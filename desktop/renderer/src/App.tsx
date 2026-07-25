@@ -4533,6 +4533,200 @@ function textToAttrs(text: string): Record<string, string> {
   return out;
 }
 
+// 概念网络力导向图：纯本地 SVG 简易力模拟(斥力+边弹簧+向心+阻尼)，无外部库(CSP 安全)。
+// 点节点=选中(联动右侧编辑)，拖节点=挪位置。节点大小=权重，颜色=类型。
+function ConceptGraph({
+  nodes,
+  edges,
+  selectedId,
+  onSelect,
+}: {
+  nodes: { id: string; name: string; type: string; weight: number }[];
+  edges: { from: string; to: string; relation: string }[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  const W = 1000;
+  const H = 700;
+  const posRef = useRef<Map<string, { x: number; y: number; vx: number; vy: number }>>(new Map());
+  const dragRef = useRef<{ id: string; moved: boolean } | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [, forceRender] = useState(0);
+  const seedRef = useRef(12345);
+  const rnd = () => {
+    seedRef.current = (seedRef.current * 1103515245 + 12345) & 0x7fffffff;
+    return seedRef.current / 0x7fffffff;
+  };
+  // 同步节点集合到位置表(新节点随机撒点,消失的删掉)
+  useEffect(() => {
+    const pos = posRef.current;
+    const ids = new Set(nodes.map((n) => n.id));
+    for (const id of [...pos.keys()]) if (!ids.has(id)) pos.delete(id);
+    for (const n of nodes)
+      if (!pos.has(n.id))
+        pos.set(n.id, { x: W / 2 + (rnd() - 0.5) * 500, y: H / 2 + (rnd() - 0.5) * 380, vx: 0, vy: 0 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes]);
+  // 力模拟:概念面板打开时持续跑,边跑边渲染
+  useEffect(() => {
+    let raf = 0;
+    let alive = true;
+    const tick = () => {
+      const pos = posRef.current;
+      const arr = nodes.map((n) => pos.get(n.id)).filter(Boolean) as {
+        x: number;
+        y: number;
+        vx: number;
+        vy: number;
+      }[];
+      const N = arr.length;
+      for (let i = 0; i < N; i++)
+        for (let j = i + 1; j < N; j++) {
+          const a = arr[i];
+          const b = arr[j];
+          const dx = a.x - b.x;
+          const dy = a.y - b.y;
+          const d2 = dx * dx + dy * dy || 0.01;
+          const d = Math.sqrt(d2);
+          const f = 7000 / d2;
+          const fx = (dx / d) * f;
+          const fy = (dy / d) * f;
+          a.vx += fx;
+          a.vy += fy;
+          b.vx -= fx;
+          b.vy -= fy;
+        }
+      for (const e of edges) {
+        const a = pos.get(e.from);
+        const b = pos.get(e.to);
+        if (!a || !b) continue;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const d = Math.hypot(dx, dy) || 0.01;
+        const f = (d - 130) * 0.02;
+        const fx = (dx / d) * f;
+        const fy = (dy / d) * f;
+        a.vx += fx;
+        a.vy += fy;
+        b.vx -= fx;
+        b.vy -= fy;
+      }
+      for (const n of nodes) {
+        const p = pos.get(n.id);
+        if (!p) continue;
+        if (dragRef.current?.id === n.id) {
+          p.vx = 0;
+          p.vy = 0;
+          continue;
+        }
+        p.vx += (W / 2 - p.x) * 0.0015;
+        p.vy += (H / 2 - p.y) * 0.0015;
+        p.vx *= 0.9;
+        p.vy *= 0.9;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.x = Math.max(24, Math.min(W - 24, p.x));
+        p.y = Math.max(24, Math.min(H - 24, p.y));
+      }
+      forceRender((t) => (t + 1) & 0xffff);
+      if (alive) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+    };
+  }, [nodes, edges]);
+  const toVB = (cx: number, cy: number) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    return { x: ((cx - r.left) / r.width) * W, y: ((cy - r.top) / r.height) * H };
+  };
+  // 拖拽:全局监听 move/up；未移动即视为点击=选中
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      const d = dragRef.current;
+      if (!d) return;
+      d.moved = true;
+      const p = posRef.current.get(d.id);
+      if (p) {
+        const v = toVB(e.clientX, e.clientY);
+        p.x = v.x;
+        p.y = v.y;
+        p.vx = 0;
+        p.vy = 0;
+      }
+    };
+    const up = () => {
+      const d = dragRef.current;
+      if (d && !d.moved) onSelect(d.id);
+      dragRef.current = null;
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onSelect]);
+  const color = (type: string) => {
+    let h = 0;
+    for (const c of type) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+    return `hsl(${h % 360}, 60%, 55%)`;
+  };
+  const pos = posRef.current;
+  const maxW = Math.max(1, ...nodes.map((n) => n.weight || 1));
+  return (
+    <svg
+      ref={svgRef}
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ width: "100%", height: "100%", display: "block", cursor: "grab", userSelect: "none" }}
+    >
+      {edges.map((e, i) => {
+        const a = pos.get(e.from);
+        const b = pos.get(e.to);
+        if (!a || !b) return null;
+        return (
+          <g key={"e" + i}>
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--border-strong, #bbb)" strokeWidth={1} opacity={0.5} />
+            <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={9} fill="var(--text-2, #999)" textAnchor="middle">
+              {e.relation}
+            </text>
+          </g>
+        );
+      })}
+      {nodes.map((n) => {
+        const p = pos.get(n.id);
+        if (!p) return null;
+        const r = 6 + (Math.min(n.weight, maxW) / maxW) * 10;
+        const sel = n.id === selectedId;
+        return (
+          <g
+            key={n.id}
+            transform={`translate(${p.x},${p.y})`}
+            onMouseDown={(ev) => {
+              ev.preventDefault();
+              dragRef.current = { id: n.id, moved: false };
+            }}
+            style={{ cursor: "pointer" }}
+          >
+            <circle r={r} fill={color(n.type)} stroke={sel ? "var(--accent, #e0533d)" : "#fff"} strokeWidth={sel ? 3 : 1.2} />
+            <text y={r + 12} fontSize={11} fill="var(--text, #333)" textAnchor="middle" fontWeight={sel ? 700 : 400}>
+              {n.name}
+            </text>
+          </g>
+        );
+      })}
+      {nodes.length === 0 && (
+        <text x={W / 2} y={H / 2} fontSize={16} fill="var(--text-2, #999)" textAnchor="middle">
+          暂无概念——点上方「抽取概念」或对话中让模型 brain_learn
+        </text>
+      )}
+    </svg>
+  );
+}
+
 function SettingsModal({
   onClose,
   liveModels,
@@ -5834,7 +6028,7 @@ function SettingsModal({
               const nodeName = (id: string) => brainNodes.find((n) => n.id === id)?.name || id;
               return (
                 <div className="prompt-pane" style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ order: -2, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <span className="s-note" style={{ margin: 0 }}>
                       {t("set.brain.statNodes")} <b>{brainStat.nodes}</b> · {t("set.brain.statEdges")}{" "}
                       <b>{brainStat.edges}</b> · {t("set.brain.statEmbedded")}{" "}
@@ -5957,8 +6151,34 @@ function SettingsModal({
                       </div>
                     </div>
 
-                    {/* 右：详情编辑 */}
-                    <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                    {/* 中：概念网络力导向图（占最大空间，点节点选中、拖节点挪位） */}
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        minHeight: 0,
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        background: "rgba(127,127,127,0.04)",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <ConceptGraph
+                        nodes={brainNodes}
+                        edges={brainEdges}
+                        selectedId={brainSel}
+                        onSelect={(id) => {
+                          const n = brainNodes.find((x) => x.id === id);
+                          if (n) {
+                            setBrainSel(id);
+                            setBrainDraft({ ...n, attrs: { ...n.attrs }, aliases: [...n.aliases] });
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {/* 右：详情编辑（选中概念时用） */}
+                    <div style={{ width: 300, flex: "0 0 300px", minHeight: 0, overflow: "auto" }}>
                       {!brainDraft ? (
                         <div className="s-note">{t("set.brain.selectHint")}</div>
                       ) : (
@@ -6104,8 +6324,9 @@ function SettingsModal({
                   </div>
                   <div
                     style={{
-                      borderTop: "1px solid var(--border)",
-                      paddingTop: 10,
+                      order: -1,
+                      borderBottom: "1px solid var(--border)",
+                      paddingBottom: 10,
                       display: "flex",
                       flexDirection: "column",
                       gap: 6,
