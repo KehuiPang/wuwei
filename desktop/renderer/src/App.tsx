@@ -5571,7 +5571,7 @@ function SettingsModal({
                 </>
               )}
 
-              {(preset.kind === "anthropic-apikey" || preset.kind === "openai") && (
+              {(preset.kind === "anthropic-apikey" || preset.kind === "openai") && !preset.hosted && (
                 <label className="field">
                   <span>{t("set.m.apiKey")}</span>
                   <div className="key-wrap">

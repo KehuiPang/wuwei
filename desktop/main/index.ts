@@ -2376,6 +2376,9 @@ function hasCredential(cfg: ReturnType<typeof loadConfig>): boolean {
   if (cfg.provider === "codex") return !!cfg.codexToken;
   if (cfg.provider === "anthropic")
     return cfg.authMode === "oauth" ? !!cfg.oauthToken : !!cfg.apiKey;
+  // 无为托管平台：key 不落 config、只在发送前注入 env，故这里以"已登录无为"为准。
+  // 登录了即有凭证(判绿由后续真实 ping 决定；网关不通会转黄，而非红)。
+  if (isHostedProvider(curProviderId())) return !!loadWuweiSession();
   // openai 兼容：有真实 key 即可；本地端点(localhost)无需 key。
   // 托管平台(通义千问/DeepSeek 等)虽有固定 baseUrl，但没 key 一样不可用→判红。
   const hasKey = !!cfg.apiKey && cfg.apiKey !== "not-needed";
