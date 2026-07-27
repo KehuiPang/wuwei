@@ -145,6 +145,8 @@ export interface Settings {
   creds?: Record<string, CredSlot>; // 按平台分槽保存的全部凭证
   app?: AppSettings; // 应用级设置(与具体平台无关)
   systemPrompt?: string; // 自定义系统提示词(全局)；未设=用默认模板。支持 {model}/{cwd} 占位符
+  brainPrompt?: string; // 脑网络说明提示词覆盖；未设=用 DEFAULT_BRAIN_NOTE(在「知识网络」设置里查看/改)
+  secretsPrompt?: string; // 密钥说明提示词覆盖；未设=用 SECRETS_SYSTEM_NOTE(在「密钥」设置里查看/改)
   customStations?: CustomStation[]; // 用户自定义的中转站(OpenAI 兼容)，显示在平台下拉里
   theme?: "dark" | "light" | "gray" | "gold"; // 界面主题(均遵循minicc VI；gold=原版怀旧)
   providerOrder?: string[]; // 用户自定义的平台展示顺序(存 providerId；缺省走内置默认序)

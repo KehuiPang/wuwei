@@ -819,6 +819,10 @@ async function emitAccount() {
   });
 }
 
+// 脑网络说明的默认提示词(可在「知识网络」设置里查看/覆盖)。追加的『已沉淀概念』动态目录不含在内。
+export const DEFAULT_BRAIN_NOTE =
+  `\n\n## 本地知识网络（Brain）\n你有一个本地概念知识网络，沉淀着项目/服务器/脚本/部署/注意事项等结构化知识。\n- 涉及具体项目或部署/环境的任务，**开工前先用 brain_recall 检索**，按返回的结构化子图行动，别每次全量翻文档、省 token。\n- 发现值得长期固化的高价值知识（项目背景、git路径、测试/线上环境、部署脚本位置、踩坑注意事项）时，用 brain_learn 记住、brain_link 串联关系；旧信息有误就用同名 brain_learn 覆盖纠正。\n- brain_recall 还会命中知识宫殿等文档库的原文片段（『相关文档』），只给摘要+路径；需要完整内容时用 brain_read_doc 按该路径读全文，不必全量翻。`;
+
 // 构造系统提示词：优先本平台专属覆盖(creds[pid].systemPrompt)，再全局(settings.systemPrompt)，都没有=默认模板；渲染 {model}/{cwd}
 function buildSysPrompt(cwd: string, model: string, providerId?: string): string {
   const st = loadSettings();
@@ -830,16 +834,16 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   base +=
     `\n\n## 长期记忆\n用户说“记住…/以后…/我喜欢…”或出现值得长期保留的信息(偏好、称呼、事实、项目背景)时，调用 remember 工具写入；它会在之后每次对话自动加载。`;
   if (mem) base += `\n\n已记住（需主动遵守/参考）：\n${mem}`;
-  // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall，不再全量注入
-  base +=
-    `\n\n## 本地知识网络（Brain）\n你有一个本地概念知识网络，沉淀着项目/服务器/脚本/部署/注意事项等结构化知识。\n- 涉及具体项目或部署/环境的任务，**开工前先用 brain_recall 检索**，按返回的结构化子图行动，别每次全量翻文档、省 token。\n- 发现值得长期固化的高价值知识（项目背景、git路径、测试/线上环境、部署脚本位置、踩坑注意事项）时，用 brain_learn 记住、brain_link 串联关系；旧信息有误就用同名 brain_learn 覆盖纠正。\n- brain_recall 还会命中知识宫殿等文档库的原文片段（『相关文档』），只给摘要+路径；需要完整内容时用 brain_read_doc 按该路径读全文，不必全量翻。`;
+  // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall；提示词可在设置里覆盖
+  base += typeof st?.brainPrompt === "string" ? st.brainPrompt : DEFAULT_BRAIN_NOTE;
   try {
     const idx = brain.conceptIndex(40);
     if (idx.length) base += `\n已沉淀的概念（可 brain_recall 展开）：${idx.join("、")}`;
   } catch {
     /* brain 不可用不影响主流程 */
   }
-  base += secrets.SECRETS_SYSTEM_NOTE; // 告知模型：密钥走本地保险箱/环境变量，无需明文
+  // 密钥说明：告知模型密钥走本地保险箱/环境变量，无需明文；提示词可在设置里覆盖
+  base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : secrets.SECRETS_SYSTEM_NOTE;
   return base;
 }
 
@@ -1742,7 +1746,29 @@ ipcMain.handle("settings:get", () => ({
   backend: backendLabel,
   model: modelLabel,
   defaultPrompt: DEFAULT_SYSTEM_PROMPT, // 供设置页显示"未自定义时的默认提示词"
+  defaultBrainPrompt: DEFAULT_BRAIN_NOTE, // 脑网络说明默认(知识网络设置页显示/恢复默认)
+  defaultSecretsPrompt: secrets.SECRETS_SYSTEM_NOTE, // 密钥说明默认(密钥设置页显示/恢复默认)
 }));
+
+// 脑网络/密钥 提示词覆盖：只落盘该字段并热更所有会话系统提示(不重启 provider)。传 null=恢复默认
+function hotRefreshSys() {
+  sysPrompt = buildSysPrompt(cwd, modelLabel, loadSettings()?.providerId);
+  for (const a of agents.values()) a.setSystem(sysPrompt);
+}
+ipcMain.on("settings:set-brain-prompt", (_e, text: string | null) => {
+  const s = loadSettings() || ({} as Settings);
+  if (typeof text === "string" && text.trim()) s.brainPrompt = text;
+  else delete s.brainPrompt; // 空/删除=恢复默认
+  saveSettings(s);
+  hotRefreshSys();
+});
+ipcMain.on("settings:set-secrets-prompt", (_e, text: string | null) => {
+  const s = loadSettings() || ({} as Settings);
+  if (typeof text === "string" && text.trim()) s.secretsPrompt = text;
+  else delete s.secretsPrompt;
+  saveSettings(s);
+  hotRefreshSys();
+});
 
 ipcMain.on("settings:set", (_e, s: Settings) => {
   try {

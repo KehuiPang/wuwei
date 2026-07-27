@@ -3,8 +3,9 @@
 // 概念/关系的写入与纠错、命中强化、供系统提示用的"概念目录"。
 import type { BrainGraph, BrainNode, BrainEdge } from "./types.js";
 import {
-  loadGraph,
-  saveGraph,
+  getGraph,
+  persistEmbedding,
+  persistNodeEdit,
   findNode,
   upsertNode,
   upsertEdge,
@@ -42,7 +43,10 @@ async function ensureEmbeddings(nodes: BrainNode[]): Promise<void> {
   if (!need.length) return;
   const vecs = await embed(need.map(nodeText), "passage");
   if (!vecs) return; // 模型不可用 → 保持无向量，检索退化为关键词
-  need.forEach((n, i) => (n.embedding = vecs[i]));
+  need.forEach((n, i) => {
+    n.embedding = vecs[i];
+    persistEmbedding(n.id, vecs[i]); // 增量落盘该节点向量
+  });
 }
 
 // 关键词命中打分：query 提到概念名/别名给高分（中文无分词，靠双向 includes）
@@ -77,7 +81,7 @@ export interface RecallResult {
 
 // 核心检索：query → 相关概念子图（不返回原文，省 token）。命中即强化。
 export async function recall(query: string, limit = 6): Promise<RecallResult> {
-  const g = loadGraph();
+  const g = getGraph();
   if (!g.nodes.length) return { text: "", hitNames: [] };
 
   await ensureEmbeddings(g.nodes);
@@ -128,8 +132,7 @@ export async function recall(query: string, limit = 6): Promise<RecallResult> {
         .map((e) => ({ relation: e.relation, to: byId.get(e.to)?.name || e.to }));
       blocks.push(renderNode(n, outs));
     }
-    reinforce(g, [...chosen.keys()], hitEdgeIds);
-    saveGraph(g);
+    reinforce(g, [...chosen.keys()], hitEdgeIds); // 内部对命中实体各落一条增量日志
     conceptText = `【本地知识网络 · 命中】\n${blocks.join("\n")}`;
     hitNames.push(...seeds.map((s) => s.n.name));
   }
@@ -150,10 +153,9 @@ export async function recall(query: string, limit = 6): Promise<RecallResult> {
 
 // 写入/更新一个概念节点（自动算 embedding）
 export async function learn(input: NodeInput): Promise<{ created: boolean; name: string }> {
-  const g = loadGraph();
-  const [node, created] = upsertNode(g, input);
-  await ensureEmbeddings([node]);
-  saveGraph(g);
+  const g = getGraph();
+  const [node, created] = upsertNode(g, input); // 已落盘节点结构
+  await ensureEmbeddings([node]); // 算完向量后增量落盘
   return { created, name: node.name };
 }
 
@@ -163,30 +165,23 @@ export async function link(
   relation: string,
   toName: string,
 ): Promise<{ ok: boolean; msg: string }> {
-  const g = loadGraph();
+  const g = getGraph();
   if (!findNode(g, fromName)) upsertNode(g, { name: fromName });
   if (!findNode(g, toName)) upsertNode(g, { name: toName });
-  const e = upsertEdge(g, fromName, relation, toName);
-  if (!e) {
-    saveGraph(g);
-    return { ok: false, msg: "关系两端相同或无法建立" };
-  }
+  const e = upsertEdge(g, fromName, relation, toName); // 节点/边均已增量落盘
+  if (!e) return { ok: false, msg: "关系两端相同或无法建立" };
   await ensureEmbeddings(g.nodes.filter((n) => !n.embedding));
-  saveGraph(g);
   return { ok: true, msg: `${fromName} ──${relation}→ ${toName}` };
 }
 
 // 遗忘/纠错：删掉一个错误概念（连带其关系）
 export function forget(name: string): boolean {
-  const g = loadGraph();
-  const ok = removeNode(g, name);
-  if (ok) saveGraph(g);
-  return ok;
+  return removeNode(getGraph(), name); // 内部落删除日志
 }
 
 // —— 供系统提示用的"概念目录"：高权重节点名，让模型知道有哪些可 recall ——
 export function conceptIndex(max = 40): string[] {
-  const g = loadGraph();
+  const g = getGraph();
   return [...g.nodes]
     .sort((a, b) => b.weight - a.weight)
     .slice(0, max)
@@ -194,7 +189,7 @@ export function conceptIndex(max = 40): string[] {
 }
 
 export function stats(): { nodes: number; edges: number; embedded: number } {
-  const g = loadGraph();
+  const g = getGraph();
   return {
     nodes: g.nodes.length,
     edges: g.edges.length,
@@ -208,7 +203,7 @@ export interface GraphLite {
   edges: BrainEdge[];
 }
 export function getGraphLite(): GraphLite {
-  const g = loadGraph();
+  const g = getGraph();
   return {
     nodes: g.nodes.map(({ embedding, ...rest }) => rest),
     edges: g.edges,
@@ -217,7 +212,7 @@ export function getGraphLite(): GraphLite {
 
 // UI 保存单个节点（手动编辑）：按 id 定位覆盖，内容变则作废向量
 export async function saveNodeFromUI(patch: Partial<BrainNode> & { id?: string; name: string }): Promise<void> {
-  const g = loadGraph();
+  const g = getGraph();
   const existing = patch.id ? g.nodes.find((n) => n.id === patch.id) : findNode(g, patch.name);
   if (existing) {
     Object.assign(existing, {
@@ -229,25 +224,21 @@ export async function saveNodeFromUI(patch: Partial<BrainNode> & { id?: string; 
       updatedAt: Date.now(),
       embedding: undefined,
     });
+    persistNodeEdit(existing); // 落节点结构 + 作废旧向量
   } else {
-    upsertNode(g, patch as NodeInput);
+    upsertNode(g, patch as NodeInput); // 已落盘
   }
-  await ensureEmbeddings(g.nodes.filter((n) => !n.embedding));
-  saveGraph(g);
+  await ensureEmbeddings(g.nodes.filter((n) => !n.embedding)); // 重算向量并增量落盘
 }
 
 export function deleteNodeFromUI(id: string): void {
-  const g = loadGraph();
+  const g = getGraph();
   const n = g.nodes.find((x) => x.id === id);
-  if (n) {
-    removeNode(g, n.name);
-    saveGraph(g);
-  }
+  if (n) removeNode(g, n.name); // 内部落删除日志
 }
 
 export function deleteEdgeFromUI(id: string): void {
-  const g = loadGraph();
-  if (removeEdge(g, id)) saveGraph(g);
+  removeEdge(getGraph(), id); // 内部落删除日志
 }
 
 export async function addEdgeFromUI(fromName: string, relation: string, toName: string): Promise<void> {

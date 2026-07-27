@@ -41,9 +41,11 @@ export interface MiniccApi {
   setGroupMode(mode: "manual" | "date" | "project"): void;
   setStreamOutput(mode: "typewriter" | "stream" | "instant", speed: number): void;
   setKeepRecent(n: number): void;
+  setBrainPrompt(text: string | null): void;
+  setSecretsPrompt(text: string | null): void;
   deleteExchange(sid: string, ordinal: number): void;
   bootstrap(): Promise<{ sessions: any[]; groups?: string[]; currentId: string; messages: any[]; usage?: any; rateLimits?: any }>;
-  getSettings(): Promise<{ settings: any; backend: string; model: string; defaultPrompt?: string }>;
+  getSettings(): Promise<{ settings: any; backend: string; model: string; defaultPrompt?: string; defaultBrainPrompt?: string; defaultSecretsPrompt?: string }>;
   setSettings(s: any): void;
   getMemory(): Promise<string>;
   setMemory(text: string): void;

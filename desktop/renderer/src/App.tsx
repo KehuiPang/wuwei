@@ -1431,6 +1431,7 @@ export function App() {
       histIdx.current = history.current.length;
     }
     push({ type: "user", text, images: imgs.length ? imgs : undefined, ts: Date.now() });
+    atBottomRef.current = true; // 发新消息=想看这轮回复：重新贴底,后续流式自动吸底(哪怕刚才滚上去看历史)
     setRunningSet((s) => new Set(s).add(currentId)); // 乐观置为运行中(主进程随后 evt:tasks 校准)
     thinkStartRef.current = Date.now();
     charsRef.current = 0;
@@ -4534,23 +4535,37 @@ function textToAttrs(text: string): Record<string, string> {
 }
 
 // 概念网络力导向图：纯本地 SVG 简易力模拟(斥力+边弹簧+向心+阻尼)，无外部库(CSP 安全)。
-// 点节点=选中(联动右侧编辑)，拖节点=挪位置。节点大小=权重，颜色=类型。
+// 点节点=选中(联动右侧编辑)+固定详情卡；拖节点=挪位置并钉住(脱离力学，双击解除)；
+// 点边=看边详情；鼠标悬停节点/边=浮动详情提示。节点大小=权重，颜色=类型。
 function ConceptGraph({
   nodes,
   edges,
   selectedId,
   onSelect,
 }: {
-  nodes: { id: string; name: string; type: string; weight: number }[];
-  edges: { from: string; to: string; relation: string }[];
+  nodes: import("./env").BrainNodeLite[];
+  edges: import("./env").BrainEdgeLite[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
   const W = 1000;
   const H = 700;
   const posRef = useRef<Map<string, { x: number; y: number; vx: number; vy: number }>>(new Map());
-  const dragRef = useRef<{ id: string; moved: boolean } | null>(null);
+  const pinnedRef = useRef<Set<string>>(new Set()); // 被拖动过=钉住的节点，力学不再拉走
+  const dragRef = useRef<
+    // node: ox/oy=抓取点与节点中心的世界坐标偏移(保持不跳)；cx/cy=按下时屏幕坐标(判断是否越过拖动阈值)
+    | { kind: "node"; id: string; moved: boolean; ox: number; oy: number; cx: number; cy: number }
+    | { kind: "pan"; sx: number; sy: number; ox: number; oy: number }
+    | null
+  >(null);
+  const viewRef = useRef({ x: 0, y: 0, k: 1 }); // 画布平移(x,y)+缩放(k)，滚轮缩放/拖背景平移
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null); // 外层容器(定位浮动详情卡)
+  const tipRef = useRef<HTMLDivElement | null>(null); // 浮动详情卡 DOM(跟随鼠标，直接改 style 不触发重渲染)
+  const cursorRef = useRef({ x: 0, y: 0 }); // 最近一次鼠标在容器内的相对坐标
+  // 悬停(hover)优先显示，其次是点击固定(pinned)的详情
+  const [hover, setHover] = useState<{ kind: "node" | "edge"; id: string } | null>(null);
+  const [pinInfo, setPinInfo] = useState<{ kind: "node" | "edge"; id: string } | null>(null);
   const [, forceRender] = useState(0);
   const seedRef = useRef(12345);
   const rnd = () => {
@@ -4614,7 +4629,9 @@ function ConceptGraph({
       for (const n of nodes) {
         const p = pos.get(n.id);
         if (!p) continue;
-        if (dragRef.current?.id === n.id) {
+        const dr = dragRef.current;
+        if ((dr?.kind === "node" && dr.id === n.id) || pinnedRef.current.has(n.id)) {
+          // 正在拖 或 已钉住：位置固定，只清速度(仍对别的节点施加斥力/弹簧)
           p.vx = 0;
           p.vy = 0;
           continue;
@@ -4646,19 +4663,36 @@ function ConceptGraph({
     const move = (e: MouseEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      d.moved = true;
-      const p = posRef.current.get(d.id);
-      if (p) {
-        const v = toVB(e.clientX, e.clientY);
-        p.x = v.x;
-        p.y = v.y;
-        p.vx = 0;
-        p.vy = 0;
+      const vb = toVB(e.clientX, e.clientY);
+      if (d.kind === "node") {
+        // 越过 3px 才算拖动，避免手抖把点击误判成拖拽(否则点不动就选不中)
+        if (!d.moved && Math.hypot(e.clientX - d.cx, e.clientY - d.cy) < 3) return;
+        d.moved = true;
+        const p = posRef.current.get(d.id);
+        if (p) {
+          const view = viewRef.current;
+          // 屏幕→世界坐标(去掉平移/缩放)，再加抓取偏移：节点跟随光标移动的距离，而不是把中心吸到光标
+          p.x = (vb.x - view.x) / view.k + d.ox;
+          p.y = (vb.y - view.y) / view.k + d.oy;
+          p.vx = 0;
+          p.vy = 0;
+        }
+      } else {
+        viewRef.current.x = d.ox + (vb.x - d.sx); // 平移画布
+        viewRef.current.y = d.oy + (vb.y - d.sy);
       }
     };
     const up = () => {
       const d = dragRef.current;
-      if (d && !d.moved) onSelect(d.id);
+      if (d && d.kind === "node") {
+        if (d.moved) {
+          pinnedRef.current.add(d.id); // 拖动过=钉住，之后力学不再拉走
+          forceRender((t) => (t + 1) & 0xffff);
+        } else {
+          onSelect(d.id); // 未移动=点击=选中(联动右侧编辑)
+          setPinInfo({ kind: "node", id: d.id }); // 并固定详情卡展示全内容
+        }
+      }
       dragRef.current = null;
     };
     window.addEventListener("mousemove", move);
@@ -4669,61 +4703,240 @@ function ConceptGraph({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onSelect]);
+  // 滚轮缩放(以光标为中心)。用原生非被动监听才能 preventDefault、不连带滚动设置面板。
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const vb = toVB(e.clientX, e.clientY);
+      const v = viewRef.current;
+      const wx = (vb.x - v.x) / v.k;
+      const wy = (vb.y - v.y) / v.k;
+      const k = Math.max(0.25, Math.min(5, v.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12)));
+      v.k = k;
+      v.x = vb.x - wx * k;
+      v.y = vb.y - wy * k;
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 在空白处按下=开始平移画布；同时收起点击固定的详情卡
+  const onBgDown = (e: React.MouseEvent) => {
+    const vb = toVB(e.clientX, e.clientY);
+    const v = viewRef.current;
+    dragRef.current = { kind: "pan", sx: vb.x, sy: vb.y, ox: v.x, oy: v.y };
+    setPinInfo(null);
+  };
   const color = (type: string) => {
     let h = 0;
     for (const c of type) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
     return `hsl(${h % 360}, 60%, 55%)`;
   };
+  // 鼠标在容器内移动:记录相对坐标并让详情卡跟随光标(直接改 DOM，避免高频重渲染)
+  const onWrapMove = (e: React.MouseEvent) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const r = wrap.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    cursorRef.current = { x, y };
+    positionTip(x, y, r.width, r.height);
+  };
+  const positionTip = (x: number, y: number, w: number, h: number) => {
+    const tip = tipRef.current;
+    if (!tip) return;
+    const tw = tip.offsetWidth || 240;
+    const th = tip.offsetHeight || 120;
+    let lx = x + 16;
+    let ly = y + 16;
+    if (lx + tw > w) lx = Math.max(4, x - tw - 16);
+    if (ly + th > h) ly = Math.max(4, h - th - 4);
+    tip.style.left = lx + "px";
+    tip.style.top = ly + "px";
+  };
+  // 详情卡出现/切换目标时，用最近光标位置摆好(点击固定时光标可能不在动)
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const r = wrap.getBoundingClientRect();
+    const { x, y } = cursorRef.current;
+    positionTip(x, y, r.width, r.height);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hover, pinInfo]);
+
   const pos = posRef.current;
   const maxW = Math.max(1, ...nodes.map((n) => n.weight || 1));
+  const byId = new Map(nodes.map((n) => [n.id, n] as const));
+  const info = hover || pinInfo; // 悬停优先，其次点击固定
+  const infoNode = info?.kind === "node" ? byId.get(info.id) : undefined;
+  const infoEdge = info?.kind === "edge" ? edges.find((e) => e.id === info.id) : undefined;
+  const fmtTime = (t?: number) => {
+    if (!t) return "";
+    const d = new Date(t);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ width: "100%", height: "100%", display: "block", cursor: "grab", userSelect: "none" }}
+    <div
+      ref={wrapRef}
+      style={{ position: "relative", width: "100%", height: "100%" }}
+      onMouseMove={onWrapMove}
     >
-      {edges.map((e, i) => {
-        const a = pos.get(e.from);
-        const b = pos.get(e.to);
-        if (!a || !b) return null;
-        return (
-          <g key={"e" + i}>
-            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="var(--border-strong, #bbb)" strokeWidth={1} opacity={0.5} />
-            <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={9} fill="var(--text-2, #999)" textAnchor="middle">
-              {e.relation}
-            </text>
-          </g>
-        );
-      })}
-      {nodes.map((n) => {
-        const p = pos.get(n.id);
-        if (!p) return null;
-        const r = 6 + (Math.min(n.weight, maxW) / maxW) * 10;
-        const sel = n.id === selectedId;
-        return (
-          <g
-            key={n.id}
-            transform={`translate(${p.x},${p.y})`}
-            onMouseDown={(ev) => {
-              ev.preventDefault();
-              dragRef.current = { id: n.id, moved: false };
-            }}
-            style={{ cursor: "pointer" }}
-          >
-            <circle r={r} fill={color(n.type)} stroke={sel ? "var(--accent, #e0533d)" : "#fff"} strokeWidth={sel ? 3 : 1.2} />
-            <text y={r + 12} fontSize={11} fill="var(--text, #333)" textAnchor="middle" fontWeight={sel ? 700 : 400}>
-              {n.name}
-            </text>
-          </g>
-        );
-      })}
-      {nodes.length === 0 && (
-        <text x={W / 2} y={H / 2} fontSize={16} fill="var(--text-2, #999)" textAnchor="middle">
-          暂无概念——点上方「抽取概念」或对话中让模型 brain_learn
-        </text>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="xMidYMid meet"
+        onMouseDown={onBgDown}
+        style={{ width: "100%", height: "100%", display: "block", cursor: "grab", userSelect: "none" }}
+      >
+        <g transform={`translate(${viewRef.current.x},${viewRef.current.y}) scale(${viewRef.current.k})`}>
+          {edges.map((e, i) => {
+            const a = pos.get(e.from);
+            const b = pos.get(e.to);
+            if (!a || !b) return null;
+            const on = info?.kind === "edge" && info.id === e.id;
+            return (
+              <g key={e.id || "e" + i}>
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={on ? "var(--accent, #e0533d)" : "var(--border-strong, #bbb)"} strokeWidth={on ? 2 : 1} opacity={on ? 0.9 : 0.5} />
+                {/* 透明加粗命中线:让又细又斜的边也好悬停/点击 */}
+                <line
+                  x1={a.x}
+                  y1={a.y}
+                  x2={b.x}
+                  y2={b.y}
+                  stroke="transparent"
+                  strokeWidth={14}
+                  style={{ cursor: "pointer" }}
+                  onMouseEnter={() => setHover({ kind: "edge", id: e.id })}
+                  onMouseLeave={() => setHover((h) => (h?.kind === "edge" && h.id === e.id ? null : h))}
+                  onMouseDown={(ev) => {
+                    ev.stopPropagation(); // 别触发背景平移
+                    setPinInfo({ kind: "edge", id: e.id });
+                  }}
+                />
+                <text x={(a.x + b.x) / 2} y={(a.y + b.y) / 2} fontSize={9} fill="var(--text-2, #999)" textAnchor="middle" style={{ pointerEvents: "none" }}>
+                  {e.relation}
+                </text>
+              </g>
+            );
+          })}
+          {nodes.map((n) => {
+            const p = pos.get(n.id);
+            if (!p) return null;
+            const r = 6 + (Math.min(n.weight, maxW) / maxW) * 10;
+            const sel = n.id === selectedId;
+            const on = info?.kind === "node" && info.id === n.id;
+            const pinned = pinnedRef.current.has(n.id);
+            return (
+              <g
+                key={n.id}
+                transform={`translate(${p.x},${p.y})`}
+                onMouseDown={(ev) => {
+                  ev.preventDefault();
+                  ev.stopPropagation(); // 别冒泡到背景平移，否则拖节点变成拖画布
+                  const vb = toVB(ev.clientX, ev.clientY);
+                  const view = viewRef.current;
+                  // 记录抓取点相对节点中心的偏移(世界坐标)：拖动时保持这个偏移，节点不跳
+                  const ox = p.x - (vb.x - view.x) / view.k;
+                  const oy = p.y - (vb.y - view.y) / view.k;
+                  dragRef.current = { kind: "node", id: n.id, moved: false, ox, oy, cx: ev.clientX, cy: ev.clientY };
+                }}
+                onDoubleClick={(ev) => {
+                  ev.stopPropagation();
+                  pinnedRef.current.delete(n.id); // 双击解除固定，节点重回力学布局
+                  forceRender((t) => (t + 1) & 0xffff);
+                }}
+                onMouseEnter={() => setHover({ kind: "node", id: n.id })}
+                onMouseLeave={() => setHover((h) => (h?.kind === "node" && h.id === n.id ? null : h))}
+                style={{ cursor: "pointer" }}
+              >
+                {pinned && <circle r={r + 4} fill="none" stroke="var(--accent, #e0533d)" strokeWidth={1} strokeDasharray="2 2" opacity={0.7} />}
+                <circle r={r} fill={color(n.type)} stroke={sel || on ? "var(--accent, #e0533d)" : "#fff"} strokeWidth={sel || on ? 3 : 1.2} />
+                <text y={r + 12} fontSize={11} fill="var(--text, #333)" textAnchor="middle" fontWeight={sel ? 700 : 400} style={{ pointerEvents: "none" }}>
+                  {n.name}
+                </text>
+              </g>
+            );
+          })}
+        </g>
+        {nodes.length === 0 && (
+          <text x={W / 2} y={H / 2} fontSize={16} fill="var(--text-2, #999)" textAnchor="middle">
+            暂无概念——点上方「抽取概念」或对话中让模型 brain_learn
+          </text>
+        )}
+      </svg>
+
+      {/* 浮动详情卡:悬停即显，点击节点/边固定；pointerEvents:none 不挡鼠标避免闪烁 */}
+      {info && (infoNode || infoEdge) && (
+        <div
+          ref={tipRef}
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            maxWidth: 300,
+            pointerEvents: "none",
+            background: "var(--panel, #fff)",
+            color: "var(--text, #222)",
+            border: "1px solid var(--border, #ddd)",
+            borderRadius: 8,
+            boxShadow: "0 6px 24px rgba(0,0,0,0.18)",
+            padding: "10px 12px",
+            fontSize: 12,
+            lineHeight: 1.5,
+            zIndex: 20,
+            whiteSpace: "normal",
+            wordBreak: "break-word",
+          }}
+        >
+          {infoNode && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <span style={{ width: 9, height: 9, borderRadius: "50%", background: color(infoNode.type), flex: "0 0 auto" }} />
+                <span style={{ fontWeight: 700, fontSize: 13 }}>{infoNode.name}</span>
+                <span style={{ color: "var(--text-2, #888)" }}>{infoNode.type}</span>
+              </div>
+              {infoNode.summary && <div style={{ marginBottom: 4 }}>{infoNode.summary}</div>}
+              {infoNode.aliases?.length > 0 && (
+                <div style={{ color: "var(--text-2, #888)", marginBottom: 4 }}>别名：{infoNode.aliases.join("、")}</div>
+              )}
+              {Object.keys(infoNode.attrs || {}).length > 0 && (
+                <div style={{ marginBottom: 4 }}>
+                  {Object.entries(infoNode.attrs).map(([k, v]) => (
+                    <div key={k} style={{ display: "flex", gap: 6 }}>
+                      <span style={{ color: "var(--text-2, #888)", flex: "0 0 auto" }}>{k}</span>
+                      <span>{v}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ color: "var(--text-2, #888)", fontSize: 11 }}>
+                权重 {infoNode.weight} · 命中 {infoNode.hits}
+                {infoNode.updatedAt ? ` · 更新 ${fmtTime(infoNode.updatedAt)}` : ""}
+              </div>
+              {pinInfo?.kind === "node" && !hover && (
+                <div style={{ color: "var(--text-2, #aaa)", fontSize: 11, marginTop: 4 }}>拖动可挪位并钉住 · 双击解除固定</div>
+              )}
+            </>
+          )}
+          {infoEdge && (
+            <>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+                {byId.get(infoEdge.from)?.name || infoEdge.from}
+                <span style={{ color: "var(--accent, #e0533d)" }}> ──{infoEdge.relation}→ </span>
+                {byId.get(infoEdge.to)?.name || infoEdge.to}
+              </div>
+              <div style={{ color: "var(--text-2, #888)", marginBottom: 4 }}>关系：{infoEdge.relation}</div>
+              <div style={{ color: "var(--text-2, #888)", fontSize: 11 }}>
+                权重 {infoEdge.weight} · 命中 {infoEdge.hits}
+              </div>
+            </>
+          )}
+        </div>
       )}
-    </svg>
+    </div>
   );
 }
 
@@ -4780,6 +4993,14 @@ function SettingsModal({
   const [sysPrompt, setSysPrompt] = useState(""); // 系统提示词(可编辑)
   const [sysPromptDefault, setSysPromptDefault] = useState(""); // 默认模板(恢复默认用)
   const [sysPromptTouched, setSysPromptTouched] = useState(false); // 是否自定义过(否则存 undefined=用默认)
+  // 脑网络说明提示词(知识网络页「提示词」视图查看/编辑) + 密钥说明提示词(密钥页查看/编辑)
+  const [brainView, setBrainView] = useState<"graph" | "prompt">("graph"); // 知识网络页：可视化 / 提示词
+  const [brainPrompt, setBrainPrompt] = useState("");
+  const [brainPromptDefault, setBrainPromptDefault] = useState("");
+  const [brainPromptTouched, setBrainPromptTouched] = useState(false);
+  const [secretsPrompt, setSecretsPrompt] = useState("");
+  const [secretsPromptDefault, setSecretsPromptDefault] = useState("");
+  const [secretsPromptTouched, setSecretsPromptTouched] = useState(false);
   const [platPromptOn, setPlatPromptOn] = useState(false); // 当前平台是否用专属提示词覆盖全局
   const [platPrompt, setPlatPrompt] = useState(""); // 当前平台专属提示词内容
   const [sKeyWaiting, setSKeyWaiting] = useState(false); // 设置里：已开官网，等复制 key 自动检测
@@ -5169,6 +5390,26 @@ function SettingsModal({
       } else {
         setSysPrompt(def);
         setSysPromptTouched(false);
+      }
+      // 脑网络说明提示词：有覆盖就用它+标记已改，否则回填默认(未改，保存不写=跟随默认)
+      const bDef = (r as any)?.defaultBrainPrompt || "";
+      setBrainPromptDefault(bDef);
+      if (typeof s.brainPrompt === "string") {
+        setBrainPrompt(s.brainPrompt);
+        setBrainPromptTouched(true);
+      } else {
+        setBrainPrompt(bDef);
+        setBrainPromptTouched(false);
+      }
+      // 密钥说明提示词：同上
+      const sDef = (r as any)?.defaultSecretsPrompt || "";
+      setSecretsPromptDefault(sDef);
+      if (typeof s.secretsPrompt === "string") {
+        setSecretsPrompt(s.secretsPrompt);
+        setSecretsPromptTouched(true);
+      } else {
+        setSecretsPrompt(sDef);
+        setSecretsPromptTouched(false);
       }
     });
   }, []);
@@ -6028,6 +6269,69 @@ function SettingsModal({
               const nodeName = (id: string) => brainNodes.find((n) => n.id === id)?.name || id;
               return (
                 <div className="prompt-pane" style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
+                  {/* 视图切换：可视化网络 / 脑网络说明提示词 */}
+                  <div
+                    style={{
+                      order: -3,
+                      display: "flex",
+                      alignSelf: "flex-start",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {(["graph", "prompt"] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setBrainView(v)}
+                        style={{
+                          padding: "4px 16px",
+                          border: "none",
+                          cursor: "pointer",
+                          fontSize: 13,
+                          background: brainView === v ? "var(--accent)" : "transparent",
+                          color: brainView === v ? "#fff" : "var(--text)",
+                        }}
+                      >
+                        {v === "graph" ? "可视化" : "提示词"}
+                      </button>
+                    ))}
+                  </div>
+                  {brainView === "prompt" ? (
+                    <>
+                      <label className="field pp-grow">
+                        <span>脑网络说明提示词 {brainPromptTouched ? "（已自定义）" : "（默认）"}</span>
+                        <textarea
+                          className="sysprompt-area pp-fill"
+                          value={brainPrompt}
+                          onChange={(e) => {
+                            setBrainPrompt(e.target.value);
+                            setBrainPromptTouched(true);
+                          }}
+                          onBlur={() => window.minicc.setBrainPrompt(brainPromptTouched ? brainPrompt : null)}
+                          placeholder="（留空 = 用默认脑网络说明）"
+                        />
+                      </label>
+                      <p className="s-note pp-fixed">
+                        这段会拼进系统提示词，告诉模型如何使用本地知识网络（brain_recall/brain_learn/brain_link）。改完失焦即保存并热更当前所有会话；「已沉淀的概念」目录会自动追加在其后。
+                        {brainPromptTouched && (
+                          <button
+                            type="button"
+                            className="link-inline"
+                            onClick={() => {
+                              setBrainPrompt(brainPromptDefault);
+                              setBrainPromptTouched(false);
+                              window.minicc.setBrainPrompt(null);
+                            }}
+                          >
+                            恢复默认
+                          </button>
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                  <>
                   <div style={{ order: -2, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <span className="s-note" style={{ margin: 0 }}>
                       {t("set.brain.statNodes")} <b>{brainStat.nodes}</b> · {t("set.brain.statEdges")}{" "}
@@ -6177,11 +6481,9 @@ function SettingsModal({
                       />
                     </div>
 
-                    {/* 右：详情编辑（选中概念时用） */}
-                    <div style={{ width: 300, flex: "0 0 300px", minHeight: 0, overflow: "auto" }}>
-                      {!brainDraft ? (
-                        <div className="s-note">{t("set.brain.selectHint")}</div>
-                      ) : (
+                    {/* 右：详情编辑（仅选中概念时出现，否则让网络图铺满整块区域） */}
+                    {brainDraft && (
+                      <div style={{ width: 300, flex: "0 0 300px", minHeight: 0, overflow: "auto" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <label className="field">
                             <span>{t("set.brain.fName")}</span>
@@ -6319,8 +6621,8 @@ function SettingsModal({
                             )}
                           </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   <div
                     style={{
@@ -6411,6 +6713,8 @@ function SettingsModal({
                     {t("set.brain.footStored")} <code>~/.wuwei/brain/graph.json</code>, {t("set.brain.footModels")}{" "}
                     <code>~/.wuwei/brain/models</code>. {t("set.brain.footDesc")}
                   </p>
+                  </>
+                  )}
                 </div>
               );
             })()}
@@ -6932,6 +7236,42 @@ function SettingsModal({
                   ))
                 )}
               </div>
+
+              {/* 密钥说明提示词：拼进系统提示词的那段，查看/修改 */}
+              <details className="sec-prompt" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
+                  密钥说明提示词 {secretsPromptTouched ? "（已自定义）" : "（默认）"} — 查看/修改
+                </summary>
+                <label className="field" style={{ marginTop: 8, display: "block" }}>
+                  <textarea
+                    className="sysprompt-area"
+                    style={{ minHeight: 140, width: "100%" }}
+                    value={secretsPrompt}
+                    onChange={(e) => {
+                      setSecretsPrompt(e.target.value);
+                      setSecretsPromptTouched(true);
+                    }}
+                    onBlur={() => window.minicc.setSecretsPrompt(secretsPromptTouched ? secretsPrompt : null)}
+                    placeholder="（留空 = 用默认密钥说明）"
+                  />
+                </label>
+                <p className="s-note">
+                  这段会拼进系统提示词，告诉模型密钥走本地保险箱/环境变量、不索取明文。改完失焦即保存并热更当前所有会话。
+                  {secretsPromptTouched && (
+                    <button
+                      type="button"
+                      className="link-inline"
+                      onClick={() => {
+                        setSecretsPrompt(secretsPromptDefault);
+                        setSecretsPromptTouched(false);
+                        window.minicc.setSecretsPrompt(null);
+                      }}
+                    >
+                      恢复默认
+                    </button>
+                  )}
+                </p>
+              </details>
             </div>
           )}
         </div>
