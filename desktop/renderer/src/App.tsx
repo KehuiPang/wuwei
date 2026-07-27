@@ -60,6 +60,37 @@ const PRIO_TITLE: Record<string, string> = Object.fromEntries(
 
 // 图片放大预览：模块级 opener，供 ItemView(消息里的图) 调用，避免逐层传 props
 let openImageLightbox: ((src: string) => void) | null = null;
+// 图片右键菜单：模块级 opener（同上，消息里的图在顶层组件 ItemView 里）
+let openImageMenu: ((x: number, y: number, src: string) => void) | null = null;
+
+// 把图片(dataURL/url)复制到系统剪贴板。统一过 canvas 转 png，兼容 jpeg(剪贴板只保证 png)。
+async function copyImageToClipboard(src: string): Promise<boolean> {
+  try {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    canvas.getContext("2d")!.drawImage(img, 0, 0);
+    const blob: Blob | null = await new Promise((r) => canvas.toBlob(r, "image/png"));
+    if (!blob) return false;
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 保存图片到本地(浏览器下载)。dataURL 直接可下。
+function saveImage(src: string): void {
+  const a = document.createElement("a");
+  a.href = src;
+  a.download = `minicc-image-${Date.now()}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
 
 const CTX_MAX = 1_000_000; // gpt-5.5 上下文窗口估算，用于占用条
 
@@ -639,6 +670,7 @@ export function App() {
   const [now, setNow] = useState(() => Date.now()); // 相对时间戳每 30s 刷新一次
   const [runningSet, setRunningSet] = useState<Set<string>>(() => new Set()); // 多任务:正在跑的会话id集
   const [pending, setPending] = useState<Pending | null>(null);
+  const [ask, setAsk] = useState<{ id: number; questions: AskQuestion[] } | null>(null); // AI 弹的选择框
   const [meta, setMeta] = useState({
     backend: "…",
     model: "…",
@@ -651,6 +683,20 @@ export function App() {
   const [input, setInput] = useState("");
   const [lightbox, setLightbox] = useState<string | null>(null); // 图片放大预览的 src
   openImageLightbox = setLightbox; // 供 ItemView 里的图调用
+  const [imgMenu, setImgMenu] = useState<{ x: number; y: number; src: string } | null>(null); // 图片右键菜单
+  openImageMenu = (x, y, src) => setImgMenu({ x, y, src });
+  useEffect(() => {
+    // 大图预览/图片菜单：Esc 关闭
+    if (!lightbox && !imgMenu) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLightbox(null);
+        setImgMenu(null);
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [lightbox, imgMenu]);
   const [suggestion, setSuggestion] = useState(""); // 输入框幽灵提示：下一步动作建议(Tab 补全)
   const [autoMode, setAutoMode] = useState(true);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
@@ -1234,6 +1280,10 @@ export function App() {
           if (autoRef.current || alwaysAllowRef.current.has(payload.name))
             window.minicc.respondPermission(payload.id, "allow");
           else setPending(payload);
+          break;
+        case "evt:ask-user":
+          // AI 请用户选择：即便自动模式也要弹(必须用户点选，模型才拿得到答案)
+          setAsk({ id: payload.id, questions: payload.questions || [] });
           break;
         case "evt:usage":
           if (payload.sid !== currentIdRef.current) break; // 只显示当前会话用量
@@ -2444,6 +2494,7 @@ export function App() {
                       now={now}
                       onDelete={canDel ? () => delExchange(ord) : undefined}
                       onEdit={() => recallUser(uItem, ord)}
+                      onResend={busy ? undefined : () => doSend(uItem.text, uItem.images || [])}
                     />
                   );
                 }
@@ -3258,11 +3309,84 @@ export function App() {
       )}
       {lightbox && (
         <div className="lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="" onClick={(e) => e.stopPropagation()} />
-          <button className="lightbox-close" title="关闭" onClick={() => setLightbox(null)}>
+          <img
+            src={lightbox}
+            alt=""
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              openImageMenu?.(e.clientX, e.clientY, lightbox);
+            }}
+          />
+          <button
+            className="lightbox-close"
+            title="关闭 (Esc)"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightbox(null);
+            }}
+          >
             ×
           </button>
         </div>
+      )}
+
+      {imgMenu && (
+        <div
+          className="img-menu-overlay"
+          onClick={() => setImgMenu(null)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setImgMenu(null);
+          }}
+        >
+          <div
+            className="img-menu"
+            style={{ left: Math.min(imgMenu.x, window.innerWidth - 168), top: Math.min(imgMenu.y, window.innerHeight - 130) }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={async () => {
+                const src = imgMenu.src;
+                setImgMenu(null);
+                const ok = await copyImageToClipboard(src);
+                if (!ok) push({ type: "notice", text: "复制图片失败（可改用「保存图片」）" });
+              }}
+            >
+              复制图片
+            </button>
+            <button
+              onClick={() => {
+                saveImage(imgMenu.src);
+                setImgMenu(null);
+              }}
+            >
+              保存图片…
+            </button>
+            <button
+              onClick={() => {
+                setLightbox(imgMenu.src);
+                setImgMenu(null);
+              }}
+            >
+              查看大图
+            </button>
+          </div>
+        </div>
+      )}
+
+      {ask && (
+        <AskModal
+          data={ask}
+          onSubmit={(list) => {
+            window.minicc.answerAsk(ask.id, { list });
+            setAsk(null);
+          }}
+          onCancel={() => {
+            window.minicc.answerAsk(ask.id, { cancelled: true });
+            setAsk(null);
+          }}
+        />
       )}
 
       {pending && (
@@ -3500,11 +3624,13 @@ function ItemView({
   now,
   onDelete,
   onEdit,
+  onResend,
 }: {
   item: Item;
   now: number;
   onDelete?: () => void;
   onEdit?: () => void;
+  onResend?: () => void;
 }) {
   if (item.type === "user")
     return (
@@ -3520,6 +3646,10 @@ function ItemView({
                     alt=""
                     style={{ cursor: "zoom-in" }}
                     onClick={() => openImageLightbox?.(src)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      openImageMenu?.(e.clientX, e.clientY, src);
+                    }}
                   />
                 ))}
               </div>
@@ -3530,6 +3660,15 @@ function ItemView({
         <div className="turn-foot user">
           <div className="tf-actions">
             <CopyBtn text={item.text} />
+            {onResend && (
+              <button
+                className="tf-icon"
+                title="重新发送（把这条的文字和图片原样再发一次，切换模型后重试很方便）"
+                onClick={onResend}
+              >
+                <ResendIcon />
+              </button>
+            )}
             {onEdit && (
               <button
                 className="tf-icon"
@@ -3621,6 +3760,96 @@ function CheckIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20 6 9 17l-5-5" />
     </svg>
+  );
+}
+// 重发图标(循环箭头)
+function ResendIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v6h-6" />
+    </svg>
+  );
+}
+
+// ask_user：AI 弹出的可点击选择框(单选/多选/可多问)
+type AskOption = { label: string; description?: string };
+type AskQuestion = { question: string; header?: string; multiSelect?: boolean; options: AskOption[] };
+function AskModal({
+  data,
+  onSubmit,
+  onCancel,
+}: {
+  data: { id: number; questions: AskQuestion[] };
+  onSubmit: (list: { selected: string[]; text?: string }[]) => void;
+  onCancel: () => void;
+}) {
+  const qs = data.questions;
+  const [sel, setSel] = useState<Record<number, string[]>>({});
+  const [other, setOther] = useState<Record<number, string>>({});
+  const toggle = (qi: number, label: string, multi: boolean) => {
+    setSel((s) => {
+      const cur = s[qi] || [];
+      if (multi) return { ...s, [qi]: cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label] };
+      return { ...s, [qi]: cur.includes(label) ? [] : [label] }; // 单选：再点取消
+    });
+  };
+  const answered = (qi: number) => (sel[qi]?.length || (other[qi] || "").trim().length) > 0;
+  const allAnswered = qs.every((_, qi) => answered(qi));
+  const submit = () => {
+    if (!allAnswered) return;
+    onSubmit(qs.map((_, qi) => ({ selected: sel[qi] || [], text: (other[qi] || "").trim() || undefined })));
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="perm-overlay">
+      <div className="ask">
+        {qs.map((q, qi) => (
+          <div key={qi} className="ask-q">
+            <div className="ask-qhead">
+              {q.header && <span className="ask-tag">{q.header}</span>}
+              <span className="ask-title">{q.question}</span>
+              {q.multiSelect && <span className="ask-multi">可多选</span>}
+            </div>
+            <div className="ask-opts">
+              {q.options.map((o, oi) => {
+                const on = (sel[qi] || []).includes(o.label);
+                return (
+                  <button key={oi} type="button" className={"ask-opt" + (on ? " on" : "")} onClick={() => toggle(qi, o.label, !!q.multiSelect)}>
+                    <span className="ask-opt-label">{o.label}</span>
+                    {o.description && <span className="ask-opt-desc">{o.description}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              className="ask-other"
+              placeholder="其它（手动输入，可选）"
+              value={other[qi] || ""}
+              onChange={(e) => setOther((o) => ({ ...o, [qi]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && allAnswered) submit();
+              }}
+            />
+          </div>
+        ))}
+        <div className="ask-foot">
+          <button type="button" onClick={onCancel}>
+            取消
+          </button>
+          <button type="button" className="allow" disabled={!allAnswered} onClick={submit}>
+            提交
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 // 复制按钮：点后短暂显示绿色勾 + "已复制"提示

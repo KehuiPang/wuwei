@@ -41,6 +41,7 @@ export interface MiniccApi {
   setGroupMode(mode: "manual" | "date" | "project"): void;
   setStreamOutput(mode: "typewriter" | "stream" | "instant", speed: number): void;
   setKeepRecent(n: number): void;
+  answerAsk(id: number, answers: unknown): void;
   setBrainPrompt(text: string | null): void;
   setSecretsPrompt(text: string | null): void;
   deleteExchange(sid: string, ordinal: number): void;

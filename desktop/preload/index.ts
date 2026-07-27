@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld("minicc", {
   setStreamOutput: (mode: "typewriter" | "stream" | "instant", speed: number) =>
     ipcRenderer.send("settings:set-stream", mode, speed),
   setKeepRecent: (n: number) => ipcRenderer.send("settings:set-keep-recent", n),
+  answerAsk: (id: number, answers: unknown) => ipcRenderer.send("ask:answer", id, answers),
   setBrainPrompt: (text: string | null) => ipcRenderer.send("settings:set-brain-prompt", text),
   setSecretsPrompt: (text: string | null) => ipcRenderer.send("settings:set-secrets-prompt", text),
   deleteExchange: (sid: string, ordinal: number) =>

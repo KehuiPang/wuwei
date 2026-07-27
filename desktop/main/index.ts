@@ -121,6 +121,10 @@ let currentId = "";
 // 权限往返：id → resolve
 const pendingPerm = new Map<number, (d: "allow" | "deny") => void>();
 let permSeq = 0;
+// ask_user(AI 弹选择框)往返：id → resolve；turnSid=当前正在跑的会话(供事件带 sid)
+const pendingAsk = new Map<number, (answers: any) => void>();
+let askSeq = 0;
+let turnSid = "";
 // 多任务：每个会话各自的中断控制器；keys = 正在运行的会话集(用于任务计数)
 const runs = new Map<string, AbortController>();
 // 广播当前所有运行中的会话(前端据此显示"N 个任务运行中"+侧栏运行点)
@@ -844,6 +848,9 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   }
   // 密钥说明：告知模型密钥走本地保险箱/环境变量，无需明文；提示词可在设置里覆盖
   base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : secrets.SECRETS_SYSTEM_NOTE;
+  // 与用户交互：需要用户拍板时优先弹选择框
+  base +=
+    `\n\n## 与用户交互\n当需要用户在若干明确选项中选择或拍板(选方案/文件/分支、确认偏好、二选一等)时，**优先调用 ask_user 工具**弹出可点击选择框(支持单选/多选/可一次多问)，而不是用文字罗列选项让用户手打。需要自由文本回答的问题则直接在正文里问。`;
   return base;
 }
 
@@ -1021,6 +1028,67 @@ const browserClickTool: Tool = {
 };
 const BROWSER_TOOLS: Tool[] = [browserOpenTool, browserReadTool, browserClickTool];
 
+// ask_user：让 AI 弹出可点击的选择框(单选/多选/可多问)，暂停等用户点选后把选择回传。
+// 走「暂停-回传」范式(同权限确认)：run 返回 Promise 挂 pendingAsk，前端选完 ipc 回来 resolve。
+const askUserTool: Tool = {
+  name: "ask_user",
+  description:
+    "需要用户在若干选项中做出选择/决策时，用这个工具弹出可点击的选择框(比让用户打字更方便)。" +
+    "支持单选/多选、可一次问多个问题。每个问题给 question(问题)+options(选项,label必填/description可选说明)，" +
+    "multiSelect=true 允许多选。适合：在方案/文件/分支间挑选、确认偏好、二选一等。" +
+    "不要用它问需要自由文本回答的问题(那种直接在正文里问)。",
+  readOnly: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      questions: {
+        type: "array",
+        description: "要问用户的一个或多个问题",
+        items: {
+          type: "object",
+          properties: {
+            question: { type: "string", description: "问题正文" },
+            header: { type: "string", description: "很短的标签(可选，如「方案」「文件」)" },
+            multiSelect: { type: "boolean", description: "是否允许多选(默认单选)" },
+            options: {
+              type: "array",
+              description: "供点击的选项",
+              items: {
+                type: "object",
+                properties: {
+                  label: { type: "string", description: "选项文字" },
+                  description: { type: "string", description: "选项说明(可选)" },
+                },
+                required: ["label"],
+              },
+            },
+          },
+          required: ["question", "options"],
+        },
+      },
+    },
+    required: ["questions"],
+  },
+  async run(input): Promise<ToolResult> {
+    const questions = Array.isArray((input as any).questions) ? (input as any).questions : [];
+    if (!questions.length) return { content: "ask_user 需要至少一个带 options 的问题", isError: true };
+    const id = ++askSeq;
+    const answers: any = await new Promise((resolve) => {
+      pendingAsk.set(id, resolve);
+      send("evt:ask-user", { sid: turnSid, id, questions });
+    });
+    if (!answers || answers.cancelled) return { content: "用户取消了选择(未作答)。" };
+    const list: { selected?: string[]; text?: string }[] = answers.list || [];
+    const lines = questions.map((q: any, i: number) => {
+      const a = list[i] || {};
+      const parts = [...(a.selected || [])];
+      if (a.text) parts.push(a.text); // 用户在「其它」里填的自由文本
+      return `${i + 1}. ${q.question} → ${parts.length ? parts.join("、") : "(未选)"}`;
+    });
+    return { content: "用户的选择：\n" + lines.join("\n") };
+  },
+};
+
 // 密钥安全包装：入参占位符→真实值回填、bash 注入密钥环境变量、工具结果→脱敏后再回给模型。
 // 闭环:模型能用密钥(env/占位符)但读不回明文(输出被脱敏)，想 echo 偷取也会被拦。
 function deepRehydrate(input: Record<string, unknown>): Record<string, unknown> {
@@ -1049,7 +1117,7 @@ function wrapSecret(t: Tool): Tool {
 
 // 桌面版工具集 = 共享工具 + 浏览器工具 + 动态 MCP 工具(连上后加入)，全部过密钥安全包装
 function desktopTools(): Tool[] {
-  return [...ALL_TOOLS, ...BROWSER_TOOLS, ...mcpTools()].map(wrapSecret);
+  return [...ALL_TOOLS, askUserTool, ...BROWSER_TOOLS, ...mcpTools()].map(wrapSecret);
 }
 function desktopToolMap(): Map<string, Tool> {
   return new Map(desktopTools().map((t) => [t.name, t]));
@@ -1426,6 +1494,7 @@ async function refreshWuweiMe(): Promise<void> {
 }
 
 async function startTurn(useId: string, text: string, images?: string[], sysOverride?: string) {
+  turnSid = useId; // 供 ask_user 工具的事件带上会话 id
   text = secrets.redact(text).text; // 兜底：已入库密钥出现在消息里→占位符替换，永不出网到模型
   const agent = getAgent(useId);
   if (!agent) {
@@ -1537,6 +1606,11 @@ ipcMain.on("chat:stop", (_e, sid?: string) => {
     r("deny");
     pendingPerm.delete(pid);
   }
+  // 若正卡在 ask_user 选择框，一并取消
+  for (const [aid, r] of pendingAsk) {
+    r({ cancelled: true });
+    pendingAsk.delete(aid);
+  }
 });
 
 ipcMain.on("perm:respond", (_e, id: number, decision: "allow" | "deny") => {
@@ -1544,6 +1618,14 @@ ipcMain.on("perm:respond", (_e, id: number, decision: "allow" | "deny") => {
   if (r) {
     r(decision);
     pendingPerm.delete(id);
+  }
+});
+
+ipcMain.on("ask:answer", (_e, id: number, answers: any) => {
+  const r = pendingAsk.get(id);
+  if (r) {
+    r(answers);
+    pendingAsk.delete(id);
   }
 });
 
