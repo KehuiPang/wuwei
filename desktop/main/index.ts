@@ -848,9 +848,9 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   }
   // 密钥说明：告知模型密钥走本地保险箱/环境变量，无需明文；提示词可在设置里覆盖
   base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : secrets.SECRETS_SYSTEM_NOTE;
-  // 与用户交互：需要用户拍板时优先弹选择框
+  // 与用户交互：需要用户拍板时必须弹选择框(强引导，否则模型习惯用文字罗列)
   base +=
-    `\n\n## 与用户交互\n当需要用户在若干明确选项中选择或拍板(选方案/文件/分支、确认偏好、二选一等)时，**优先调用 ask_user 工具**弹出可点击选择框(支持单选/多选/可一次多问)，而不是用文字罗列选项让用户手打。需要自由文本回答的问题则直接在正文里问。`;
+    `\n\n## 与用户交互（务必遵守）\n每当你要让用户在几个明确选项里做选择、确认或拍板——例如“走方案A还是B”“删哪个文件”“要不要继续”“选哪个分支”——你**必须调用 ask_user 工具**弹出可点击选择框，**禁止**在正文里用“方案A/方案B”“1. …2. …”这类文字罗列选项让用户打字。单选/多选/一次多问都支持。只有当答案是自由文本(不是从选项里挑)时，才在正文直接问。这条优先于你平时“用文字提问”的习惯。`;
   return base;
 }
 
@@ -1033,10 +1033,11 @@ const BROWSER_TOOLS: Tool[] = [browserOpenTool, browserReadTool, browserClickToo
 const askUserTool: Tool = {
   name: "ask_user",
   description:
-    "需要用户在若干选项中做出选择/决策时，用这个工具弹出可点击的选择框(比让用户打字更方便)。" +
-    "支持单选/多选、可一次问多个问题。每个问题给 question(问题)+options(选项,label必填/description可选说明)，" +
-    "multiSelect=true 允许多选。适合：在方案/文件/分支间挑选、确认偏好、二选一等。" +
-    "不要用它问需要自由文本回答的问题(那种直接在正文里问)。",
+    "【首选交互方式】只要你打算让用户在几个明确选项里选择、确认或拍板，就调用本工具弹出可点击选择框，" +
+    "不要在正文用文字罗列『方案A/方案B』『1./2.』让用户打字。支持单选/多选/一次多个问题。" +
+    "multiSelect=true 允许多选。适合：方案/文件/分支间挑选、确认偏好、二选一、要不要继续等。" +
+    "只有需要用户自由文本作答(非选项)时才在正文直接问。" +
+    '最简调用示例：{"questions":[{"question":"走哪个方案？","options":[{"label":"方案A"},{"label":"方案B"}]}]}',
   readOnly: true,
   inputSchema: {
     type: "object",

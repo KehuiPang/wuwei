@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WuweiMe } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
@@ -3378,6 +3378,7 @@ export function App() {
       {ask && (
         <AskModal
           data={ask}
+          anchor={composerRef}
           onSubmit={(list) => {
             window.minicc.answerAsk(ask.id, { list });
             setAsk(null);
@@ -3777,28 +3778,34 @@ type AskOption = { label: string; description?: string };
 type AskQuestion = { question: string; header?: string; multiSelect?: boolean; options: AskOption[] };
 function AskModal({
   data,
+  anchor,
   onSubmit,
   onCancel,
 }: {
   data: { id: number; questions: AskQuestion[] };
+  anchor: React.RefObject<HTMLDivElement | null>; // 输入框(composer)，用于对齐定位
   onSubmit: (list: { selected: string[]; text?: string }[]) => void;
   onCancel: () => void;
 }) {
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
   const [other, setOther] = useState<Record<number, string>>({});
-  const toggle = (qi: number, label: string, multi: boolean) => {
-    setSel((s) => {
-      const cur = s[qi] || [];
-      if (multi) return { ...s, [qi]: cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label] };
-      return { ...s, [qi]: cur.includes(label) ? [] : [label] }; // 单选：再点取消
-    });
+  const anyMulti = qs.some((q) => q.multiSelect); // 有多选题→需手动点提交
+  const buildList = (s: Record<number, string[]>) =>
+    qs.map((_, qi) => ({ selected: s[qi] || [], text: (other[qi] || "").trim() || undefined }));
+  const doneWith = (s: Record<number, string[]>) =>
+    qs.every((_, qi) => (s[qi]?.length || (other[qi] || "").trim().length) > 0);
+  const pick = (qi: number, label: string, multi: boolean) => {
+    const cur = sel[qi] || [];
+    const next = multi ? (cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]) : cur.includes(label) ? [] : [label];
+    const merged = { ...sel, [qi]: next };
+    setSel(merged);
+    // 单选即提交：全是单选题、这次是选中(非取消)、且所有题都答了 → 直接确认，不用点提交
+    if (!multi && !anyMulti && next.length && doneWith(merged)) onSubmit(buildList(merged));
   };
-  const answered = (qi: number) => (sel[qi]?.length || (other[qi] || "").trim().length) > 0;
-  const allAnswered = qs.every((_, qi) => answered(qi));
+  const allAnswered = doneWith(sel);
   const submit = () => {
-    if (!allAnswered) return;
-    onSubmit(qs.map((_, qi) => ({ selected: sel[qi] || [], text: (other[qi] || "").trim() || undefined })));
+    if (allAnswered) onSubmit(buildList(sel));
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -3808,46 +3815,68 @@ function AskModal({
     return () => window.removeEventListener("keydown", h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 对齐到输入框：同左、同宽、贴其正上方 8px
+  const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
+  useLayoutEffect(() => {
+    const upd = () => {
+      const el = anchor.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el); // composer 有左右 padding，对齐到内容区(真正的输入条)
+      const padL = parseFloat(cs.paddingLeft) || 0;
+      const padR = parseFloat(cs.paddingRight) || 0;
+      const padT = parseFloat(cs.paddingTop) || 0;
+      setBox({ left: r.left + padL, width: r.width - padL - padR, bottom: window.innerHeight - (r.top + padT) + 8 });
+    };
+    upd();
+    window.addEventListener("resize", upd);
+    return () => window.removeEventListener("resize", upd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor]);
+  const showSubmit = anyMulti || qs.length > 1; // 单个单选题靠点击即交，不显示提交按钮
   return (
-    <div className="perm-overlay">
-      <div className="ask">
-        {qs.map((q, qi) => (
-          <div key={qi} className="ask-q">
-            <div className="ask-qhead">
-              {q.header && <span className="ask-tag">{q.header}</span>}
-              <span className="ask-title">{q.question}</span>
-              {q.multiSelect && <span className="ask-multi">可多选</span>}
-            </div>
-            <div className="ask-opts">
-              {q.options.map((o, oi) => {
-                const on = (sel[qi] || []).includes(o.label);
-                return (
-                  <button key={oi} type="button" className={"ask-opt" + (on ? " on" : "")} onClick={() => toggle(qi, o.label, !!q.multiSelect)}>
-                    <span className="ask-opt-label">{o.label}</span>
-                    {o.description && <span className="ask-opt-desc">{o.description}</span>}
-                  </button>
-                );
-              })}
-            </div>
-            <input
-              className="ask-other"
-              placeholder="其它（手动输入，可选）"
-              value={other[qi] || ""}
-              onChange={(e) => setOther((o) => ({ ...o, [qi]: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && allAnswered) submit();
-              }}
-            />
+    <div
+      className="ask"
+      style={box ? { left: box.left, width: box.width, bottom: box.bottom } : { visibility: "hidden" }}
+    >
+      {qs.map((q, qi) => (
+        <div key={qi} className="ask-q">
+          <div className="ask-qhead">
+            {q.header && <span className="ask-tag">{q.header}</span>}
+            <span className="ask-title">{q.question}</span>
+            {q.multiSelect && <span className="ask-multi">可多选</span>}
           </div>
-        ))}
-        <div className="ask-foot">
-          <button type="button" onClick={onCancel}>
-            取消
-          </button>
+          <div className="ask-opts">
+            {q.options.map((o, oi) => {
+              const on = (sel[qi] || []).includes(o.label);
+              return (
+                <button key={oi} type="button" className={"ask-opt" + (on ? " on" : "")} onClick={() => pick(qi, o.label, !!q.multiSelect)}>
+                  <span className="ask-opt-label">{o.label}</span>
+                  {o.description && <span className="ask-opt-desc">{o.description}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <input
+            className="ask-other"
+            placeholder="其它（手动输入，可选）"
+            value={other[qi] || ""}
+            onChange={(e) => setOther((o) => ({ ...o, [qi]: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && allAnswered) submit();
+            }}
+          />
+        </div>
+      ))}
+      <div className="ask-foot">
+        <button type="button" onClick={onCancel}>
+          取消
+        </button>
+        {showSubmit && (
           <button type="button" className="allow" disabled={!allAnswered} onClick={submit}>
             提交
           </button>
-        </div>
+        )}
       </div>
     </div>
   );

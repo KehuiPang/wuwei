@@ -1725,17 +1725,20 @@ body {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
 }
 
-/* ===== ask_user：AI 弹的选择框 ===== */
+/* ===== ask_user：AI 弹的选择框 =====
+   非模态：fixed 定位对齐到输入框(内联 left/width/bottom = 同左同宽、贴其正上方)，
+   卡片外不设遮罩，上方历史仍可滚动/交互 */
 .ask {
+  position: fixed;
+  z-index: 90;
+  box-sizing: border-box; /* width 精确=输入框内容区宽，padding/border 不再撑宽 */
   background: var(--bg);
   border: 1px solid var(--border-strong);
   border-radius: 14px;
-  padding: 18px 20px;
-  width: 520px;
-  max-width: 92vw;
-  max-height: 84vh;
+  padding: 14px 16px;
+  max-height: 60vh; /* 内容多则内部滚，别顶到上方 */
   overflow-y: auto;
-  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); /* 极轻，和输入框同层次，不显得浮在其上 */
 }
 .ask-q { margin-bottom: 16px; }
 .ask-q:last-of-type { margin-bottom: 8px; }

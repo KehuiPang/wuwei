@@ -8,6 +8,7 @@ const EVENTS = [
   "evt:tool-start",
   "evt:tool-end",
   "evt:permission-request",
+  "evt:ask-user",
   "evt:usage",
   "evt:ratelimits",
   "evt:compact",
