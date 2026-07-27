@@ -2775,6 +2775,30 @@ body {
   margin: 0 0 14px;
   font-size: 15px;
 }
+.coin-shortage-dialog {
+  width: 420px;
+}
+.coin-shortage-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 4px;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  color: var(--spark);
+}
+.coin-shortage-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.coin-shortage-balance {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
 /* 设置里 API Key 自动检测反馈 */
 .skey-msg {
   margin: 6px 0 0;

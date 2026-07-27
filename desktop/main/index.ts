@@ -1482,7 +1482,10 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     // 若已被 chat:stop 手动停止(runs 里已换掉/删掉本 ac),就不再重复报,避免"已停止"提示重复
     if (runs.get(useId) === ac) {
       if (e?.name === "AbortError" || ac.signal.aborted) send("evt:stopped", { sid: useId });
-      else send("evt:error", { sid: useId, message: e.message });
+      else {
+        if (isHostedProvider(loadSettings()?.providerId)) void refreshWuweiMe(); // 失败也刷新，避免余额提示仍显示旧缓存
+        send("evt:error", { sid: useId, message: e.message });
+      }
     }
   } finally {
     if (runs.get(useId) === ac) {

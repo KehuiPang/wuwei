@@ -128,6 +128,10 @@ function friendlyError(raw: string): string {
   return "出错：" + (r.split("\n")[0] || r).slice(0, 120);
 }
 
+function isCoinShortage(raw: string): boolean {
+  return /insufficient_balance|无为币余额不足|积分余额不足|余额不足/i.test(raw || "");
+}
+
 // 粗判是否像 API Key：无空白、可见 ASCII、够长(真正闸门是连通测试)
 function isLikelyKey(s: string): boolean {
   const t = (s || "").trim();
@@ -814,6 +818,19 @@ export function App() {
   // 灰度开关（C2）：订阅版是否显示，完全由后端 flags 决定，默认隐藏。客户端只渲染不判定。
   const showSubscription = !!wuwei?.flags?.includes("subscription");
   const [wuweiBusy, setWuweiBusy] = useState(false);
+  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
+  async function refreshWuweiForShortage(message: string) {
+    setCoinShortage({ message });
+    try {
+      const me = await window.minicc.wuweiMe();
+      if (me) {
+        setWuwei(me);
+        setCoinShortage({ message, balance: me.coin.balance });
+      }
+    } catch {
+      /* 弹窗仍然保留充值入口 */
+    }
+  }
   async function doWuweiLogout() {
     await window.minicc.wuweiLogout();
     setWuwei(null);
@@ -1261,7 +1278,12 @@ export function App() {
         case "evt:error": {
           if (payload.sid && payload.sid !== currentIdRef.current) break;
           thinkStartRef.current = null;
-          const friendly = friendlyError(String(payload.message ?? payload));
+          const rawMsg = String(payload.message ?? payload);
+          const friendly = friendlyError(rawMsg);
+          if (isCoinShortage(rawMsg) || isCoinShortage(friendly)) {
+            setShowAcctMenu(false);
+            void refreshWuweiForShortage(friendly);
+          }
           // 去重：与上一条完全相同的出错提示不重复堆叠
           setItems((p) => {
             const last = p[p.length - 1];
@@ -1448,6 +1470,10 @@ export function App() {
     if (!wuwei) {
       setLoginResume(true);
       setShowLoginForm(true);
+      return;
+    }
+    if (curPreset?.hosted && wuwei.coin.balance <= 0) {
+      void refreshWuweiForShortage("无为币余额不足：请充值后再使用无为托管模型。");
       return;
     }
     setSuggestion(""); // 发送后清掉旧的下一步建议(回复完会重新生成)
@@ -3127,6 +3153,40 @@ export function App() {
           }}
           onSuccess={onWuweiLoggedIn}
         />
+      )}
+      {coinShortage && (
+        <div className="perm-overlay add-st-overlay" onClick={() => setCoinShortage(null)}>
+          <div className="add-st-dialog coin-shortage-dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>无为币余额不足</h3>
+            <p className="s-note">{coinShortage.message}</p>
+            <div className="coin-shortage-card">
+              <CoinIcon size={18} />
+              <div>
+                <div className="coin-shortage-label">当前可用余额</div>
+                <div className="coin-shortage-balance">
+                  {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? "刷新中"} 无为币
+                </div>
+              </div>
+            </div>
+            <div className="btns">
+              <button
+                onClick={() => {
+                  void refreshWuweiForShortage(coinShortage.message);
+                }}
+              >
+                刷新余额
+              </button>
+              <button
+                className="allow"
+                onClick={() => {
+                  window.minicc.openExternal("https://wuweiai.io/pricing");
+                }}
+              >
+                去充值
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {secretPrompt && (
         <div className="perm-overlay" onClick={() => setSecretPrompt(null)}>
