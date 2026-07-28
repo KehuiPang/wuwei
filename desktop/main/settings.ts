@@ -167,6 +167,20 @@ export interface CustomStation {
 // 应用级设置：放在专门的「设置」弹窗里，跨平台通用
 export interface AppSettings {
   claudeAutoRefresh?: boolean; // Claude Code token 过期时用 refreshToken 自动刷新(默认关；有搞挂 Claude Code 登录的风险)
+  secretsDetect?: boolean; // 发送前扫描/拦截疑似新密钥(默认开=undefined 视为 true)；关掉后长 token 不再被切成一堆弹窗
+  brainEnabled?: boolean; // 启用本地知识网络 Brain：注入系统提示 + 提供 brain_* 工具(默认开)
+  brainDocs?: boolean; // brain_recall 是否连带扫描文档冷存储的『相关文档』(默认开)
+}
+
+// 三个开关的取值：undefined 一律按「开」处理，保持历史默认行为，只让用户能主动关
+export function secretsDetectEnabled(s: Settings | null): boolean {
+  return s?.app?.secretsDetect !== false;
+}
+export function brainEnabled(s: Settings | null): boolean {
+  return s?.app?.brainEnabled !== false;
+}
+export function brainDocsEnabled(s: Settings | null): boolean {
+  return s?.app?.brainDocs !== false;
 }
 
 export function loadSettings(): Settings | null {

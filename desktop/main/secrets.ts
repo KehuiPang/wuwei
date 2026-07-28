@@ -329,13 +329,17 @@ function nameFromLabel(label: string): string {
   return uniq.join("_").replace(/^_+|_+$/g, "") || "password";
 }
 
-// 高熵长串（无标签的随机密钥）：≥24 位、同时含大小写+数字，普通英文/句子几乎不会命中
+// 高熵长串（无标签的随机密钥）：≥24 位、同时含大小写+数字，普通英文/句子几乎不会命中。
+// 整段连续匹配(不设 80 上限截断)，避免「一长串 token 被切成好几段、各弹一条」把弹窗撑爆。
+// 超过 ENTROPY_MAX 的极长串视为临时性 token / 会话串(如临时 access_token)，不是可长期保管的密钥，直接放过不拦。
+const ENTROPY_MAX = 128;
 function entropyCandidates(text: string): string[] {
   const out: string[] = [];
-  const re = /[A-Za-z0-9_\-./+=]{24,80}/g;
+  const re = /[A-Za-z0-9_\-./+=]{24,}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))) {
     const s = m[0];
+    if (s.length > ENTROPY_MAX) continue; // 超长→临时 token，不拦
     if (!/[a-z]/.test(s) || !/[A-Z]/.test(s) || !/[0-9]/.test(s)) continue; // 需三类字符齐全
     if (/^https?:\/\//i.test(s)) continue; // 跳过 URL
     if (s.includes("⟦")) continue; // 跳过占位符

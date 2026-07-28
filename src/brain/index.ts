@@ -24,6 +24,12 @@ export { BRAIN_DIR, GRAPH_FILE } from "./store.js";
 export { readDoc, docStats, DOCS_FILE, loadDocIndex } from "./docs.js";
 export type { BuildProgress } from "./docs.js";
 
+// 文档冷存储扫描开关：主进程按设置 setDocsEnabled(...) 同步；关掉后 recall 不再连带扫『相关文档』。
+let docsEnabled = true;
+export function setDocsEnabled(on: boolean) {
+  docsEnabled = on !== false;
+}
+
 // 构建/重建文档冷存储索引（知识宫殿等目录）
 export async function buildDocs(dir: string, onProgress?: (p: BuildProgress) => void) {
   return buildDocIndex(dir, onProgress);
@@ -138,8 +144,9 @@ export async function recall(query: string, limit = 6): Promise<RecallResult> {
   }
 
   // —— 文档冷存储（知识宫殿等原文块，需细节时路由过去读）——
+  // 设置里关掉「扫描相关文档」后跳过，只返回概念子图。
   let docText = "";
-  const docs = await searchDocs(query, 4, qv ? qv[0] : undefined);
+  const docs = docsEnabled ? await searchDocs(query, 4, qv ? qv[0] : undefined) : [];
   if (docs.length) {
     docText =
       "【相关文档 · 需要细节用 brain_read_doc 读全文】\n" +

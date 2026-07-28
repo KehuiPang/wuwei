@@ -62,6 +62,9 @@ import {
   loadSessionBalances,
   saveSessionBalances,
   migrateFromMinicc,
+  secretsDetectEnabled,
+  brainEnabled,
+  brainDocsEnabled,
   type Settings,
   type SessionBal,
 } from "./settings.js";
@@ -838,13 +841,16 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   base +=
     `\n\n## 长期记忆\n用户说“记住…/以后…/我喜欢…”或出现值得长期保留的信息(偏好、称呼、事实、项目背景)时，调用 remember 工具写入；它会在之后每次对话自动加载。`;
   if (mem) base += `\n\n已记住（需主动遵守/参考）：\n${mem}`;
-  // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall；提示词可在设置里覆盖
-  base += typeof st?.brainPrompt === "string" ? st.brainPrompt : DEFAULT_BRAIN_NOTE;
-  try {
-    const idx = brain.conceptIndex(40);
-    if (idx.length) base += `\n已沉淀的概念（可 brain_recall 展开）：${idx.join("、")}`;
-  } catch {
-    /* brain 不可用不影响主流程 */
+  // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall；提示词可在设置里覆盖。
+  // 设置里关掉「知识网络」后：不注入说明、不追加概念目录(brain_* 工具也在别处一并停掉)。
+  if (brainEnabled(st)) {
+    base += typeof st?.brainPrompt === "string" ? st.brainPrompt : DEFAULT_BRAIN_NOTE;
+    try {
+      const idx = brain.conceptIndex(40);
+      if (idx.length) base += `\n已沉淀的概念（可 brain_recall 展开）：${idx.join("、")}`;
+    } catch {
+      /* brain 不可用不影响主流程 */
+    }
   }
   // 密钥说明：告知模型密钥走本地保险箱/环境变量，无需明文；提示词可在设置里覆盖
   base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : secrets.SECRETS_SYSTEM_NOTE;
@@ -854,10 +860,20 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   return base;
 }
 
+// 把「扫描相关文档」开关同步到 brain 模块(recall 据此决定是否连带扫文档冷存储)
+function syncBrainDocsFlag(st: Settings | null) {
+  try {
+    brain.setDocsEnabled(brainDocsEnabled(st));
+  } catch {
+    /* brain 不可用不影响主流程 */
+  }
+}
+
 function initProvider() {
   cwd = process.cwd();
   const st = loadSettings();
   applyEnvFromSettings(st); // 有已保存设置则据此，否则自动推断
+  syncBrainDocsFlag(st);
   const cfg = loadConfig();
   provider = makeProvider(cfg);
   modelLabel = cfg.model;
@@ -876,6 +892,7 @@ function applySettings(s: Settings) {
   log("applySettings", "平台=", s.providerId, "模型=", s.model, "有key=", !!s.apiKey);
   saveSettings(s);
   applyEnvFromSettings(s);
+  syncBrainDocsFlag(s);
   const cfg = loadConfig();
   provider = makeProvider(cfg);
   backendLabel = labelFor(cfg, s.providerId);
@@ -887,6 +904,7 @@ function applySettings(s: Settings) {
     a.setProvider(provider);
     a.setSystem(sysPrompt); // 热更每个会话的系统提示，问"你是什么模型"能答对
   }
+  refreshAgentTools(); // 「知识网络」开关变了→即时给所有会话加/摘 brain_* 工具
   send("evt:ready", { backend: backendLabel, model: modelLabel, cwd, sub: subFlag, ctxWindow });
   void emitAccount(); // 切平台后左下角账号/余额随之更新
   if (s.providerId) void silentRefreshAccount(s.providerId); // 用存的 token 静默刷新，无需重登
@@ -1116,9 +1134,12 @@ function wrapSecret(t: Tool): Tool {
   };
 }
 
-// 桌面版工具集 = 共享工具 + 浏览器工具 + 动态 MCP 工具(连上后加入)，全部过密钥安全包装
+// 桌面版工具集 = 共享工具 + 浏览器工具 + 动态 MCP 工具(连上后加入)，全部过密钥安全包装。
+// 设置里关掉「知识网络」→ 一并摘掉 brain_* 工具，别再让模型调用(与系统提示注入的开关同源)。
 function desktopTools(): Tool[] {
-  return [...ALL_TOOLS, askUserTool, ...BROWSER_TOOLS, ...mcpTools()].map(wrapSecret);
+  const brainOn = brainEnabled(loadSettings());
+  const base = brainOn ? ALL_TOOLS : ALL_TOOLS.filter((t) => !t.name.startsWith("brain_"));
+  return [...base, askUserTool, ...BROWSER_TOOLS, ...mcpTools()].map(wrapSecret);
 }
 function desktopToolMap(): Map<string, Tool> {
   return new Map(desktopTools().map((t) => [t.name, t]));
@@ -1630,6 +1651,48 @@ ipcMain.on("ask:answer", (_e, id: number, answers: any) => {
   }
 });
 
+// —— Codex 限额重置(免费重置额度)：官方客户端走 /wham/rate-limit-reset-credits ——
+// 用 ~/.codex/auth.json 的订阅 token 认证；GET 查可用次数、POST consume 用掉一次(不可逆)。
+function codexAuthHeaders(): Record<string, string> | null {
+  try {
+    const auth = JSON.parse(readFileSync(join(homedir(), ".codex", "auth.json"), "utf8"));
+    const tok = auth?.tokens?.access_token;
+    const acc = auth?.tokens?.account_id;
+    if (!tok || !acc) return null;
+    return { Authorization: `Bearer ${tok}`, "chatgpt-account-id": acc, "User-Agent": "codex_cli_rs/0.0.0", Accept: "application/json" };
+  } catch {
+    return null;
+  }
+}
+ipcMain.handle("codex:reset-credits", async () => {
+  const h = codexAuthHeaders();
+  if (!h) return { ok: false, error: "无 Codex 登录(~/.codex/auth.json)" };
+  try {
+    const res = await fetch("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits", { headers: h });
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const j: any = await res.json();
+    return { ok: true, availableCount: j.available_count ?? 0, credits: Array.isArray(j.credits) ? j.credits : [] };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+});
+ipcMain.handle("codex:consume-reset", async (_e, creditId: string) => {
+  const h = codexAuthHeaders();
+  if (!h) return { ok: false, error: "无 Codex 登录" };
+  try {
+    const res = await fetch("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume", {
+      method: "POST",
+      headers: { ...h, "Content-Type": "application/json" },
+      body: JSON.stringify({ credit_id: creditId, redeem_request_id: randomUUID() }),
+    });
+    const body = await res.text();
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}: ${body.slice(0, 200)}` };
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // —— 会话管理 IPC ——
 ipcMain.on("session:new", () => {
   currentId = randomUUID();
@@ -1875,6 +1938,18 @@ ipcMain.on(
     saveSettings({ ...s, streamMode: mode, streamSpeed: speed });
   },
 );
+
+// 应用级开关(app.*：密钥检测/知识网络/扫描相关文档)：只并进 app 字段落盘，不重启 provider。
+// 热更：知识网络开关变了→重建系统提示 + 加/摘 brain_* 工具；文档开关→同步 brain 模块。
+ipcMain.on("settings:set-app", (_e, patch: Record<string, boolean>) => {
+  const s = loadSettings() || ({} as Settings);
+  s.app = { ...(s.app || {}), ...patch } as any;
+  saveSettings(s);
+  syncBrainDocsFlag(s);
+  sysPrompt = buildSysPrompt(cwd, modelLabel, s.providerId);
+  for (const a of agents.values()) a.setSystem(sysPrompt);
+  refreshAgentTools();
+});
 
 // 上下文压缩：保留最近 N 条(热更所有会话，不重启 provider)
 ipcMain.on("settings:set-keep-recent", (_e, n: number) => {
@@ -2192,8 +2267,10 @@ ipcMain.handle("secrets:reveal", async (_e, pw: string) => {
 // 发送前扫描：脱敏已入库密钥 + 返回尚未入库的疑似新密钥(给确认弹窗)。永不抛错,否则会挡住发送。
 ipcMain.handle("secrets:scan", (_e, text: string) => {
   try {
-    // detect 用原文(才能发现"值已存在但描述不同"的重复)；redact 单独产出发给模型的脱敏版
-    return { redacted: secrets.redact(text).text, candidates: secrets.detect(text) };
+    // redact 始终跑：已入库密钥→占位符，永不出网(与"检测新密钥"是两回事，不受开关影响)。
+    // detect 受「密钥检测」开关控制：关掉后不再扫描/弹窗拦截疑似新密钥(如临时长 token)。
+    const detect = secretsDetectEnabled(loadSettings());
+    return { redacted: secrets.redact(text).text, candidates: detect ? secrets.detect(text) : [] };
   } catch {
     return { redacted: text, candidates: [] };
   }

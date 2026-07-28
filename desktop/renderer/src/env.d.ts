@@ -41,7 +41,10 @@ export interface MiniccApi {
   setGroupMode(mode: "manual" | "date" | "project"): void;
   setStreamOutput(mode: "typewriter" | "stream" | "instant", speed: number): void;
   setKeepRecent(n: number): void;
+  setAppSettings(patch: Record<string, boolean>): void;
   answerAsk(id: number, answers: unknown): void;
+  codexResetCredits(): Promise<{ ok: boolean; availableCount?: number; credits?: any[]; error?: string }>;
+  codexConsumeReset(creditId: string): Promise<{ ok: boolean; error?: string }>;
   setBrainPrompt(text: string | null): void;
   setSecretsPrompt(text: string | null): void;
   deleteExchange(sid: string, ordinal: number): void;

@@ -723,6 +723,10 @@ export function App() {
   const currentIdRef = useRef(currentId); // 事件回调里读最新 currentId(判是否本会话的更新)
   currentIdRef.current = currentId;
   const [showUsage, setShowUsage] = useState(false);
+  // Codex 限额重置(免费重置额度)
+  const [codexResets, setCodexResets] = useState<{ availableCount: number; credits: any[] } | null>(null);
+  const [resetConfirm, setResetConfirm] = useState<string | null>(null); // 正在二次确认的 creditId
+  const [resetMsg, setResetMsg] = useState("");
   const [showTasks, setShowTasks] = useState(false); // 运行中任务列表弹窗
   const [showBrowser, setShowBrowser] = useState(false); // 内置浏览器面板(可视化AI操作)
   const [browserMode, setBrowserMode] = useState<"split" | "full">("split"); // 半屏/全屏
@@ -1384,6 +1388,31 @@ export function App() {
   useEffect(() => {
     setSuggestion(""); // 切换会话清掉上个会话的建议
   }, [currentId]);
+
+  // 打开用量面板且当前是 Codex：拉取可用的免费限额重置次数
+  useEffect(() => {
+    if (!showUsage || curProviderId !== "codex") {
+      setCodexResets(null);
+      setResetConfirm(null);
+      setResetMsg("");
+      return;
+    }
+    window.minicc.codexResetCredits().then((r) => {
+      if (r.ok) setCodexResets({ availableCount: r.availableCount ?? 0, credits: r.credits ?? [] });
+    });
+  }, [showUsage, curProviderId]);
+  const doConsumeReset = async (creditId: string) => {
+    setResetConfirm(null);
+    setResetMsg("重置中…");
+    const r = await window.minicc.codexConsumeReset(creditId);
+    if (r.ok) {
+      setResetMsg("✅ 已重置！发一条消息后额度会刷新。");
+      const rr = await window.minicc.codexResetCredits();
+      if (rr.ok) setCodexResets({ availableCount: rr.availableCount ?? 0, credits: rr.credits ?? [] });
+    } else {
+      setResetMsg("重置失败：" + (r.error || ""));
+    }
+  };
 
   // 平台切换后拉该平台实时模型列表(/models)，并入下拉；延迟一点等主进程 applySettings 落定
   useEffect(() => {
@@ -2365,7 +2394,27 @@ export function App() {
                 title="浏览器（独立窗口）"
                 onClick={() => setShowBrowserMenu((v) => !v)}
               >
-                <GlobeIcon size={15} />
+                <svg
+                  className="tb-browser-ico"
+                  width="15"
+                  height="15"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <rect
+                    x="1.6"
+                    y="2.6"
+                    width="12.8"
+                    height="10.8"
+                    rx="2"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                  />
+                  <path d="M1.6 5.7h12.8" stroke="currentColor" strokeWidth="1.3" />
+                  <circle cx="4" cy="4.15" r="0.62" fill="currentColor" />
+                  <circle cx="6.1" cy="4.15" r="0.62" fill="currentColor" />
+                </svg>
                 <span className="tb-caret">▾</span>
               </button>
               {showBrowserMenu && (
@@ -2950,7 +2999,27 @@ export function App() {
               onClick={() => setShowBrowser((v) => !v)}
               style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
             >
-              <GlobeIcon size={14} />
+              <svg
+                className="fb-ico"
+                width="13"
+                height="13"
+                viewBox="0 0 16 16"
+                fill="none"
+                aria-hidden="true"
+              >
+                <rect
+                  x="1.6"
+                  y="2.6"
+                  width="12.8"
+                  height="10.8"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
+                <path d="M1.6 5.7h12.8" stroke="currentColor" strokeWidth="1.3" />
+                <circle cx="4" cy="4.15" r="0.62" fill="currentColor" />
+                <circle cx="6.1" cy="4.15" r="0.62" fill="currentColor" />
+              </svg>
               <span className="fb-txt">{t("foot.browser")}</span>
             </button>
 
@@ -2986,9 +3055,16 @@ export function App() {
                 {meta.sub && rate && typeof rate.primaryUsedPercent === "number" && (
                   <>
                     <span className="fs-dot">·</span>
-                    <span>5小时 {rate.primaryUsedPercent}%</span>
-                    <span className="fs-dot">·</span>
-                    <span>周 {rate.secondaryUsedPercent ?? 0}%</span>
+                    {(rate.primaryWindowMinutes ?? 300) >= 1440 ? (
+                      // 主窗口已是周尺度(Codex 168h)：只显示一个「周」用量，不再摆短窗口
+                      <span>周 {rate.primaryUsedPercent}%</span>
+                    ) : (
+                      <>
+                        <span>5小时 {rate.primaryUsedPercent}%</span>
+                        <span className="fs-dot">·</span>
+                        <span>周 {rate.secondaryUsedPercent ?? 0}%</span>
+                      </>
+                    )}
                   </>
                 )}
                 {!meta.sub && account.balance && (
@@ -3104,17 +3180,52 @@ export function App() {
                 )}
                 {typeof rate.primaryUsedPercent === "number" && (
                   <LimitRow
-                    label={`${Math.round((rate.primaryWindowMinutes ?? 300) / 60)}小时限额`}
+                    // 主窗口≥24h(如 Codex 现在的 168h=7天)：本身就是周尺度，直接标「周限额」，不再单列短窗口
+                    label={(rate.primaryWindowMinutes ?? 300) >= 1440 ? "周限额" : windowLabel(rate.primaryWindowMinutes)}
                     used={rate.primaryUsedPercent}
                     resetSec={rate.primaryResetAfterSeconds}
                   />
                 )}
-                {typeof rate.secondaryUsedPercent === "number" && (
+                {(rate.primaryWindowMinutes ?? 300) < 1440 && typeof rate.secondaryUsedPercent === "number" && (
                   <LimitRow
                     label={`周限额`}
                     used={rate.secondaryUsedPercent}
                     resetSec={rate.secondaryResetAfterSeconds}
                   />
+                )}
+                {curProviderId === "codex" && codexResets && codexResets.availableCount > 0 && (
+                  <div className="u-reset">
+                    <div className="u-row">
+                      <span>限额重置</span>
+                      <span>可用 {codexResets.availableCount} 次</span>
+                    </div>
+                    {codexResets.credits
+                      .filter((c) => c.status === "available")
+                      .map((c) => (
+                        <div key={c.id} className="u-reset-item">
+                          <div className="u-reset-info">
+                            <span className="u-reset-title">{c.title || "Full reset"}</span>
+                            {c.expires_at && (
+                              <span className="u-reset-exp">{new Date(c.expires_at).toLocaleDateString()} 到期</span>
+                            )}
+                          </div>
+                          {resetConfirm === c.id ? (
+                            <span className="u-reset-confirm">
+                              用掉这次？
+                              <button className="allow" onClick={() => doConsumeReset(c.id)}>
+                                确认
+                              </button>
+                              <button onClick={() => setResetConfirm(null)}>取消</button>
+                            </span>
+                          ) : (
+                            <button className="u-reset-btn" onClick={() => setResetConfirm(c.id)}>
+                              使用重置
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    {resetMsg && <div className="u-reset-msg">{resetMsg}</div>}
+                  </div>
                 )}
                 <div className="u-note">数据来自订阅额度（发一条消息后刷新）。</div>
               </>
@@ -3477,6 +3588,12 @@ function fmtReset(sec?: number): string {
   return `${m}分后重置`;
 }
 
+// 额度窗口时长 → 友好标签：≥48h 用「N天限额」，否则「X小时限额」(数据来自订阅接口返回的窗口时长)
+function windowLabel(min?: number, fallback = 300): string {
+  const h = Math.round((min ?? fallback) / 60);
+  return h >= 48 ? `${Math.round(h / 24)}天限额` : `${h}小时限额`;
+}
+
 function LimitRow({ label, used, resetSec }: { label: string; used: number; resetSec?: number }) {
   return (
     <div className="limit">
@@ -3790,22 +3907,28 @@ function AskModal({
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
   const [other, setOther] = useState<Record<number, string>>({});
-  const anyMulti = qs.some((q) => q.multiSelect); // 有多选题→需手动点提交
+  const [step, setStep] = useState(0); // 分步：一次只问一题，答完再出下一题
+  const q = qs[step];
+  const isLast = step === qs.length - 1;
+  const curMulti = !!q.multiSelect;
   const buildList = (s: Record<number, string[]>) =>
     qs.map((_, qi) => ({ selected: s[qi] || [], text: (other[qi] || "").trim() || undefined }));
-  const doneWith = (s: Record<number, string[]>) =>
-    qs.every((_, qi) => (s[qi]?.length || (other[qi] || "").trim().length) > 0);
-  const pick = (qi: number, label: string, multi: boolean) => {
-    const cur = sel[qi] || [];
-    const next = multi ? (cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]) : cur.includes(label) ? [] : [label];
-    const merged = { ...sel, [qi]: next };
-    setSel(merged);
-    // 单选即提交：全是单选题、这次是选中(非取消)、且所有题都答了 → 直接确认，不用点提交
-    if (!multi && !anyMulti && next.length && doneWith(merged)) onSubmit(buildList(merged));
+  const answeredAt = (s: Record<number, string[]>, qi: number) =>
+    (s[qi]?.length || (other[qi] || "").trim().length) > 0;
+  const curAnswered = answeredAt(sel, step);
+  // 进入下一题；已是最后一题则整体提交
+  const advance = (s: Record<number, string[]> = sel) => {
+    if (!answeredAt(s, step)) return;
+    if (isLast) onSubmit(buildList(s));
+    else setStep((v) => v + 1);
   };
-  const allAnswered = doneWith(sel);
-  const submit = () => {
-    if (allAnswered) onSubmit(buildList(sel));
+  const pick = (label: string, multi: boolean) => {
+    const cur = sel[step] || [];
+    const next = multi ? (cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]) : cur.includes(label) ? [] : [label];
+    const merged = { ...sel, [step]: next };
+    setSel(merged);
+    // 单选即进：这次是选中(非取消) → 自动进入下一题/提交，不用点按钮
+    if (!multi && next.length) advance(merged);
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -3833,48 +3956,58 @@ function AskModal({
     return () => window.removeEventListener("resize", upd);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
-  const showSubmit = anyMulti || qs.length > 1; // 单个单选题靠点击即交，不显示提交按钮
+  // 单个单选题靠点击即交，不显示按钮；多选题或多题分步时显示「下一步/提交」
+  const showPrimary = curMulti || qs.length > 1;
   return (
     <div
       className="ask"
       style={box ? { left: box.left, width: box.width, bottom: box.bottom } : { visibility: "hidden" }}
     >
-      {qs.map((q, qi) => (
-        <div key={qi} className="ask-q">
-          <div className="ask-qhead">
-            {q.header && <span className="ask-tag">{q.header}</span>}
-            <span className="ask-title">{q.question}</span>
-            {q.multiSelect && <span className="ask-multi">可多选</span>}
-          </div>
-          <div className="ask-opts">
-            {q.options.map((o, oi) => {
-              const on = (sel[qi] || []).includes(o.label);
-              return (
-                <button key={oi} type="button" className={"ask-opt" + (on ? " on" : "")} onClick={() => pick(qi, o.label, !!q.multiSelect)}>
-                  <span className="ask-opt-label">{o.label}</span>
-                  {o.description && <span className="ask-opt-desc">{o.description}</span>}
-                </button>
-              );
-            })}
-          </div>
-          <input
-            className="ask-other"
-            placeholder="其它（手动输入，可选）"
-            value={other[qi] || ""}
-            onChange={(e) => setOther((o) => ({ ...o, [qi]: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && allAnswered) submit();
-            }}
-          />
+      <div className="ask-q">
+        <div className="ask-qhead">
+          {q.header && <span className="ask-tag">{q.header}</span>}
+          <span className="ask-title">{q.question}</span>
+          {q.multiSelect && <span className="ask-multi">可多选</span>}
         </div>
-      ))}
+        <div className="ask-opts">
+          {q.options.map((o, oi) => {
+            const on = (sel[step] || []).includes(o.label);
+            return (
+              <button key={oi} type="button" className={"ask-opt" + (on ? " on" : "")} onClick={() => pick(o.label, curMulti)}>
+                <span className="ask-opt-label">{o.label}</span>
+                {o.description && <span className="ask-opt-desc">{o.description}</span>}
+              </button>
+            );
+          })}
+        </div>
+        <input
+          className="ask-other"
+          placeholder="其它（手动输入，可选）"
+          value={other[step] || ""}
+          onChange={(e) => setOther((o) => ({ ...o, [step]: e.target.value }))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && curAnswered) advance();
+          }}
+        />
+      </div>
       <div className="ask-foot">
         <button type="button" onClick={onCancel}>
           取消
         </button>
-        {showSubmit && (
-          <button type="button" className="allow" disabled={!allAnswered} onClick={submit}>
-            提交
+        {qs.length > 1 && (
+          <span className="ask-step">
+            {step + 1} / {qs.length}
+          </span>
+        )}
+        <span className="ask-foot-spacer" />
+        {step > 0 && (
+          <button type="button" onClick={() => setStep((v) => v - 1)}>
+            上一步
+          </button>
+        )}
+        {showPrimary && (
+          <button type="button" className="allow" disabled={!curAnswered} onClick={() => advance()}>
+            {isLast ? "提交" : "下一步"}
           </button>
         )}
       </div>
@@ -5276,6 +5409,15 @@ function SettingsModal({
   const [docProg, setDocProg] = useState("");
   credsRef.current = creds;
   const loadedRef = useRef<any>({}); // 保存加载时的完整 settings，保存时 spread 保留 theme/app 等本页不管的字段
+  // 三个应用级开关(app.*)：undefined 一律视为「开」，保持历史默认；改动即时落盘+热更(走独立 settings:set-app，不重启 provider)
+  const [secretsDetect, setSecretsDetect] = useState(true); // 发送前扫描/拦截疑似新密钥
+  const [brainOn, setBrainOn] = useState(true); // 启用本地知识网络 Brain
+  const [brainDocsOn, setBrainDocsOn] = useState(true); // recall 连带扫描『相关文档』
+  const setAppToggle = (patch: Record<string, boolean>) => {
+    const cur = loadedRef.current || {};
+    loadedRef.current = { ...cur, app: { ...(cur.app || {}), ...patch } }; // 同步本地，避免后续「保存」把开关刷回
+    window.minicc.setAppSettings(patch);
+  };
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [newStName, setNewStName] = useState(""); // 新增中转站：名称
   const [newStUrl, setNewStUrl] = useState(""); // 新增中转站：baseURL
@@ -5409,6 +5551,8 @@ function SettingsModal({
   const [secrets, setSecrets] = useState<SecretRow[]>([]);
   const [secretsAvail, setSecretsAvail] = useState(true);
   const [secNew, setSecNew] = useState({ name: "", envVar: "", value: "", note: "" });
+  const [secEdit, setSecEdit] = useState<string | null>(null); // 正在编辑的密钥 id
+  const [secEditDraft, setSecEditDraft] = useState({ name: "", envVar: "", note: "" });
   const [secMore, setSecMore] = useState(false); // 展开环境变量名/备注(默认收起)
   const [secImportOpen, setSecImportOpen] = useState(false);
   const [secImportText, setSecImportText] = useState("");
@@ -5608,6 +5752,10 @@ function SettingsModal({
       const s = r?.settings;
       if (!s) return;
       loadedRef.current = s; // 存完整 settings，保存时 spread 保留本页不管的字段
+      // 三个应用级开关：undefined 视为开
+      setSecretsDetect(s.app?.secretsDetect !== false);
+      setBrainOn(s.app?.brainEnabled !== false);
+      setBrainDocsOn(s.app?.brainDocs !== false);
       const sts: Station[] = s.customStations || [];
       setStations(sts);
       stationsRef.current = sts;
@@ -6556,6 +6704,43 @@ function SettingsModal({
                       </button>
                     ))}
                   </div>
+                  {/* 总开关：关掉后不注入知识网络说明、不再提供 brain_* 工具 */}
+                  <div className="app-set-row" style={{ order: -2, cursor: "default" }}>
+                    <div className="app-set-text">
+                      <div className="app-set-label">启用知识网络</div>
+                      <div className="app-set-hint">
+                        开：给模型注入知识网络说明并提供 brain_recall / brain_learn 等工具。关：完全停用（下面的概念/文档仍在，随时可重新开启）。
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="app-set-toggle"
+                      checked={brainOn}
+                      onChange={(e) => {
+                        setBrainOn(e.target.checked);
+                        setAppToggle({ brainEnabled: e.target.checked });
+                      }}
+                    />
+                  </div>
+                  {/* 子开关：recall 是否连带扫描『相关文档』(文档冷存储) */}
+                  <div className="app-set-row" style={{ order: -1, cursor: "default", opacity: brainOn ? 1 : 0.5 }}>
+                    <div className="app-set-text">
+                      <div className="app-set-label">检索时扫描相关文档</div>
+                      <div className="app-set-hint">
+                        开：brain_recall 除概念子图外，还返回知识宫殿等文档库的相关原文片段。关：只返回概念子图、不扫文档。
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="app-set-toggle"
+                      checked={brainDocsOn}
+                      disabled={!brainOn}
+                      onChange={(e) => {
+                        setBrainDocsOn(e.target.checked);
+                        setAppToggle({ brainDocs: e.target.checked });
+                      }}
+                    />
+                  </div>
                   {brainView === "prompt" ? (
                     <>
                       <label className="field pp-grow">
@@ -7354,6 +7539,25 @@ function SettingsModal({
                 {!secretsAvail && <b style={{ color: "var(--danger, #c0392b)" }}>{t("set.sec.unavailable")}</b>}
               </p>
 
+              <div className="app-set-row" style={{ cursor: "default" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">发送前检测疑似新密钥</div>
+                  <div className="app-set-hint">
+                    开：发送前扫描文本、发现疑似新密钥就弹窗让你确认是否入库。关：不再扫描拦截——传很长的临时
+                    token 时不会被切成一堆弹窗。（已入库密钥仍会自动脱敏，不受此开关影响。）
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={secretsDetect}
+                  onChange={(e) => {
+                    setSecretsDetect(e.target.checked);
+                    setAppToggle({ secretsDetect: e.target.checked });
+                  }}
+                />
+              </div>
+
               <div className="sec-add">
                 <div className="sec-add-row">
                   <input
@@ -7465,33 +7669,93 @@ function SettingsModal({
                 {secrets.length === 0 ? (
                   <div className="mcp-empty">{t("set.sec.empty")}</div>
                 ) : (
-                  secrets.map((s) => (
-                    <div key={s.id} className="sec-row">
-                      <div className="sec-row-left">
-                        <div className="sec-row-top">
-                          <span className="sec-name">{s.name}</span>
-                          {s.envVar && <span className="sec-env">${s.envVar}</span>}
-                        </div>
-                        <div className="sec-row-sub">
-                          <span className={"sec-mask" + (revealed ? " revealed" : "")}>
-                            {revealed && revealed[s.id] != null ? revealed[s.id] : s.masked}
-                          </span>
-                          {s.note && <span className="sec-row-note">· {s.note}</span>}
+                  secrets.map((s) =>
+                    secEdit === s.id ? (
+                      // 编辑态：改名称/环境变量名/备注(值不动)
+                      <div key={s.id} className="sec-row sec-row-edit">
+                        <div className="sec-edit-fields">
+                          <input
+                            className="sec-in"
+                            placeholder="名称"
+                            value={secEditDraft.name}
+                            onChange={(e) => setSecEditDraft((d) => ({ ...d, name: e.target.value }))}
+                          />
+                          <input
+                            className="sec-in"
+                            placeholder="环境变量名 (如 DB_PASSWORD)"
+                            value={secEditDraft.envVar}
+                            onChange={(e) => setSecEditDraft((d) => ({ ...d, envVar: e.target.value }))}
+                          />
+                          <input
+                            className="sec-in"
+                            placeholder="备注 (可选)"
+                            value={secEditDraft.note}
+                            onChange={(e) => setSecEditDraft((d) => ({ ...d, note: e.target.value }))}
+                          />
+                          <div className="sec-edit-actions">
+                            <button
+                              type="button"
+                              className="allow"
+                              disabled={!secEditDraft.name.trim()}
+                              onClick={async () => {
+                                await window.minicc.secretsUpdate(s.id, {
+                                  name: secEditDraft.name.trim(),
+                                  envVar: secEditDraft.envVar.trim() || undefined,
+                                  note: secEditDraft.note.trim(),
+                                });
+                                setSecEdit(null);
+                                reloadSecrets();
+                              }}
+                            >
+                              保存
+                            </button>
+                            <button type="button" onClick={() => setSecEdit(null)}>
+                              取消
+                            </button>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        className="sec-del"
-                        title={t("set.sec.delete")}
-                        onClick={async () => {
-                          await window.minicc.secretsDelete(s.id);
-                          reloadSecrets();
-                        }}
-                      >
-                        {t("set.sec.delete")}
-                      </button>
-                    </div>
-                  ))
+                    ) : (
+                      <div key={s.id} className="sec-row">
+                        <div className="sec-row-left">
+                          <div className="sec-row-top">
+                            <span className="sec-name">{s.name}</span>
+                            {s.envVar && <span className="sec-env">${s.envVar}</span>}
+                          </div>
+                          <div className="sec-row-sub">
+                            <span className={"sec-mask" + (revealed ? " revealed" : "")}>
+                              {revealed && revealed[s.id] != null ? revealed[s.id] : s.masked}
+                            </span>
+                            {s.note && <span className="sec-row-note">· {s.note}</span>}
+                          </div>
+                        </div>
+                        <div className="sec-row-actions">
+                          <button
+                            type="button"
+                            className="sec-edit-btn"
+                            title="改名称/备注"
+                            onClick={() => {
+                              setSecEditDraft({ name: s.name, envVar: s.envVar || "", note: s.note || "" });
+                              setSecEdit(s.id);
+                            }}
+                          >
+                            编辑
+                          </button>
+                          <button
+                            type="button"
+                            className="sec-del"
+                            title={t("set.sec.delete")}
+                            onClick={async () => {
+                              await window.minicc.secretsDelete(s.id);
+                              reloadSecrets();
+                            }}
+                          >
+                            {t("set.sec.delete")}
+                          </button>
+                        </div>
+                      </div>
+                    ),
+                  )
                 )}
               </div>
 
