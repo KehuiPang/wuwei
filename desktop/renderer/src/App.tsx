@@ -3488,11 +3488,11 @@ export function App() {
                 <path d="M4 4l8 8M12 4l-8 8" />
               </svg>
             </button>
-            {/* 一念之门·○带缺口，缺口一点朱 */}
+            {/* 无为官方主标「一念之门圆相」(同 WuweiLogo path)，描边随主题、火种点朱赭 */}
             <div className="coin-emblem">
-              <svg width="34" height="34" viewBox="0 0 32 32" fill="none">
-                <path d="M23.5 6.6A13 13 0 1 0 27 14.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="24.6" cy="5.4" r="2.4" fill="var(--spark)" />
+              <svg width="32" height="32" viewBox="0 0 240 240" fill="none" aria-hidden="true">
+                <path d="M152.04 193.48 A82 82 0 1 1 195.48 150.04" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
+                <circle cx="195.48" cy="150.04" r="10" fill="var(--spark)" />
               </svg>
             </div>
             <h3 className="coin-title">无为币不足</h3>
