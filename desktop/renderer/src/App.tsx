@@ -912,6 +912,7 @@ export function App() {
   const showSubscription = !!wuwei?.flags?.includes("subscription");
   const [wuweiBusy, setWuweiBusy] = useState(false);
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
+  const [guestNudgeShown, setGuestNudgeShown] = useState(false);
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -1616,13 +1617,20 @@ export function App() {
       setInput("");
       return;
     }
-    // 硬门槛：未登录无为账号不能发送 → 弹登录注册（保留输入内容，登录后自动续发）
+    // 游客先体验：普通模型不因无为账号打断首问；只有托管模型必须登录才能扣币。
     if (!wuwei) {
-      setLoginResume(true);
-      setShowLoginForm(true);
-      return;
+      const needsWuweiAccount = !!curPreset?.hosted || curProviderId.startsWith("wuwei-");
+      if (needsWuweiAccount) {
+        setLoginResume(true);
+        setShowLoginForm(true);
+        return;
+      }
+      if (!guestNudgeShown) {
+        push({ type: "notice", text: "可先游客体验；登录无为账号后可使用托管模型、余额和订阅权益。" });
+        setGuestNudgeShown(true);
+      }
     }
-    if (curPreset?.hosted && wuwei.coin.balance <= 0) {
+    if (curPreset?.hosted && wuwei && wuwei.coin.balance <= 0) {
       void refreshWuweiForShortage("无为币余额不足：请充值后再使用无为托管模型。");
       return;
     }
