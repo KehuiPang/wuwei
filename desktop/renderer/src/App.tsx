@@ -3481,34 +3481,85 @@ export function App() {
         />
       )}
       {coinShortage && (
-        <div className="perm-overlay add-st-overlay" onClick={() => setCoinShortage(null)}>
-          <div className="add-st-dialog coin-shortage-dialog" onClick={(e) => e.stopPropagation()}>
-            <h3>无为币余额不足</h3>
-            <p className="s-note">{coinShortage.message}</p>
-            <div className="coin-shortage-card">
-              <CoinIcon size={18} />
-              <div>
-                <div className="coin-shortage-label">当前可用余额</div>
-                <div className="coin-shortage-balance">
-                  {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? "刷新中"} 无为币
-                </div>
-              </div>
+        <div className="perm-overlay coin-overlay" onClick={() => setCoinShortage(null)}>
+          <div className="coin-dialog" onClick={(e) => e.stopPropagation()}>
+            <button className="coin-x" aria-label="关闭" onClick={() => setCoinShortage(null)}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
+            {/* 一念之门·○带缺口，缺口一点朱 */}
+            <div className="coin-emblem">
+              <svg width="34" height="34" viewBox="0 0 32 32" fill="none">
+                <path d="M23.5 6.6A13 13 0 1 0 27 14.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="24.6" cy="5.4" r="2.4" fill="var(--spark)" />
+              </svg>
             </div>
-            <div className="btns">
+            <h3 className="coin-title">无为币不足</h3>
+            <p className="coin-sub">余额已用尽 —— 选一种方式，继续使用无为托管模型</p>
+
+            <div className="coin-balance-hero">
+              <span className="coin-balance-label">当前可用余额</span>
+              <span className="coin-balance-num">
+                <CoinIcon size={22} />
+                {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
+                <em>无为币</em>
+              </span>
+            </div>
+
+            <div className="coin-options">
               <button
+                className="coin-opt coin-opt-primary"
                 onClick={() => {
-                  void refreshWuweiForShortage(coinShortage.message);
+                  setCoinShortage(null);
+                  window.minicc.openExternal("https://wuweiai.io/pricing#coinpack"); // TODO: 站内积分包页
                 }}
               >
+                <span className="coin-opt-ic">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <ellipse cx="12" cy="6" rx="7" ry="3" />
+                    <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" />
+                    <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
+                  </svg>
+                </span>
+                <span className="coin-opt-body">
+                  <span className="coin-opt-t">购买积分包</span>
+                  <span className="coin-opt-d">按需充值，用多少买多少，即充即用</span>
+                </span>
+                <svg className="coin-opt-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 3l5 5-5 5" />
+                </svg>
+              </button>
+
+              <button
+                className="coin-opt coin-opt-plan"
+                onClick={() => {
+                  setCoinShortage(null);
+                  window.minicc.openExternal("https://wuweiai.io/pricing"); // TODO: 站内升级套餐页
+                }}
+              >
+                <span className="coin-badge">更优惠</span>
+                <span className="coin-opt-ic">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.2l1-5.8L3.5 9.2l5.9-.9L12 3z" />
+                  </svg>
+                </span>
+                <span className="coin-opt-body">
+                  <span className="coin-opt-t">升级套餐</span>
+                  <span className="coin-opt-d">无为 Pro ¥29/月 · 每月 1000 无为币 + 托管额度</span>
+                </span>
+                <svg className="coin-opt-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 3l5 5-5 5" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="coin-foot">
+              <button className="coin-refresh" onClick={() => void refreshWuweiForShortage(coinShortage.message)}>
                 刷新余额
               </button>
-              <button
-                className="allow"
-                onClick={() => {
-                  window.minicc.openExternal("https://wuweiai.io/pricing");
-                }}
-              >
-                去充值
+              <button className="coin-dismiss" onClick={() => setCoinShortage(null)}>
+                暂不需要
               </button>
             </div>
           </div>

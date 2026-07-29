@@ -3014,30 +3014,170 @@ body {
   margin: 0 0 14px;
   font-size: 15px;
 }
-.coin-shortage-dialog {
-  width: 420px;
+/* ── 无为币不足弹窗（小美设计稿 v1 · 一念之门 VI）── */
+.coin-overlay {
+  z-index: 60;
+  background: rgba(8, 10, 13, 0.55);
+  backdrop-filter: blur(3px);
 }
-.coin-shortage-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 14px 0 4px;
-  padding: 12px 13px;
+.coin-dialog {
+  position: relative;
+  width: 384px;
+  max-width: 92vw;
+  padding: 30px 26px 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--bg-raised);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  text-align: center;
+  animation: coin-pop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes coin-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.coin-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.coin-x:hover { background: var(--bg-soft); color: var(--text-dim); }
+.coin-emblem {
+  width: 56px;
+  height: 56px;
+  margin: 2px auto 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text);
+  background: var(--spark-soft);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-soft);
-  color: var(--spark);
 }
-.coin-shortage-label {
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-bottom: 3px;
-}
-.coin-shortage-balance {
-  font-size: 18px;
-  font-weight: 700;
+.coin-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text);
 }
+.coin-sub {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.coin-balance-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+}
+.coin-balance-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.coin-balance-num {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--spark);
+}
+.coin-balance-num em {
+  font-size: 13px;
+  font-weight: 500;
+  font-style: normal;
+  color: var(--text-dim);
+}
+.coin-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.coin-opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 15px;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.12s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+.coin-opt:hover { transform: translateY(-1px); }
+.coin-opt-ic {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+}
+.coin-opt-body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.coin-opt-t { font-size: 15px; font-weight: 600; color: var(--text); }
+.coin-opt-d { font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+.coin-opt-arrow { flex: none; color: var(--text-faint); transition: transform 0.15s, color 0.15s; }
+.coin-opt:hover .coin-opt-arrow { transform: translateX(2px); }
+/* 购买积分包：一点朱主操作 */
+.coin-opt-primary { border-color: var(--spark); background: var(--spark-soft); }
+.coin-opt-primary:hover { box-shadow: 0 6px 18px var(--spark-soft); }
+.coin-opt-primary .coin-opt-ic { background: var(--spark); color: #fff; }
+.coin-opt-primary:hover .coin-opt-arrow { color: var(--spark); }
+/* 升级套餐：靛青 */
+.coin-opt-plan:hover { border-color: var(--accent); background: var(--accent-soft); }
+.coin-opt-plan .coin-opt-ic { background: var(--accent-soft); color: var(--accent); }
+.coin-opt-plan:hover .coin-opt-arrow { color: var(--accent); }
+.coin-badge {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #fff;
+  background: var(--spark);
+  border-radius: 999px;
+  box-shadow: 0 2px 6px var(--spark-soft);
+}
+.coin-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.coin-refresh,
+.coin-dismiss {
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 6px 4px;
+  transition: color 0.15s;
+}
+.coin-refresh { color: var(--text-muted); }
+.coin-refresh:hover { color: var(--accent); }
+.coin-dismiss { color: var(--text-dim); font-weight: 500; }
+.coin-dismiss:hover { color: var(--text); }
 /* 设置里 API Key 自动检测反馈 */
 .skey-msg {
   margin: 6px 0 0;
