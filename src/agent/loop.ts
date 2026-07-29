@@ -25,13 +25,26 @@ export interface SessionUsage {
   totalSteps: number; // 累计模型请求次数（多步工具时每步一次；用于算"本轮步数"）
 }
 
+// 本轮(一次 send)自足的用量：每轮从 0 起累加，直接盖在助手消息上，
+// 不靠跨轮累计做差 → 不受历史/跨版本污染，缓存命中与真正新增各自独立、单价能分开算。
+export interface RoundUsage {
+  input: number; // 本轮总输入(每步重发上下文累加)
+  output: number; // 本轮总输出
+  cacheHit: number; // 本轮缓存命中的输入 token（便宜）
+  cacheMiss: number; // 本轮真正新增的输入 token（贵）
+  steps: number; // 本轮模型请求次数
+  lastInput: number; // 本轮最后一次请求的输入量(≈当前上下文)
+}
+// onUsage 上报的用量 = 会话累计 + 本轮自足值
+export type UsageReport = SessionUsage & { round?: RoundUsage };
+
 export interface AgentHooks {
   onText?(delta: string): void;
   requestPermission?(tool: Tool, input: Record<string, unknown>): Promise<PermissionDecision>;
   onToolStart?(id: string, name: string, input: Record<string, unknown>): void;
   onToolEnd?(id: string, result: string, isError: boolean): void;
   onAssistantDone?(): void;
-  onUsage?(u: SessionUsage): void; // 每轮请求后回报累计用量
+  onUsage?(u: UsageReport): void; // 每步回报累计用量 + 本轮自足值
   onRateLimits?(rl: import("../types.js").RateLimits): void; // 订阅额度快照
   onCompact?(before: number, after: number): void; // 压缩发生时回报条数变化
   onStep?(): void; // 每完成一段(助手消息/工具结果)后回调：用于即时落盘，重启不丢进度
@@ -109,6 +122,7 @@ export class Agent {
   private compactThreshold: number;
   private keepRecent: number;
   private pendingInject: { text: string; images: string[] }[] = []; // 运行中注入的新需求，循环边界取用
+  private round: RoundUsage = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, steps: 0, lastInput: 0 }; // 本轮自足用量
 
   constructor(
     private provider: Provider,
@@ -204,6 +218,7 @@ export class Agent {
     if (userContent.length === 0) return;
     this.ensureCanAcceptUser(); // 上一轮若被中断,先修好历史尾部,避免连续user/悬空tool_use致API 400
     this.messages.push({ role: "user", content: userContent, ts: Date.now() });
+    this.round = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, steps: 0, lastInput: 0 }; // 本轮清零重记
 
     while (true) {
       if (signal?.aborted) return; // 已被用户中断
@@ -216,19 +231,29 @@ export class Agent {
       });
 
       this.usage.totalSteps += 1; // 每次模型请求算一步(不管有没有返回 usage)
+      this.round.steps += 1;
       if (result.usage) {
-        this.usage.totalInput += result.usage.inputTokens;
+        const inTok = result.usage.inputTokens;
+        const hit = result.usage.cacheHitTokens ?? 0;
+        const miss = result.usage.cacheMissTokens ?? Math.max(0, inTok - hit);
+        // 累计(给"当前上下文"/费用总览/持久化恢复)
+        this.usage.totalInput += inTok;
         this.usage.totalOutput += result.usage.outputTokens;
-        this.usage.lastInput = result.usage.inputTokens;
-        this.usage.totalCacheHit += result.usage.cacheHitTokens ?? 0;
-        this.usage.totalCacheMiss +=
-          result.usage.cacheMissTokens ??
-          Math.max(0, result.usage.inputTokens - (result.usage.cacheHitTokens ?? 0));
+        this.usage.lastInput = inTok;
+        this.usage.totalCacheHit += hit;
+        this.usage.totalCacheMiss += miss;
+        // 本轮自足(每步各自独立累加,缓存命中/新增互不串)
+        this.round.input += inTok;
+        this.round.output += result.usage.outputTokens;
+        this.round.cacheHit += hit;
+        this.round.cacheMiss += miss;
+        this.round.lastInput = inTok;
       }
-      hooks.onUsage?.(this.usage); // 每步都上报(即使无 usage 也让步数实时刷新)
+      const snap: UsageReport = { ...this.usage, round: { ...this.round } };
+      hooks.onUsage?.(snap); // 每步都上报(即使无 usage 也让步数实时刷新)
       if (result.rateLimits) hooks.onRateLimits?.(result.rateLimits);
 
-      // 盖上累计用量快照：UI 据此算"本轮 token"(本轮末累计 − 上轮末累计)，并存进历史供重开后仍可看
+      // 盖上用量快照(累计 + 本轮自足值)：UI 直接读本轮值,不靠跨轮做差;并存进历史供重开后仍可看
       this.messages.push({
         role: "assistant",
         content: result.content,
@@ -240,6 +265,7 @@ export class Agent {
           totalCacheHit: this.usage.totalCacheHit,
           totalCacheMiss: this.usage.totalCacheMiss,
           totalSteps: this.usage.totalSteps,
+          round: { ...this.round },
         },
       });
       hooks.onStep?.(); // 助手段落已入历史，即时落盘(重启不丢)

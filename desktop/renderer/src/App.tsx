@@ -25,7 +25,15 @@ interface Usage {
   totalOutput: number;
   lastInput: number;
 }
-// 盖在助手消息上的累计用量快照(本轮末)；UI 据此算每轮 token 增量
+// 盖在助手消息上的用量快照；round=本轮自足值(直接读,不靠跨轮做差)
+type RoundUsage = {
+  input: number;
+  output: number;
+  cacheHit: number;
+  cacheMiss: number;
+  steps: number;
+  lastInput: number;
+};
 type UsageSnap = {
   totalInput: number;
   totalOutput: number;
@@ -33,6 +41,7 @@ type UsageSnap = {
   totalCacheHit?: number;
   totalCacheMiss?: number;
   totalSteps?: number;
+  round?: RoundUsage;
 };
 interface Pending {
   id: number;
@@ -1327,18 +1336,21 @@ export function App() {
         case "evt:usage":
           if (payload.sid !== currentIdRef.current) break; // 只显示当前会话用量
           setUsage(payload.usage);
-          // 实时盖到本轮正在生成的最后一条助手气泡上：footer 悬停即见本轮 token 增量(每完成一段就刷新)
-          setItems((p) => {
-            for (let k = p.length - 1; k >= 0; k--) {
-              if (p[k].type === "assistant") {
-                const c = [...p];
-                c[k] = { ...(c[k] as any), usage: payload.usage };
-                return c;
+          // 实时盖到本轮正在生成的最后一条助手气泡上：footer 悬停即见本轮 token(每完成一段就刷新)。
+          // 仅当带 round(每步上报)才盖，避免 bootstrap/切会话的无 round 快照冲掉已有值。
+          if (payload.usage?.round) {
+            setItems((p) => {
+              for (let k = p.length - 1; k >= 0; k--) {
+                if (p[k].type === "assistant") {
+                  const c = [...p];
+                  c[k] = { ...(c[k] as any), usage: payload.usage };
+                  return c;
+                }
+                if (p[k].type === "user") break; // 本轮还没出助手文字(如直接调工具)→先不盖，等出正文
               }
-              if (p[k].type === "user") break; // 本轮还没出助手文字(如直接调工具)→先不盖，等出正文
-            }
-            return p;
-          });
+              return p;
+            });
+          }
           break;
         case "evt:ratelimits":
           setRate(payload);
@@ -2604,28 +2616,35 @@ export function App() {
               // 本轮 token = 本轮末累计 − 上轮末累计(输入含每步重发上下文的真实消耗)；上下文=最近一次请求输入量
               const endCum = aiTurnUsage(t.blocks);
               let tok:
-                | { inT: number; outT: number; steps: number; miss: number; hasMiss: boolean }
+                | { inT: number; outT: number; steps: number; hit: number; miss: number; split: boolean }
                 | undefined;
-              if (endCum) {
-                // 缺字段时沿用上一基线(别重置为0)，避免跨升级/旧快照把增量算爆
-                const hasMiss = typeof endCum.totalCacheMiss === "number";
-                const missC = endCum.totalCacheMiss ?? prevCum.totalCacheMiss;
-                const stepsC = endCum.totalSteps ?? prevCum.totalSteps;
-                const inT = Math.max(0, endCum.totalInput - prevCum.totalInput);
+              if (endCum?.round) {
+                // 本轮自足值:缓存命中/真正新增各自独立,单价能分开算,不受历史污染
+                const r = endCum.round;
+                tok = { inT: r.input, outT: r.output, steps: r.steps, hit: r.cacheHit, miss: r.cacheMiss, split: true };
+                prevCum = {
+                  totalInput: endCum.totalInput,
+                  totalOutput: endCum.totalOutput,
+                  totalCacheHit: endCum.totalCacheHit ?? 0,
+                  totalCacheMiss: endCum.totalCacheMiss ?? 0,
+                  totalSteps: endCum.totalSteps ?? 0,
+                };
+              } else if (endCum) {
+                // 旧快照(无 round):只能按累计做差给总量,缓存拆分不可靠→不显示
                 tok = {
-                  inT,
+                  inT: Math.max(0, endCum.totalInput - prevCum.totalInput),
                   outT: Math.max(0, endCum.totalOutput - prevCum.totalOutput),
-                  steps: Math.max(0, stepsC - prevCum.totalSteps),
-                  // 铁律:新增输入是总输入的一部分,绝不可能超过总输入→夹到 [0, inT]
-                  miss: Math.min(inT, Math.max(0, missC - prevCum.totalCacheMiss)),
-                  hasMiss, // 仅当本轮快照真的带 cacheMiss 才展示"新增输入"，否则只显示总量
+                  steps: Math.max(0, (endCum.totalSteps ?? 0) - prevCum.totalSteps),
+                  hit: 0,
+                  miss: 0,
+                  split: false,
                 };
                 prevCum = {
                   totalInput: endCum.totalInput,
                   totalOutput: endCum.totalOutput,
                   totalCacheHit: endCum.totalCacheHit ?? prevCum.totalCacheHit,
-                  totalCacheMiss: missC,
-                  totalSteps: stepsC,
+                  totalCacheMiss: endCum.totalCacheMiss ?? prevCum.totalCacheMiss,
+                  totalSteps: endCum.totalSteps ?? prevCum.totalSteps,
                 };
               }
               return (
@@ -2686,10 +2705,16 @@ export function App() {
                             <b>总输入</b>
                             <em>{tok.inT.toLocaleString()}</em>
                           </span>
-                          {tok.hasMiss && (
+                          {tok.split && (
+                            <span className="tf-tok-sub">
+                              <b>· 缓存命中</b>
+                              <em>{tok.hit.toLocaleString()}（便宜）</em>
+                            </span>
+                          )}
+                          {tok.split && (
                             <span className="tf-tok-sub">
                               <b>· 新增输入</b>
-                              <em>{tok.miss.toLocaleString()}（真正新花的）</em>
+                              <em>{tok.miss.toLocaleString()}（新花的·贵）</em>
                             </span>
                           )}
                           <span>
