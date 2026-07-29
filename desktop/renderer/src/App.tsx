@@ -905,6 +905,7 @@ export function App() {
   const [wuwei, setWuwei] = useState<{
     user: { id: string; email: string | null; name: string | null; avatar: string | null };
     coin: { balance: number };
+    membership?: { tier: "free" | "pro_month" | "pro_year"; expireAt?: string | number };
     flags?: string[];
     providers?: { hidden?: string[] };
   } | null>(null);
@@ -2232,97 +2233,130 @@ export function App() {
                   <div className="acct-menu">
                     {/* 无为账号（与模型商账号合并进同一入口）。未登录只给登录入口，设置等登录后才显示 */}
                     {wuwei ? (
-                      <>
-                        {/* premium 账号头部：头像 + 昵称 + 无为币（主题中性配色） */}
-                        <div style={{ padding: "11px 13px 10px", display: "flex", alignItems: "center", gap: 10 }}>
-                          <div
-                            style={{
-                              width: 34,
-                              height: 34,
-                              borderRadius: "50%",
-                              overflow: "hidden",
-                              flex: "0 0 auto",
-                              background: "#274A63",
-                              color: "#F4F6F8",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              fontSize: 14,
-                            }}
-                          >
-                            {wuwei.user.avatar ? (
-                              <img src={wuwei.user.avatar} alt="" style={{ width: "100%", height: "100%" }} />
-                            ) : (
-                              (wuwei.user.name || wuwei.user.email || "无").slice(0, 1).toUpperCase()
-                            )}
-                          </div>
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div
-                              style={{
-                                fontSize: 13,
-                                fontWeight: 600,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              {wuwei.user.name || wuwei.user.email || "无为用户"}
+                      (() => {
+                        const tier = wuwei.membership?.tier ?? "free";
+                        const isPro = tier !== "free";
+                        const tierLabel = tier === "pro_year" ? "Pro 年付" : tier === "pro_month" ? "Pro 月付" : "免费版";
+                        const exp = wuwei.membership?.expireAt;
+                        const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
+                        const bal = wuwei.coin.balance;
+                        const goPricing = () => window.minicc.openExternal("https://wuweiai.io/pricing");
+                        const initial = (wuwei.user.name || wuwei.user.email || "无").slice(0, 1).toUpperCase();
+                        const Spark = () => (
+                          <svg className="acct-spark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                            <path d="M8 1.4l1.5 5.1 5.1 1.5-5.1 1.5L8 14.6 6.5 9.5 1.4 8l5.1-1.5z" />
+                          </svg>
+                        );
+                        return (
+                          <>
+                            {/* 身份区：头像(Pro金光晕) + 昵称 + tier chip + 邮箱 */}
+                            <div className="acct-id">
+                              <div className={"acct-avatar" + (isPro ? " pro" : "")}>
+                                {wuwei.user.avatar ? <img src={wuwei.user.avatar} alt="" /> : initial}
+                              </div>
+                              <div className="acct-id-txt">
+                                <div className="acct-nm">
+                                  <span className="acct-name">{wuwei.user.name || wuwei.user.email || "无为用户"}</span>
+                                  <span className={"acct-tier " + (isPro ? "pro" : "free")}>
+                                    {isPro && <Spark />}
+                                    {tierLabel}
+                                  </span>
+                                </div>
+                                {wuwei.user.email && <div className="acct-mail">{wuwei.user.email}</div>}
+                              </div>
                             </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                              <div
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: 5,
-                                  padding: "1px 9px 1px 6px",
-                                  borderRadius: 999,
-                                  background: "var(--bg-soft)",
-                                  border: "1px solid var(--border)",
-                                  color: "var(--spark)",
-                                  fontSize: 12,
-                                  width: "fit-content",
+
+                            {/* 无为币钱包卡 */}
+                            <div className="acct-wallet">
+                              <div className="acct-wallet-row">
+                                <div>
+                                  <div className="acct-wallet-lbl">
+                                    <CoinIcon size={14} /> 无为币余额
+                                  </div>
+                                  <div className="acct-bal">
+                                    {bal.toLocaleString()}
+                                    <small>无为币</small>
+                                  </div>
+                                </div>
+                                <button className="acct-topup" onClick={goPricing}>
+                                  充值
+                                </button>
+                              </div>
+                              <div className={"acct-hint " + (bal > 0 ? "pos" : "zero")}>
+                                {bal > 0 ? "会员每月赠币 · 每日签到再领 10" : "充值解锁更多对话额度"}
+                              </div>
+                            </div>
+
+                            {/* 会员条：免费=靛青升级引导 / Pro=金色状态条 */}
+                            {isPro ? (
+                              <div className="acct-memb on">
+                                <div>
+                                  <div className="acct-memb-ttl">
+                                    <Spark /> {tierLabel}会员
+                                  </div>
+                                  <div className="acct-memb-sub">
+                                    {expStr ? expStr + " 到期 · 续费享 9 折" : "续费享 9 折"}
+                                  </div>
+                                </div>
+                                <button className="acct-renew" onClick={goPricing}>
+                                  续费
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="acct-memb up" onClick={goPricing}>
+                                <div>
+                                  <div className="acct-memb-ttl">
+                                    <span className="acct-crown">
+                                      <Spark />
+                                    </span>{" "}
+                                    开通 Pro 会员
+                                  </div>
+                                  <div className="acct-memb-sub">更多额度 · 更省 · ¥29/月起</div>
+                                </div>
+                                <span className="acct-go">立即开通</span>
+                              </div>
+                            )}
+
+                            <div className="acct-sep" />
+                            <div className="acct-items">
+                              <button
+                                className="acct-it"
+                                onClick={() => {
+                                  setShowAcctMenu(false);
+                                  goPricing();
                                 }}
                               >
-                                <CoinIcon size={13} />
-                                <span style={{ fontWeight: 700 }}>{wuwei.coin.balance}</span>
-                                <span style={{ fontWeight: 500, opacity: 0.7 }}>{t("acct.guestIncentive")}</span>
-                              </div>
-                              <span
-                                title="前往官网充值无为币"
-                                onClick={() => window.minicc.openExternal("https://wuweiai.io/pricing")}
-                                style={{ fontSize: 11.5, color: "var(--spark)", cursor: "pointer", fontWeight: 500 }}
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                                  <path d="M3 10h18M7 15h4" />
+                                </svg>
+                                充值中心
+                              </button>
+                              <button
+                                className="acct-it"
+                                onClick={() => {
+                                  setShowAcctMenu(false);
+                                  setSettingsTab("general");
+                                  setShowSettings(true);
+                                }}
                               >
-                                充值
-                              </span>
+                                <GearIcon size={16} />
+                                {t("acct.settings")}
+                              </button>
+                              <button
+                                className="acct-it danger"
+                                onClick={() => {
+                                  setShowAcctMenu(false);
+                                  void doWuweiLogout();
+                                }}
+                              >
+                                <LogoutIcon size={16} />
+                                {t("acct.logout")}
+                              </button>
                             </div>
-                          </div>
-                        </div>
-                        <div style={{ height: 1, background: "rgba(128,128,128,.18)", margin: "2px 0" }} />
-                        <button
-                          className="acct-menu-item"
-                          style={{ display: "flex", alignItems: "center", gap: 8 }}
-                          onClick={() => {
-                            setShowAcctMenu(false);
-                            setSettingsTab("general");
-                            setShowSettings(true);
-                          }}
-                        >
-                          <GearIcon size={15} />
-                          {t("acct.settings")}
-                        </button>
-                        {/* 退出放最后一项 */}
-                        <button
-                          className="acct-menu-item"
-                          style={{ display: "flex", alignItems: "center", gap: 8 }}
-                          onClick={() => {
-                            setShowAcctMenu(false);
-                            void doWuweiLogout();
-                          }}
-                        >
-                          <LogoutIcon size={15} />
-                          {t("acct.logout")}
-                        </button>
-                      </>
+                          </>
+                        );
+                      })()
                     ) : (
                       <div style={{ padding: "20px 18px 12px", textAlign: "center" }}>
                         <div
