@@ -3208,165 +3208,145 @@ body {
   margin: 0 0 14px;
   font-size: 15px;
 }
-/* ── 无为币不足弹窗（小美设计稿 v1 · 一念之门 VI）── */
-.coin-overlay {
-  z-index: 60;
-  background: rgba(8, 10, 13, 0.55);
-  backdrop-filter: blur(3px);
-}
-.coin-dialog {
+/* ── 付费三界面 v2「大气版」(小笨定稿 2026-07-30；朱=积分包 / 金=会员) ── */
+.pay-overlay { z-index: 60; background: rgba(8, 10, 13, 0.5); backdrop-filter: blur(3px); }
+.pay-card {
   position: relative;
-  width: 384px;
-  max-width: 92vw;
-  padding: 30px 26px 22px;
-  border: 1px solid var(--border-strong);
-  border-radius: 18px;
-  background: var(--bg-raised);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-  text-align: center;
-  animation: coin-pop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 416px;
+  max-width: 94vw;
+  background: #fff;
+  border: 1px solid rgba(22, 25, 30, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 3px 8px rgba(22, 25, 30, 0.05), 0 30px 66px -18px rgba(22, 25, 30, 0.3);
+  overflow: hidden;
+  animation: pay-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
-@keyframes coin-pop {
-  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+@keyframes pay-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
   to { opacity: 1; transform: none; }
 }
-.coin-x {
+.pay-x {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
+  right: 16px;
+  top: 16px;
+  width: 30px;
+  height: 30px;
   border: none;
-  border-radius: 8px;
   background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.coin-x:hover { background: var(--bg-soft); color: var(--text-dim); }
-.coin-emblem {
-  margin: 4px auto 14px;
+  border-radius: 50%;
+  color: #8a9099;
   display: grid;
   place-items: center;
-  color: var(--text);
+  cursor: pointer;
+  z-index: 2;
 }
-.coin-title {
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text);
+.pay-x:hover { background: #f4f6f8; }
+.pay-x svg { width: 16px; height: 16px; }
+.pay-top { padding: 30px 30px 20px; text-align: center; }
+.pay-enso { display: block; margin: 0 auto 15px; }
+.pay-top h2 { font-size: 21px; font-weight: 750; color: #16191e; letter-spacing: 0.5px; margin: 0; }
+.pay-top p { font-size: 12.5px; color: #8a9099; margin: 9px auto 0; line-height: 1.6; max-width: 300px; }
+.pay-coin {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  vertical-align: -2px;
+  background: radial-gradient(circle at 35% 30%, #e7b15c, #c8862f);
+  box-shadow: inset 0 0 0 1.4px rgba(255, 255, 255, 0.55);
 }
-.coin-sub {
-  margin: 0 0 18px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-dim);
-}
-.coin-balance-hero {
+.pay-spark { width: 14px; height: 14px; flex: 0 0 auto; }
+/* 余额条 */
+.pay-bal { margin: 0 30px 18px; padding: 15px; border-radius: 14px; background: #f4f6f8; text-align: center; border: 1px solid rgba(22, 25, 30, 0.08); }
+.pay-bal-l { font-size: 11px; color: #5a616b; font-weight: 600; letter-spacing: 0.4px; }
+.pay-bal-v { font-size: 30px; font-weight: 750; color: #c05f3c; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.pay-bal-v small { font-size: 13px; color: #8a9099; font-weight: 600; margin-left: 4px; }
+/* 弹窗两选项 */
+.pay-opts { padding: 0 26px 8px; display: flex; flex-direction: column; gap: 13px; }
+.pay-opt {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 18px;
-  padding: 16px;
-  border-radius: 14px;
-  background: var(--bg-soft);
-  border: 1px solid var(--border);
-}
-.coin-balance-label {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.coin-balance-num {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 27px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--spark);
-}
-.coin-balance-num em {
-  font-size: 13px;
-  font-weight: 500;
-  font-style: normal;
-  color: var(--text-dim);
-}
-.coin-options {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.coin-opt {
+  gap: 14px;
+  padding: 16px 17px;
+  border-radius: 15px;
+  cursor: pointer;
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 14px 15px;
-  border-radius: 13px;
-  border: 1px solid var(--border);
-  background: var(--bg-soft);
-  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: transform 0.12s;
   text-align: left;
-  transition: transform 0.12s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  background: #fff;
+  width: 100%;
 }
-.coin-opt:hover { transform: translateY(-1px); }
-.coin-opt-ic {
-  flex: none;
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-}
-.coin-opt-body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.coin-opt-t { font-size: 15px; font-weight: 600; color: var(--text); }
-.coin-opt-d { font-size: 12px; line-height: 1.4; color: var(--text-muted); }
-.coin-opt-arrow { flex: none; color: var(--text-faint); transition: transform 0.15s, color 0.15s; }
-.coin-opt:hover .coin-opt-arrow { transform: translateX(2px); }
-/* 购买积分包：一点朱主操作 */
-.coin-opt-primary { border-color: var(--spark); background: var(--spark-soft); }
-.coin-opt-primary:hover { box-shadow: 0 6px 18px var(--spark-soft); }
-.coin-opt-primary .coin-opt-ic { background: var(--spark); color: #fff; }
-.coin-opt-primary:hover .coin-opt-arrow { color: var(--spark); }
-/* 升级套餐：靛青 */
-.coin-opt-plan:hover { border-color: var(--accent); background: var(--accent-soft); }
-.coin-opt-plan .coin-opt-ic { background: var(--accent-soft); color: var(--accent); }
-.coin-opt-plan:hover .coin-opt-arrow { color: var(--accent); }
-.coin-badge {
-  position: absolute;
-  top: -8px;
-  right: 12px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: #fff;
-  background: var(--spark);
-  border-radius: 999px;
-  box-shadow: 0 2px 6px var(--spark-soft);
-}
-.coin-foot {
+.pay-opt:hover { transform: translateY(-1px); }
+.pay-oi { width: 42px; height: 42px; border-radius: 12px; flex: 0 0 auto; display: grid; place-items: center; }
+.pay-oi svg { width: 21px; height: 21px; }
+.pay-ot { font-size: 15px; font-weight: 700; color: #16191e; }
+.pay-os { font-size: 12px; color: #5a616b; margin-top: 4px; }
+.pay-arr { margin-left: auto; color: #8a9099; flex: 0 0 auto; }
+.pay-badge { position: absolute; right: 16px; top: -9px; font-size: 10px; font-weight: 700; color: #fff; padding: 2px 10px; border-radius: 999px; }
+.pay-opt-plan { background: linear-gradient(135deg, #fdf9ef, #f7efd9); border-color: rgba(169, 127, 46, 0.35); box-shadow: 0 6px 18px -8px rgba(169, 127, 46, 0.4); }
+.pay-opt-plan .pay-oi { background: linear-gradient(135deg, #c9a24b, #a97f2e); color: #fff; }
+.pay-opt-plan .pay-badge { background: linear-gradient(135deg, #c9a24b, #a97f2e); }
+.pay-opt-pack { background: #fff; border-color: rgba(192, 95, 60, 0.26); }
+.pay-opt-pack .pay-oi { background: rgba(192, 95, 60, 0.1); color: #c05f3c; }
+.pay-foot { display: flex; justify-content: space-between; padding: 16px 30px 24px; }
+.pay-foot button { border: none; background: transparent; font-size: 12.5px; color: #8a9099; cursor: pointer; }
+.pay-foot button:hover { color: #5a616b; }
+/* 积分包档位 */
+.pay-rows { padding: 2px 26px 6px; display: flex; flex-direction: column; gap: 12px; }
+.pay-rw {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-.coin-refresh,
-.coin-dismiss {
-  border: none;
-  background: transparent;
-  font-size: 13px;
+  gap: 14px;
+  padding: 15px 16px;
+  border: 1.5px solid rgba(22, 25, 30, 0.08);
+  border-radius: 15px;
   cursor: pointer;
-  padding: 6px 4px;
-  transition: color 0.15s;
+  position: relative;
+  background: #fff;
+  transition: 0.14s;
+  text-align: left;
+  width: 100%;
 }
-.coin-refresh { color: var(--text-muted); }
-.coin-refresh:hover { color: var(--accent); }
-.coin-dismiss { color: var(--text-dim); font-weight: 500; }
-.coin-dismiss:hover { color: var(--text); }
+.pay-rw:hover { transform: translateY(-1px); border-color: rgba(192, 95, 60, 0.4); }
+.pay-rw.sel { border-color: rgba(192, 95, 60, 0.55); background: linear-gradient(150deg, #fff, #fdf1ec); }
+.pay-rw-ic { width: 38px; height: 38px; border-radius: 11px; flex: 0 0 auto; background: rgba(192, 95, 60, 0.09); color: #c05f3c; display: grid; place-items: center; }
+.pay-rw-ic svg { width: 20px; height: 20px; }
+.pay-rw.sel .pay-rw-ic { background: linear-gradient(135deg, #c05f3c, #a34e30); color: #fff; }
+.pay-amt { font-size: 16.5px; font-weight: 750; color: #16191e; }
+.pay-amt .u { font-size: 11.5px; color: #8a9099; font-weight: 600; }
+.pay-desc { font-size: 11.5px; color: #8a9099; margin-top: 4px; }
+.pay-desc em { font-style: normal; color: #5c8a73; font-weight: 650; }
+.pay-price { margin-left: auto; font-size: 19px; font-weight: 750; color: #c05f3c; flex: 0 0 auto; }
+.pay-rbadge { position: absolute; right: 14px; top: -9px; font-size: 9.5px; font-weight: 700; color: #fff; padding: 2px 9px; border-radius: 999px; }
+.pay-rbadge.rec { background: linear-gradient(135deg, #c05f3c, #a34e30); }
+.pay-rbadge.val { background: #274a63; }
+/* CTA + 取消 */
+.pay-cta { display: block; margin: 16px 26px 12px; padding: 15px; border-radius: 14px; text-align: center; font-size: 14.5px; font-weight: 700; color: #fff; cursor: pointer; border: none; width: auto; }
+.pay-cta.red { background: linear-gradient(135deg, #c05f3c, #a34e30); box-shadow: 0 10px 22px -8px rgba(192, 95, 60, 0.6); }
+.pay-cta.gold { background: linear-gradient(135deg, #c9a24b, #a97f2e); box-shadow: 0 10px 22px -8px rgba(169, 127, 46, 0.6); }
+.pay-cancel { text-align: center; padding-bottom: 22px; }
+.pay-cancel button { border: none; background: transparent; font-size: 12.5px; color: #8a9099; cursor: pointer; }
+/* 套餐 */
+.pay-plans { padding: 2px 26px 4px; display: flex; flex-direction: column; gap: 13px; }
+.pay-pc { border: 1.5px solid rgba(22, 25, 30, 0.08); border-radius: 16px; padding: 16px 18px; position: relative; cursor: pointer; background: #fff; transition: 0.14s; text-align: left; width: 100%; }
+.pay-pc:hover { transform: translateY(-1px); }
+.pay-pc.sel { border-color: rgba(169, 127, 46, 0.5); background: linear-gradient(150deg, #fffdf8, #f8f1df); box-shadow: 0 10px 24px -12px rgba(169, 127, 46, 0.5); }
+.pay-pc-r1 { display: flex; align-items: baseline; justify-content: space-between; }
+.pay-pc-nm { font-size: 15.5px; font-weight: 750; color: #16191e; display: flex; align-items: center; gap: 7px; }
+.pay-pc-pr { font-size: 23px; font-weight: 750; color: #a97f2e; }
+.pay-pc-pr .u { font-size: 12px; color: #8a9099; font-weight: 600; }
+.pay-pc-r2 { font-size: 12px; color: #5a616b; margin-top: 7px; }
+.pay-pc-r2 em { font-style: normal; color: #c05f3c; font-weight: 700; }
+.pay-tag { position: absolute; right: 16px; top: -10px; font-size: 10px; font-weight: 700; color: #fff; padding: 2px 11px; border-radius: 999px; }
+.pay-tag.rec { background: linear-gradient(135deg, #c9a24b, #a97f2e); }
+.pay-tag.pop { background: #274a63; }
+.pay-feats { margin: 16px 26px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.pay-ft { font-size: 12.5px; font-weight: 700; color: #16191e; display: flex; align-items: center; gap: 7px; }
+.pay-ft svg { width: 15px; height: 15px; color: #a97f2e; flex: 0 0 auto; }
+.pay-fs { font-size: 11px; color: #8a9099; margin-top: 3px; margin-left: 22px; line-height: 1.4; }
+.pay-fnote { text-align: center; font-size: 11px; color: #8a9099; padding: 4px 0 20px; }
+.pay-fnote .ok { color: #5c8a73; }
 /* 设置里 API Key 自动检测反馈 */
 .skey-msg {
   margin: 6px 0 0;

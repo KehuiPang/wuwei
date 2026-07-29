@@ -259,6 +259,172 @@ function WuweiLogo({ size = 46 }: { size?: number }) {
     </svg>
   );
 }
+
+// ── 付费三界面 v2（定稿 2026-07-30）：共用组件 + SKU/套餐数据（朱=积分包 / 金=会员）──
+function PayEnso({ size = 50 }: { size?: number }) {
+  return (
+    <svg className="pay-enso" viewBox="0 0 240 240" width={size} height={size} aria-hidden="true">
+      <g transform="rotate(-8 120 118)">
+        <path d="M152.04 193.48 A82 82 0 1 1 195.48 150.04" fill="none" stroke="#16191E" strokeWidth="9.5" strokeLinecap="round" />
+        <circle cx="195.48" cy="150.04" r="7.6" fill="#C05F3C" />
+      </g>
+    </svg>
+  );
+}
+function PaySpark({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M8 1.4l1.5 5.1 5.1 1.5-5.1 1.5L8 14.6 6.5 9.5 1.4 8l5.1-1.5z" />
+    </svg>
+  );
+}
+function PayCloseX({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="pay-x" aria-label="关闭" onClick={onClick}>
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+        <path d="M4 4l8 8M12 4l-8 8" />
+      </svg>
+    </button>
+  );
+}
+function PayArrow() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3l5 5-5 5" />
+    </svg>
+  );
+}
+function PackIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="3" y="6" width="18" height="13" rx="2" />
+      <path d="M3 10h18" />
+    </svg>
+  );
+}
+
+type CoinPack = { coins: number; bonus: number; price: number; desc: string; badge?: string; badgeType?: "rec" | "val" };
+const COIN_PACKS: CoinPack[] = [
+  { coins: 1000, bonus: 50, price: 10, desc: "轻量补充，适合临时使用" },
+  { coins: 3000, bonus: 200, price: 30, desc: "无为本尊常用档", badge: "推荐", badgeType: "rec" },
+  { coins: 10000, bonus: 1000, price: 100, desc: "适合高频使用", badge: "最超值", badgeType: "val" },
+];
+type ProPlan = { id: "month" | "year"; name: string; price: number; unit: string; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
+const PRO_PLANS: ProPlan[] = [
+  { id: "month", name: "无为 Pro 月付", price: 29, unit: "/月", sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "最受欢迎", tagType: "pop" },
+  { id: "year", name: "无为 Pro 年付", price: 288, unit: "/年", sub: "每月 1200 无为币 · 每日签到 30", note: "付10月送2月，全年省 ¥60", tag: "最省心", tagType: "rec" },
+];
+const PRO_FEATS: [string, string][] = [
+  ["托管额度", "不用自己配接口额度"],
+  ["上下文 256K", "长任务更不断线"],
+  ["多任务并行", "同时跑多个会话"],
+  ["云端备份", "重要会话可恢复"],
+];
+
+// ② 购买积分包（朱系）：站内选档，付款按钮暂跳 pricing（Paddle 接入待后端产品 ID）
+function CoinPackModal({ onClose }: { onClose: () => void }) {
+  const [sel, setSel] = useState(1); // 默认选中常用档 3,000
+  const p = COIN_PACKS[sel];
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top">
+          <PayEnso />
+          <h2>购买积分包</h2>
+          <p>按需充值，用多少买多少，即充即用，永久有效</p>
+        </div>
+        <div className="pay-rows">
+          {COIN_PACKS.map((pack, i) => (
+            <button key={pack.coins} className={"pay-rw" + (i === sel ? " sel" : "")} onClick={() => setSel(i)}>
+              {pack.badge && <span className={"pay-rbadge " + pack.badgeType}>{pack.badge}</span>}
+              <span className="pay-rw-ic">
+                <PackIcon />
+              </span>
+              <span style={{ minWidth: 0 }}>
+                <span className="pay-amt">
+                  {pack.coins.toLocaleString()}
+                  <span className="u"> 无为币</span>
+                </span>
+                <span className="pay-desc" style={{ display: "block" }}>
+                  {pack.desc} <em>+{pack.bonus} 赠送</em>
+                </span>
+              </span>
+              <span className="pay-price">¥{pack.price}</span>
+            </button>
+          ))}
+        </div>
+        <button className="pay-cta red" onClick={() => window.minicc.openExternal("https://wuweiai.io/pricing")}>
+          确认购买 ¥{p.price}
+        </button>
+        <div className="pay-cancel">
+          <button onClick={onClose}>取消　·　付费积分永久有效 · 生态产品通用</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ③ 升级无为 Pro（金系）：月付/年付选择 + 2×2 权益；付款按钮暂跳 pricing
+function PlanModal({ onClose }: { onClose: () => void }) {
+  const [sel, setSel] = useState<"month" | "year">("year");
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top">
+          <PayEnso />
+          <h2>升级无为 Pro</h2>
+          <p>托管额度、更长上下文、多任务并行。长期使用选年付更省心。</p>
+        </div>
+        <div className="pay-plans">
+          {PRO_PLANS.map((plan) => (
+            <button key={plan.id} className={"pay-pc" + (plan.id === sel ? " sel" : "")} onClick={() => setSel(plan.id)}>
+              <span className={"pay-tag " + plan.tagType}>{plan.tag}</span>
+              <span className="pay-pc-r1">
+                <span className="pay-pc-nm">
+                  <PaySpark size={13} /> {plan.name}
+                </span>
+                <span className="pay-pc-pr">
+                  ¥{plan.price}
+                  <span className="u">{plan.unit}</span>
+                </span>
+              </span>
+              <span className="pay-pc-r2" style={{ display: "block" }}>
+                {plan.sub}
+                {plan.note && (
+                  <>
+                    {" · "}
+                    <em>{plan.note}</em>
+                  </>
+                )}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="pay-feats">
+          {PRO_FEATS.map(([tt, ss]) => (
+            <div key={tt} className="pay-f">
+              <div className="pay-ft">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                {tt}
+              </div>
+              <div className="pay-fs">{ss}</div>
+            </div>
+          ))}
+        </div>
+        <button className="pay-cta gold" onClick={() => window.minicc.openExternal("https://wuweiai.io/pricing")}>
+          {sel === "year" ? "升级年付 ¥288" : "升级月付 ¥29"}
+        </button>
+        <div className="pay-fnote">
+          <span className="ok">✓</span> 随时可升级　<span className="ok">✓</span> 功能权益与官网一致
+        </div>
+      </div>
+    </div>
+  );
+}
 function GlobeIcon({ size = 15 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto", display: "block" }}>
@@ -890,6 +1056,8 @@ export function App() {
     email: null,
   });
   const [showAcctMenu, setShowAcctMenu] = useState(false);
+  const [coinPackOpen, setCoinPackOpen] = useState(false); // ② 购买积分包弹窗
+  const [planOpen, setPlanOpen] = useState(false); // ③ 升级套餐弹窗
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
@@ -2240,7 +2408,8 @@ export function App() {
                         const exp = wuwei.membership?.expireAt;
                         const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
                         const bal = wuwei.coin.balance;
-                        const goPricing = () => window.minicc.openExternal("https://wuweiai.io/pricing");
+                        const openPack = () => { setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
+                        const openPlan = () => { setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
                         const initial = (wuwei.user.name || wuwei.user.email || "无").slice(0, 1).toUpperCase();
                         const Spark = () => (
                           <svg className="acct-spark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -2278,7 +2447,7 @@ export function App() {
                                     <small>无为币</small>
                                   </div>
                                 </div>
-                                <button className="acct-topup" onClick={goPricing}>
+                                <button className="acct-topup" onClick={openPack}>
                                   充值
                                 </button>
                               </div>
@@ -2298,12 +2467,12 @@ export function App() {
                                     {expStr ? expStr + " 到期 · 续费享 9 折" : "续费享 9 折"}
                                   </div>
                                 </div>
-                                <button className="acct-renew" onClick={goPricing}>
+                                <button className="acct-renew" onClick={openPlan}>
                                   续费
                                 </button>
                               </div>
                             ) : (
-                              <div className="acct-memb up" onClick={goPricing}>
+                              <div className="acct-memb up" onClick={openPlan}>
                                 <div>
                                   <div className="acct-memb-ttl">
                                     <span className="acct-crown">
@@ -2319,13 +2488,7 @@ export function App() {
 
                             <div className="acct-sep" />
                             <div className="acct-items">
-                              <button
-                                className="acct-it"
-                                onClick={() => {
-                                  setShowAcctMenu(false);
-                                  goPricing();
-                                }}
-                              >
+                              <button className="acct-it" onClick={openPack}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                                   <rect x="3" y="5" width="18" height="14" rx="2.5" />
                                   <path d="M3 10h18M7 15h4" />
@@ -3514,91 +3677,75 @@ export function App() {
           onSuccess={onWuweiLoggedIn}
         />
       )}
+      {/* ① 无为币不足触发弹窗（v2）：金色升级Pro在上(更划算) + 朱色购买积分包在下 */}
       {coinShortage && (
-        <div className="perm-overlay coin-overlay" onClick={() => setCoinShortage(null)}>
-          <div className="coin-dialog" onClick={(e) => e.stopPropagation()}>
-            <button className="coin-x" aria-label="关闭" onClick={() => setCoinShortage(null)}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                <path d="M4 4l8 8M12 4l-8 8" />
-              </svg>
-            </button>
-            {/* 无为官方主标「一念之门圆相」(同 WuweiLogo path)，描边随主题、火种点朱赭 */}
-            <div className="coin-emblem">
-              <svg width="42" height="42" viewBox="0 0 240 240" fill="none" aria-hidden="true">
-                <path d="M152.04 193.48 A82 82 0 1 1 195.48 150.04" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-                <circle cx="195.48" cy="150.04" r="10" fill="var(--spark)" />
-              </svg>
+        <div className="perm-overlay pay-overlay" onClick={() => setCoinShortage(null)}>
+          <div className="pay-card" onClick={(e) => e.stopPropagation()}>
+            <PayCloseX onClick={() => setCoinShortage(null)} />
+            <div className="pay-top">
+              <PayEnso />
+              <h2>无为币不足</h2>
+              <p>余额已用尽 —— 选一种方式，继续使用无为托管模型</p>
             </div>
-            <h3 className="coin-title">无为币不足</h3>
-            <p className="coin-sub">余额已用尽 —— 选一种方式，继续使用无为托管模型</p>
-
-            <div className="coin-balance-hero">
-              <span className="coin-balance-label">当前可用余额</span>
-              <span className="coin-balance-num">
-                <CoinIcon size={22} />
-                {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
-                <em>无为币</em>
-              </span>
+            <div className="pay-bal">
+              <div className="pay-bal-l">当前可用余额</div>
+              <div className="pay-bal-v">
+                <span className="pay-coin" /> {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
+                <small>无为币</small>
+              </div>
             </div>
-
-            <div className="coin-options">
+            <div className="pay-opts">
               <button
-                className="coin-opt coin-opt-primary"
+                className="pay-opt pay-opt-plan"
                 onClick={() => {
                   setCoinShortage(null);
-                  window.minicc.openExternal("https://wuweiai.io/pricing#coinpack"); // TODO: 站内积分包页
+                  setPlanOpen(true);
                 }}
               >
-                <span className="coin-opt-ic">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <ellipse cx="12" cy="6" rx="7" ry="3" />
-                    <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" />
-                    <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
-                  </svg>
+                <span className="pay-badge">更划算</span>
+                <span className="pay-oi">
+                  <PaySpark size={20} />
                 </span>
-                <span className="coin-opt-body">
-                  <span className="coin-opt-t">购买积分包</span>
-                  <span className="coin-opt-d">按需充值，用多少买多少，即充即用</span>
+                <span style={{ minWidth: 0 }}>
+                  <span className="pay-ot">升级无为 Pro</span>
+                  <span className="pay-os" style={{ display: "block" }}>
+                    ¥29/月 · 每月 1000 无为币 + 托管额度
+                  </span>
                 </span>
-                <svg className="coin-opt-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 3l5 5-5 5" />
-                </svg>
+                <span className="pay-arr">
+                  <PayArrow />
+                </span>
               </button>
-
               <button
-                className="coin-opt coin-opt-plan"
+                className="pay-opt pay-opt-pack"
                 onClick={() => {
                   setCoinShortage(null);
-                  window.minicc.openExternal("https://wuweiai.io/pricing"); // TODO: 站内升级套餐页
+                  setCoinPackOpen(true);
                 }}
               >
-                <span className="coin-badge">更优惠</span>
-                <span className="coin-opt-ic">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.2l1-5.8L3.5 9.2l5.9-.9L12 3z" />
-                  </svg>
+                <span className="pay-oi">
+                  <PackIcon size={21} />
                 </span>
-                <span className="coin-opt-body">
-                  <span className="coin-opt-t">升级套餐</span>
-                  <span className="coin-opt-d">无为 Pro ¥29/月 · 每月 1000 无为币 + 托管额度</span>
+                <span style={{ minWidth: 0 }}>
+                  <span className="pay-ot">购买积分包</span>
+                  <span className="pay-os" style={{ display: "block" }}>
+                    按需充值，用多少买多少，即充即用
+                  </span>
                 </span>
-                <svg className="coin-opt-arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 3l5 5-5 5" />
-                </svg>
+                <span className="pay-arr">
+                  <PayArrow />
+                </span>
               </button>
             </div>
-
-            <div className="coin-foot">
-              <button className="coin-refresh" onClick={() => void refreshWuweiForShortage(coinShortage.message)}>
-                刷新余额
-              </button>
-              <button className="coin-dismiss" onClick={() => setCoinShortage(null)}>
-                暂不需要
-              </button>
+            <div className="pay-foot">
+              <button onClick={() => void refreshWuweiForShortage(coinShortage.message)}>↻ 刷新余额</button>
+              <button onClick={() => setCoinShortage(null)}>暂不需要</button>
             </div>
           </div>
         </div>
       )}
+      {coinPackOpen && <CoinPackModal onClose={() => setCoinPackOpen(false)} />}
+      {planOpen && <PlanModal onClose={() => setPlanOpen(false)} />}
       {secretPrompt && (
         <div className="perm-overlay" onClick={() => setSecretPrompt(null)}>
           <div className="add-st-dialog sec-prompt" onClick={(e) => e.stopPropagation()}>
