@@ -109,7 +109,9 @@ class AnthropicProvider implements Provider {
     // —— prompt 缓存断点(Anthropic 需显式标记,否则一律不缓存、cache_read 恒为0) ——
     // 在 system 末块、tools 末项、历史末条各打一个 ephemeral 断点,缓存"系统提示+工具+历史"这段
     // 稳定前缀;下一步重发时命中缓存(读价约1/10),多步循环省下绝大部分输入。Claude Code 同款做法。
-    const CC = { type: "ephemeral" as const };
+    // ttl:"1h" → 缓存活 1 小时(默认 ephemeral 只 5 分钟)。用户两轮之间思考几分钟,
+    // 下一轮仍能命中缓存(读价约1/10),不必每轮重写。经真机验证:仅需请求体 ttl,无需额外 beta 头。
+    const CC = { type: "ephemeral" as const, ttl: "1h" };
     // system 统一成 text-block 数组，末块打断点(空提示词不发空块,Anthropic 拒收→400)
     const sysBlocks: Anthropic.TextBlockParam[] = this.oauth
       ? [
@@ -305,8 +307,13 @@ class OpenAIProvider implements Provider {
         }
         if (j.usage) {
           const inTok = j.usage.prompt_tokens ?? 0;
-          // DeepSeek 等返回缓存命中/未命中明细；缺失则按全部未命中兜底
-          const hit = j.usage.prompt_cache_hit_tokens ?? j.usage.prompt_tokens_details?.cached_tokens;
+          // 各家自动缓存的命中字段名不一,尽量都兼容:
+          // DeepSeek=prompt_cache_hit_tokens;Kimi/智谱/通用=prompt_tokens_details.cached_tokens;
+          // 少数放在 usage 顶层 cached_tokens。缺失则按全部未命中兜底。
+          const hit =
+            j.usage.prompt_cache_hit_tokens ??
+            j.usage.prompt_tokens_details?.cached_tokens ??
+            j.usage.cached_tokens;
           const cacheHit = typeof hit === "number" ? hit : 0;
           const cacheMiss =
             typeof j.usage.prompt_cache_miss_tokens === "number"
