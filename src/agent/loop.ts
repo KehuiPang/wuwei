@@ -220,7 +220,17 @@ export class Agent {
       }
       if (result.rateLimits) hooks.onRateLimits?.(result.rateLimits);
 
-      this.messages.push({ role: "assistant", content: result.content, ts: Date.now() });
+      // 盖上累计用量快照：UI 据此算"本轮 token"(本轮末累计 − 上轮末累计)，并存进历史供重开后仍可看
+      this.messages.push({
+        role: "assistant",
+        content: result.content,
+        ts: Date.now(),
+        usage: {
+          totalInput: this.usage.totalInput,
+          totalOutput: this.usage.totalOutput,
+          lastInput: this.usage.lastInput,
+        },
+      });
       hooks.onStep?.(); // 助手段落已入历史，即时落盘(重启不丢)
 
       let toolUses = result.content.filter(

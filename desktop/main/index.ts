@@ -126,6 +126,8 @@ const pendingPerm = new Map<number, (d: "allow" | "deny") => void>();
 let permSeq = 0;
 // ask_user(AI 弹选择框)往返：id → resolve；turnSid=当前正在跑的会话(供事件带 sid)
 const pendingAsk = new Map<number, (answers: any) => void>();
+// ask id → 发起该询问的会话 id：答案里带截图时，据此把图片注入回该会话的循环边界
+const pendingAskSid = new Map<number, string>();
 let askSeq = 0;
 let turnSid = "";
 // 多任务：每个会话各自的中断控制器；keys = 正在运行的会话集(用于任务计数)
@@ -1088,13 +1090,17 @@ const askUserTool: Tool = {
     },
     required: ["questions"],
   },
-  async run(input): Promise<ToolResult> {
+  async run(input, ctx): Promise<ToolResult> {
     const questions = Array.isArray((input as any).questions) ? (input as any).questions : [];
     if (!questions.length) return { content: "ask_user 需要至少一个带 options 的问题", isError: true };
     const id = ++askSeq;
+    // 绑定到「执行本工具的会话」——用 ctx.sessionId(每个 Agent 自带)，不是全局 turnSid。
+    // 多会话并发时 turnSid 会被最后派发的会话覆盖，导致弹窗/通知指向错的会话。
+    const askSid = ctx.sessionId || turnSid;
     const answers: any = await new Promise((resolve) => {
       pendingAsk.set(id, resolve);
-      send("evt:ask-user", { sid: turnSid, id, questions });
+      pendingAskSid.set(id, askSid);
+      send("evt:ask-user", { sid: askSid, id, questions });
     });
     if (!answers || answers.cancelled) return { content: "用户取消了选择(未作答)。" };
     const list: { selected?: string[]; text?: string }[] = answers.list || [];
@@ -1156,7 +1162,7 @@ function getAgent(id: string): Agent | null {
   if (!provider) return null;
   let a = agents.get(id);
   if (!a) {
-    a = new Agent(provider, sysPrompt, desktopTools(), { cwd }, desktopToolMap(), agentOpts);
+    a = new Agent(provider, sysPrompt, desktopTools(), { cwd, sessionId: id }, desktopToolMap(), agentOpts);
     a.setMessages(loadMessages(id));
     const meta = listSessions().find((s) => s.id === id); // 恢复该会话的用量
     if (meta?.usage) a.setUsage(meta.usage);
@@ -1632,6 +1638,7 @@ ipcMain.on("chat:stop", (_e, sid?: string) => {
   for (const [aid, r] of pendingAsk) {
     r({ cancelled: true });
     pendingAsk.delete(aid);
+    pendingAskSid.delete(aid);
   }
 });
 
@@ -1646,8 +1653,16 @@ ipcMain.on("perm:respond", (_e, id: number, decision: "allow" | "deny") => {
 ipcMain.on("ask:answer", (_e, id: number, answers: any) => {
   const r = pendingAsk.get(id);
   if (r) {
+    // 用户随答案附了截图：注入回该会话的循环边界，与 tool_result 并入同一条 user 消息，模型即刻看到
+    const imgs: string[] = Array.isArray(answers?.images) ? answers.images : [];
+    if (imgs.length) {
+      const sid = pendingAskSid.get(id);
+      const agent = sid ? getAgent(sid) : null;
+      if (agent) agent.injectUser("（用户在回答上面的问题时附带了以下截图）", imgs);
+    }
     r(answers);
     pendingAsk.delete(id);
+    pendingAskSid.delete(id);
   }
 });
 

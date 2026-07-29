@@ -8,7 +8,7 @@ import rehypeHighlight from "rehype-highlight";
 
 type Item =
   | { type: "user"; text: string; images?: string[]; ts?: number }
-  | { type: "assistant"; text: string; ts?: number }
+  | { type: "assistant"; text: string; ts?: number; usage?: UsageSnap }
   | {
       type: "tool";
       id?: string; // 工具调用 id：并行时用来精确匹配 start/end(不再靠"最后一个running")
@@ -25,6 +25,8 @@ interface Usage {
   totalOutput: number;
   lastInput: number;
 }
+// 盖在助手消息上的累计用量快照(本轮末)；UI 据此算每轮 token 增量
+type UsageSnap = { totalInput: number; totalOutput: number; lastInput: number };
 interface Pending {
   id: number;
   name: string;
@@ -116,7 +118,7 @@ function messagesToItems(messages: any[]): Item[] {
         items.push({ type: "user", text, images: imgs.length ? imgs : undefined, ts: m.ts });
     } else {
       for (const b of m.content) {
-        if (b.type === "text" && b.text) items.push({ type: "assistant", text: b.text, ts: m.ts });
+        if (b.type === "text" && b.text) items.push({ type: "assistant", text: b.text, ts: m.ts, usage: m.usage });
         else if (b.type === "tool_use") {
           const it: Extract<Item, { type: "tool" }> = {
             type: "tool",
@@ -670,7 +672,20 @@ export function App() {
   const [now, setNow] = useState(() => Date.now()); // 相对时间戳每 30s 刷新一次
   const [runningSet, setRunningSet] = useState<Set<string>>(() => new Set()); // 多任务:正在跑的会话id集
   const [pending, setPending] = useState<Pending | null>(null);
-  const [ask, setAsk] = useState<{ id: number; questions: AskQuestion[] } | null>(null); // AI 弹的选择框
+  // AI 弹的选择框：按会话 id 存，避免「A 会话弹的框在 B 会话冒出来」。只有当前会话才直接弹 AskModal。
+  const [asks, setAsks] = useState<Record<string, { id: number; questions: AskQuestion[] }>>({});
+  // 非当前会话发起的 ask → 右上角通知(点击切过去/✕忽略/30s自动消失)
+  const [askToasts, setAskToasts] = useState<{ askId: number; sid: string; title: string }[]>([]);
+  const dropToast = (askId: number) => setAskToasts((t) => t.filter((x) => x.askId !== askId));
+  const clearAsk = (sid: string) => {
+    setAsks((m) => {
+      if (!(sid in m)) return m;
+      const n = { ...m };
+      delete n[sid];
+      return n;
+    });
+    setAskToasts((t) => t.filter((x) => x.sid !== sid));
+  };
   const [meta, setMeta] = useState({
     backend: "…",
     model: "…",
@@ -700,6 +715,8 @@ export function App() {
   const [suggestion, setSuggestion] = useState(""); // 输入框幽灵提示：下一步动作建议(Tab 补全)
   const [autoMode, setAutoMode] = useState(true);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const sessionsRef = useRef<SessionMeta[]>([]); // 事件回调里取会话标题(ask 通知文案)
+  sessionsRef.current = sessions;
   const [groups, setGroups] = useState<string[]>([]); // 分组顺序(新组置顶)
   const [groupMode, setGroupMode] = useState<"manual" | "date" | "project">("manual"); // 分组模式
   const [streamMode, setStreamMode] = useState<"typewriter" | "stream" | "instant">("stream"); // 输出方式
@@ -722,6 +739,10 @@ export function App() {
   const busy = runningSet.has(currentId); // 当前可见会话是否在跑(多任务:各会话独立)
   const currentIdRef = useRef(currentId); // 事件回调里读最新 currentId(判是否本会话的更新)
   currentIdRef.current = currentId;
+  // 切到某会话后，它的 ask 通知就没必要留着了(框已在眼前)
+  useEffect(() => {
+    setAskToasts((t) => t.filter((x) => x.sid !== currentId));
+  }, [currentId]);
   const [showUsage, setShowUsage] = useState(false);
   // Codex 限额重置(免费重置额度)
   const [codexResets, setCodexResets] = useState<{ availableCount: number; credits: any[] } | null>(null);
@@ -1285,13 +1306,32 @@ export function App() {
             window.minicc.respondPermission(payload.id, "allow");
           else setPending(payload);
           break;
-        case "evt:ask-user":
-          // AI 请用户选择：即便自动模式也要弹(必须用户点选，模型才拿得到答案)
-          setAsk({ id: payload.id, questions: payload.questions || [] });
+        case "evt:ask-user": {
+          // AI 请用户选择：按发起会话 id 存。当前会话→直接弹框；别的会话→右上角通知，不打断当前对话。
+          const askSid = payload.sid || currentIdRef.current;
+          setAsks((m) => ({ ...m, [askSid]: { id: payload.id, questions: payload.questions || [] } }));
+          if (askSid !== currentIdRef.current) {
+            const title = sessionsRef.current.find((s) => s.id === askSid)?.title || "其它会话";
+            setAskToasts((t) => [...t.filter((x) => x.sid !== askSid), { askId: payload.id, sid: askSid, title }]);
+            window.setTimeout(() => dropToast(payload.id), 30000); // 30s 自动消失
+          }
           break;
+        }
         case "evt:usage":
           if (payload.sid !== currentIdRef.current) break; // 只显示当前会话用量
           setUsage(payload.usage);
+          // 实时盖到本轮正在生成的最后一条助手气泡上：footer 悬停即见本轮 token 增量(每完成一段就刷新)
+          setItems((p) => {
+            for (let k = p.length - 1; k >= 0; k--) {
+              if (p[k].type === "assistant") {
+                const c = [...p];
+                c[k] = { ...(c[k] as any), usage: payload.usage };
+                return c;
+              }
+              if (p[k].type === "user") break; // 本轮还没出助手文字(如直接调工具)→先不盖，等出正文
+            }
+            return p;
+          });
           break;
         case "evt:ratelimits":
           setRate(payload);
@@ -2506,6 +2546,7 @@ export function App() {
           {(() => {
             const turns = groupTurns(items);
             let userOrd = -1; // 已见的用户输入序号(与主进程 messages 里的用户输入一一对应)
+            let prevCum = { totalInput: 0, totalOutput: 0 }; // 上一 AI 回合末的累计用量，用于算本轮增量
             const canDel = !busy; // 运行中不允许删(历史正在变)
             const delExchange = (ord: number) => {
               if (ord < 0) return;
@@ -2552,6 +2593,17 @@ export function App() {
               const ord = userOrd; // AI 回合归属最近一条用户输入这一轮
               const aiTs = aiTurnTs(t.blocks);
               const lastTurn = i === turns.length - 1; // 只有最后一个回合可能正在流
+              // 本轮 token = 本轮末累计 − 上轮末累计(输入含每步重发上下文的真实消耗)；上下文=最近一次请求输入量
+              const endCum = aiTurnUsage(t.blocks);
+              let tok: { inT: number; outT: number; ctx: number } | undefined;
+              if (endCum) {
+                tok = {
+                  inT: Math.max(0, endCum.totalInput - prevCum.totalInput),
+                  outT: Math.max(0, endCum.totalOutput - prevCum.totalOutput),
+                  ctx: endCum.lastInput,
+                };
+                prevCum = { totalInput: endCum.totalInput, totalOutput: endCum.totalOutput };
+              }
               return (
                 <div className="aiturn" key={i}>
                   <div className="aiturn-body">
@@ -2583,6 +2635,27 @@ export function App() {
                         </button>
                       )}
                     </div>
+                    {tok && (
+                      <span className="tf-tok">
+                        <span className="tf-tok-badge">
+                          ↑{fmtTok(tok.inT)} ↓{fmtTok(tok.outT)}
+                        </span>
+                        <span className="tf-tok-pop">
+                          <span>
+                            <b>本轮输入</b>
+                            <em>{tok.inT.toLocaleString()}</em>
+                          </span>
+                          <span>
+                            <b>本轮输出</b>
+                            <em>{tok.outT.toLocaleString()}</em>
+                          </span>
+                          <span className="tf-tok-ctx">
+                            <b>累计上下文</b>
+                            <em>{tok.ctx.toLocaleString()}</em>
+                          </span>
+                        </span>
+                      </span>
+                    )}
                     {aiTs && (
                       <span className="tf-time" title={new Date(aiTs).toLocaleString()}>
                         {relTime(aiTs, now)}
@@ -3486,19 +3559,56 @@ export function App() {
         </div>
       )}
 
-      {ask && (
+      {asks[currentId] && (
         <AskModal
-          data={ask}
+          key={asks[currentId].id}
+          data={asks[currentId]}
           anchor={composerRef}
-          onSubmit={(list) => {
-            window.minicc.answerAsk(ask.id, { list });
-            setAsk(null);
+          onSubmit={(list, images) => {
+            window.minicc.answerAsk(asks[currentId].id, { list, images });
+            clearAsk(currentId);
           }}
           onCancel={() => {
-            window.minicc.answerAsk(ask.id, { cancelled: true });
-            setAsk(null);
+            window.minicc.answerAsk(asks[currentId].id, { cancelled: true });
+            clearAsk(currentId);
           }}
         />
+      )}
+
+      {/* 别的会话发起的 ask → 右上角通知：点击切过去选择 / ✕ 忽略 / 30s 自动消失 */}
+      {askToasts.some((x) => x.sid !== currentId) && (
+        <div className="ask-toasts">
+          {askToasts
+            .filter((x) => x.sid !== currentId)
+            .map((t) => (
+              <div
+                key={t.askId}
+                className="ask-toast"
+                onClick={() => {
+                  window.minicc.switchSession(t.sid);
+                  dropToast(t.askId);
+                }}
+              >
+                <div className="ask-toast-body">
+                  <div className="ask-toast-title">🔔 有会话在等你选择</div>
+                  <div className="ask-toast-sub">
+                    「{t.title}」需要确认，点此切换过去
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="ask-toast-x"
+                  title="忽略通知（该会话仍在等待，切过去即可回答）"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    dropToast(t.askId);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+        </div>
       )}
 
       {pending && (
@@ -3901,25 +4011,38 @@ function AskModal({
 }: {
   data: { id: number; questions: AskQuestion[] };
   anchor: React.RefObject<HTMLDivElement | null>; // 输入框(composer)，用于对齐定位
-  onSubmit: (list: { selected: string[]; text?: string }[]) => void;
+  onSubmit: (list: { selected: string[]; text?: string }[], images: string[]) => void;
   onCancel: () => void;
 }) {
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
   const [other, setOther] = useState<Record<number, string>>({});
+  const [imgs, setImgs] = useState<Record<number, string[]>>({}); // 每题附带的截图(dataURL)
+  const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0); // 分步：一次只问一题，答完再出下一题
   const q = qs[step];
   const isLast = step === qs.length - 1;
   const curMulti = !!q.multiSelect;
+  const curImgs = imgs[step] || [];
+  // 读图片文件为 dataURL，追加到当前题
+  const addImgFiles = (files: FileList | File[]) => {
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith("image/")) continue;
+      const reader = new FileReader();
+      reader.onload = () => setImgs((m) => ({ ...m, [step]: [...(m[step] || []), reader.result as string] }));
+      reader.readAsDataURL(f);
+    }
+  };
   const buildList = (s: Record<number, string[]>) =>
     qs.map((_, qi) => ({ selected: s[qi] || [], text: (other[qi] || "").trim() || undefined }));
+  const allImgs = () => qs.flatMap((_, qi) => imgs[qi] || []); // 所有题的截图汇总一并回传
   const answeredAt = (s: Record<number, string[]>, qi: number) =>
-    (s[qi]?.length || (other[qi] || "").trim().length) > 0;
+    (s[qi]?.length || (other[qi] || "").trim().length || (imgs[qi]?.length || 0)) > 0;
   const curAnswered = answeredAt(sel, step);
   // 进入下一题；已是最后一题则整体提交
   const advance = (s: Record<number, string[]> = sel) => {
     if (!answeredAt(s, step)) return;
-    if (isLast) onSubmit(buildList(s));
+    if (isLast) onSubmit(buildList(s), allImgs());
     else setStep((v) => v + 1);
   };
   const pick = (label: string, multi: boolean) => {
@@ -3927,8 +4050,8 @@ function AskModal({
     const next = multi ? (cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]) : cur.includes(label) ? [] : [label];
     const merged = { ...sel, [step]: next };
     setSel(merged);
-    // 单选即进：这次是选中(非取消) → 自动进入下一题/提交，不用点按钮
-    if (!multi && next.length) advance(merged);
+    // 单选即进：自动进入下一题/提交。但本题已附截图时不自动交——留时间让用户补完图文再手动提交
+    if (!multi && next.length && !curImgs.length) advance(merged);
   };
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -3956,8 +4079,8 @@ function AskModal({
     return () => window.removeEventListener("resize", upd);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
-  // 单个单选题靠点击即交，不显示按钮；多选题或多题分步时显示「下一步/提交」
-  const showPrimary = curMulti || qs.length > 1;
+  // 单个单选题靠点击即交，不显示按钮；多选题/多题分步/已附截图时显示「下一步/提交」
+  const showPrimary = curMulti || qs.length > 1 || curImgs.length > 0;
   return (
     <div
       className="ask"
@@ -3980,15 +4103,66 @@ function AskModal({
             );
           })}
         </div>
-        <input
-          className="ask-other"
-          placeholder="其它（手动输入，可选）"
-          value={other[step] || ""}
-          onChange={(e) => setOther((o) => ({ ...o, [step]: e.target.value }))}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && curAnswered) advance();
-          }}
-        />
+        {curImgs.length > 0 && (
+          <div className="img-strip ask-imgs">
+            {curImgs.map((src, i) => (
+              <div className="thumb" key={i}>
+                <img src={src} alt="" />
+                <button
+                  type="button"
+                  title="移除"
+                  onClick={() => setImgs((m) => ({ ...m, [step]: (m[step] || []).filter((_, j) => j !== i) }))}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="ask-other-row">
+          <input
+            className="ask-other"
+            placeholder="其它（手动输入或粘贴/添加截图，可选）"
+            value={other[step] || ""}
+            onChange={(e) => setOther((o) => ({ ...o, [step]: e.target.value }))}
+            onPaste={(e) => {
+              const its = e.clipboardData?.items;
+              if (!its) return;
+              const files: File[] = [];
+              for (const it of its)
+                if (it.type.startsWith("image/")) {
+                  const f = it.getAsFile();
+                  if (f) files.push(f);
+                }
+              if (files.length) {
+                e.preventDefault();
+                addImgFiles(files);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && curAnswered) advance();
+            }}
+          />
+          <button
+            type="button"
+            className="ask-attach"
+            title="添加截图"
+            onClick={() => fileRef.current?.click()}
+          >
+            📎
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => {
+              if (e.target.files?.length) addImgFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+        </div>
       </div>
       <div className="ask-foot">
         <button type="button" onClick={onCancel}>
@@ -4356,6 +4530,21 @@ function aiTurnTs(blocks: RenderBlock[]): number | undefined {
     if (b.kind === "item" && b.item.type === "assistant" && b.item.ts) return b.item.ts;
   }
   return undefined;
+}
+// 取一个 AI 回合末尾的累计用量快照(回合内最后一条带 usage 的助手文字)
+function aiTurnUsage(blocks: RenderBlock[]): UsageSnap | undefined {
+  for (let k = blocks.length - 1; k >= 0; k--) {
+    const b = blocks[k];
+    if (b.kind === "item" && b.item.type === "assistant" && (b.item as any).usage)
+      return (b.item as any).usage as UsageSnap;
+  }
+  return undefined;
+}
+// token 数紧凑显示：1234→1.2k，1200000→1.2M
+function fmtTok(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0) + "k";
+  return (n / 1_000_000).toFixed(1) + "M";
 }
 
 function renderDiff(item: Extract<Item, { type: "tool" }>) {
@@ -5445,6 +5634,8 @@ function SettingsModal({
   const [brainFilter, setBrainFilter] = useState(""); // 概念列表过滤
   const [brainSel, setBrainSel] = useState<string | null>(null); // 选中编辑的节点 id
   const [brainDraft, setBrainDraft] = useState<import("./env").BrainNodeLite | null>(null); // 编辑草稿
+  const [brainLeftOpen, setBrainLeftOpen] = useState(true); // 左侧概念列表：可收起给图谱腾地方
+  const [brainRightOpen, setBrainRightOpen] = useState(true); // 右侧详情编辑：可收起(选中仍在，收成小条)
   const [brainRecallQ, setBrainRecallQ] = useState(""); // 检索测试输入
   const [brainRecallOut, setBrainRecallOut] = useState(""); // 检索测试结果
   const [brainWarming, setBrainWarming] = useState(false); // 模型预热中
@@ -6674,7 +6865,7 @@ function SettingsModal({
               const sorted = [...filteredNodes].sort((a, b) => b.weight - a.weight);
               const nodeName = (id: string) => brainNodes.find((n) => n.id === id)?.name || id;
               return (
-                <div className="prompt-pane" style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
+                <div className="prompt-pane" style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0, overflowY: "auto" }}>
                   {/* 视图切换：可视化网络 / 脑网络说明提示词 */}
                   <div
                     style={{
@@ -6843,9 +7034,16 @@ function SettingsModal({
                     </pre>
                   )}
 
-                  <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 0 }}>
-                    {/* 左：概念列表 */}
-                    <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
+                  <div style={{ display: "flex", gap: 12, flex: "1 1 auto", minHeight: 340 }}>
+                    {/* 左：概念列表（可收起成竖条，给中间图谱腾空间） */}
+                    {brainLeftOpen ? (
+                    <div style={{ width: 220, flex: "0 0 220px", display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>概念列表</span>
+                        <button type="button" className="brain-col-btn" title="收起概念列表" onClick={() => setBrainLeftOpen(false)}>
+                          ◀
+                        </button>
+                      </div>
                       <input
                         placeholder={t("set.brain.filterPlaceholder")}
                         value={brainFilter}
@@ -6897,6 +7095,17 @@ function SettingsModal({
                         )}
                       </div>
                     </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="brain-col-rail"
+                        title="展开概念列表"
+                        onClick={() => setBrainLeftOpen(true)}
+                      >
+                        <span className="brain-rail-arrow">▶</span>
+                        <span className="brain-rail-label">概念列表</span>
+                      </button>
+                    )}
 
                     {/* 中：概念网络力导向图（占最大空间，点节点选中、拖节点挪位） */}
                     <div
@@ -6924,10 +7133,53 @@ function SettingsModal({
                       />
                     </div>
 
-                    {/* 右：详情编辑（仅选中概念时出现，否则让网络图铺满整块区域） */}
-                    {brainDraft && (
+                    {/* 右：详情编辑（仅选中概念时出现；可收起成竖条，或叉掉取消选中让图谱铺满） */}
+                    {brainDraft && !brainRightOpen && (
+                      <div style={{ flex: "0 0 26px", width: 26, display: "flex", flexDirection: "column", gap: 4, minHeight: 0 }}>
+                        <button
+                          type="button"
+                          className="brain-col-btn"
+                          title="关闭详情（取消选中）"
+                          onClick={() => {
+                            setBrainDraft(null);
+                            setBrainSel(null);
+                          }}
+                          style={{ padding: "2px 0" }}
+                        >
+                          ✕
+                        </button>
+                        <button
+                          type="button"
+                          className="brain-col-rail"
+                          title="展开详情"
+                          onClick={() => setBrainRightOpen(true)}
+                          style={{ flex: "1 1 auto", width: "auto" }}
+                        >
+                          <span className="brain-rail-arrow">◀</span>
+                          <span className="brain-rail-label">概念详情</span>
+                        </button>
+                      </div>
+                    )}
+                    {brainDraft && brainRightOpen && (
                       <div style={{ width: 300, flex: "0 0 300px", minHeight: 0, overflow: "auto" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>概念详情</span>
+                            <button type="button" className="brain-col-btn" title="收起详情" onClick={() => setBrainRightOpen(false)}>
+                              ▶
+                            </button>
+                            <button
+                              type="button"
+                              className="brain-col-btn"
+                              title="关闭详情（取消选中）"
+                              onClick={() => {
+                                setBrainDraft(null);
+                                setBrainSel(null);
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
                           <label className="field">
                             <span>{t("set.brain.fName")}</span>
                             <input

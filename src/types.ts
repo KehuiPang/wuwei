@@ -16,6 +16,8 @@ export interface Message {
   role: Role;
   content: ContentBlock[];
   ts?: number; // 本地时间戳(仅持久化/展示"多久之前"，toAnthropic/toOpenAI 会剥掉不发给 API)
+  // 累计用量快照(仅盖在助手消息上，供 UI 算"本轮 token"=本轮末累计−上轮末累计；不发给 API)
+  usage?: { totalInput: number; totalOutput: number; lastInput: number };
 }
 
 // 一个工具 = 给模型看的 schema + 本地执行函数
@@ -32,6 +34,7 @@ export interface ToolContext {
   cwd: string;
   signal?: AbortSignal; // 中断信号：用户停止时传入，长命令(bash/grep)据此杀子进程
   env?: Record<string, string>; // 本地密钥注入(仅本机子进程可见，模型看不到)：bash 工具据此合并环境变量
+  sessionId?: string; // 执行该工具的会话 id：ask_user 据此把选择框/通知绑到正确的会话(多会话并发时不串)
 }
 
 export interface ToolResult {

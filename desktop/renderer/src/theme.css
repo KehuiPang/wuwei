@@ -781,6 +781,65 @@ body {
   color: var(--text-faint);
   user-select: none;
 }
+/* 本轮 token 徽标：常态紧凑显示 ↑输入 ↓输出，悬停出详细浮层 */
+.turn-foot .tf-tok {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+.turn-foot .tf-tok-badge {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: default;
+  transition: color 0.12s, background 0.12s;
+}
+.turn-foot .tf-tok:hover .tf-tok-badge {
+  color: var(--text-dim);
+  background: var(--bg-soft);
+}
+.turn-foot .tf-tok-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 168px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev, var(--bg-soft));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.turn-foot .tf-tok:hover .tf-tok-pop {
+  display: flex;
+}
+.turn-foot .tf-tok-pop span {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.turn-foot .tf-tok-pop b {
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.turn-foot .tf-tok-pop em {
+  font-style: normal;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.turn-foot .tf-tok-ctx {
+  margin-top: 2px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+}
 
 /* AI 回合：整组左对齐，回合之间留足空隙 */
 .aiturn {
@@ -1806,6 +1865,50 @@ body {
 }
 .ask-q { margin-bottom: 16px; }
 .ask-q:last-of-type { margin-bottom: 8px; }
+/* 别的会话发起 ask 时的右上角通知 */
+.ask-toasts {
+  position: fixed;
+  top: 44px;
+  right: 16px;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+}
+.ask-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--bg-raised, var(--bg));
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 10px 10px 12px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  animation: ask-toast-in 0.18s ease;
+}
+.ask-toast:hover { border-color: var(--accent); }
+.ask-toast-body { flex: 1; min-width: 0; }
+.ask-toast-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.ask-toast-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+.ask-toast-x {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+.ask-toast-x:hover { color: var(--text); background: var(--bg-soft); }
+@keyframes ask-toast-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
 .ask-qhead { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .ask-tag {
   font-size: 11px; padding: 1px 7px; border-radius: 5px;
@@ -1823,11 +1926,19 @@ body {
 .ask-opt.on { border-color: var(--accent, #e0533d); background: color-mix(in srgb, var(--accent, #e0533d) 12%, transparent); }
 .ask-opt-label { font-size: 13.5px; font-weight: 500; }
 .ask-opt-desc { font-size: 12px; color: var(--text-2, #888); }
+.ask-other-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .ask-other {
-  margin-top: 8px; width: 100%; padding: 6px 10px; font-size: 13px;
+  flex: 1; min-width: 0; padding: 6px 10px; font-size: 13px;
   border: 1px solid var(--border, #ddd); border-radius: 8px;
   background: transparent; color: var(--text);
 }
+.ask-attach {
+  flex: none; width: 32px; height: 32px; line-height: 1; font-size: 15px;
+  border: 1px solid var(--border, #ddd); border-radius: 8px;
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.ask-attach:hover { border-color: var(--accent, #e0533d); background: rgba(127,127,127,0.06); }
+.ask-imgs { margin-top: 10px; margin-bottom: 0; }
 .ask-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
 .ask-foot-spacer { flex: 1; }
 .ask-step { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
@@ -2981,6 +3092,50 @@ body {
 }
 .prompt-pane .pp-fixed {
   flex-shrink: 0;
+}
+/* 知识图谱左右栏的收起/关闭：小按钮 + 收起后的竖条 */
+.brain-col-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.brain-col-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.brain-col-rail {
+  align-self: stretch;
+  flex: 0 0 26px;
+  width: 26px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  color: var(--text-dim);
+}
+.brain-col-rail:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.brain-rail-arrow {
+  font-size: 11px;
+}
+.brain-rail-label {
+  writing-mode: vertical-rl;
+  font-size: 12px;
+  letter-spacing: 2px;
 }
 
 /* ===== 会话分组 + 右键菜单 + 优先级 ===== */
