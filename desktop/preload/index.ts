@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld("minicc", {
   setStreamOutput: (mode: "typewriter" | "stream" | "instant", speed: number) =>
     ipcRenderer.send("settings:set-stream", mode, speed),
   setKeepRecent: (n: number) => ipcRenderer.send("settings:set-keep-recent", n),
+  setAskToast: (autoDismiss: boolean, sec: number) =>
+    ipcRenderer.send("settings:set-ask-toast", autoDismiss, sec),
   setAppSettings: (patch: Record<string, boolean>) => ipcRenderer.send("settings:set-app", patch),
   answerAsk: (id: number, answers: unknown) => ipcRenderer.send("ask:answer", id, answers),
   codexResetCredits: () => ipcRenderer.invoke("codex:reset-credits"),

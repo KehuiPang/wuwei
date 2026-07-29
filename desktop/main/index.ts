@@ -1971,6 +1971,17 @@ ipcMain.on("settings:set-app", (_e, patch: Record<string, boolean>) => {
   refreshAgentTools();
 });
 
+// 右上角「别的会话在等你选择」提醒：是否自动消失 + 倒计时秒数(纯 UI，只落盘)
+ipcMain.on("settings:set-ask-toast", (_e, autoDismiss: boolean, sec: number) => {
+  const s = loadSettings() || ({} as Settings);
+  const n = Number(sec);
+  saveSettings({
+    ...s,
+    askToastAutoDismiss: !!autoDismiss,
+    askToastDismissSec: Number.isFinite(n) && n > 0 ? n : 30,
+  });
+});
+
 // 上下文压缩：保留最近 N 条(热更所有会话，不重启 provider)
 ipcMain.on("settings:set-keep-recent", (_e, n: number) => {
   const keep = Number(n);

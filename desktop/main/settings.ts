@@ -155,6 +155,8 @@ export interface Settings {
   streamMode?: "typewriter" | "stream" | "instant"; // 输出方式：打字机(匀速)/流式(一下出)/回完一次性
   streamSpeed?: number; // 打字机速度(字符/秒)，默认 400
   keepRecent?: number; // 上下文压缩时保留最近多少条原始消息(默认 12)
+  askToastAutoDismiss?: boolean; // 别的会话「在等你选择」的右上角提醒是否自动消失(默认开=undefined 视为 true)
+  askToastDismissSec?: number; // 自动消失倒计时秒数(默认 30)
 }
 
 // 自定义中转站：名称 + OpenAI 兼容端点(key 存 creds[id] 槽，同其它平台)

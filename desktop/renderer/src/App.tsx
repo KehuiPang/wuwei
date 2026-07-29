@@ -738,6 +738,12 @@ export function App() {
   const [streamMode, setStreamMode] = useState<"typewriter" | "stream" | "instant">("stream"); // 输出方式
   const [streamSpeed, setStreamSpeed] = useState(400); // 打字机速度(字符/秒)
   const [keepRecent, setKeepRecent] = useState(12); // 上下文压缩保留最近N条
+  const [askToastAuto, setAskToastAuto] = useState(true); // 别的会话提醒是否自动消失
+  const [askToastSec, setAskToastSec] = useState(30); // 自动消失秒数
+  const askToastAutoRef = useRef(askToastAuto); // 事件回调里读最新值(避免闭包旧值)
+  askToastAutoRef.current = askToastAuto;
+  const askToastSecRef = useRef(askToastSec);
+  askToastSecRef.current = askToastSec;
   const streamModeRef = useRef(streamMode);
   streamModeRef.current = streamMode;
   const streamSpeedRef = useRef(streamSpeed);
@@ -1059,6 +1065,8 @@ export function App() {
       setStreamMode((r?.settings as any)?.streamMode || "stream");
       setStreamSpeed((r?.settings as any)?.streamSpeed || 400);
       setKeepRecent((r?.settings as any)?.keepRecent || 12);
+      setAskToastAuto((r?.settings as any)?.askToastAutoDismiss !== false); // 默认开
+      setAskToastSec((r?.settings as any)?.askToastDismissSec || 30);
       // 应用主题(深色已下线，默认白色；存量 dark 回退白色)
       const theme = resolveTheme((r?.settings as any)?.theme);
       document.documentElement.setAttribute("data-theme", theme);
@@ -1329,7 +1337,10 @@ export function App() {
           if (askSid !== currentIdRef.current) {
             const title = sessionsRef.current.find((s) => s.id === askSid)?.title || "其它会话";
             setAskToasts((t) => [...t.filter((x) => x.sid !== askSid), { askId: payload.id, sid: askSid, title }]);
-            window.setTimeout(() => dropToast(payload.id), 30000); // 30s 自动消失
+            // 自动消失：按设置的开关与秒数(关掉则常驻，直到点开/✕忽略)
+            if (askToastAutoRef.current) {
+              window.setTimeout(() => dropToast(payload.id), Math.max(1, askToastSecRef.current) * 1000);
+            }
           }
           break;
         }
@@ -1779,6 +1790,11 @@ export function App() {
   function changeKeepRecent(n: number) {
     setKeepRecent(n);
     window.minicc.setKeepRecent(n);
+  }
+  function changeAskToast(auto: boolean, sec: number) {
+    setAskToastAuto(auto);
+    setAskToastSec(sec);
+    window.minicc.setAskToast(auto, sec);
   }
 
   function answerPerm(decision: "allow" | "deny") {
@@ -3438,6 +3454,9 @@ export function App() {
           lang={lang}
           onLang={changeLang}
           t={t}
+          askToastAuto={askToastAuto}
+          askToastSec={askToastSec}
+          onAskToast={changeAskToast}
         />
       )}
       {/* 应用内登录框：邮箱/手机号/Google。未登录点发送(loginResume)或点账号登录时弹出 */}
@@ -5597,6 +5616,9 @@ function SettingsModal({
   lang,
   onLang,
   t,
+  askToastAuto,
+  askToastSec,
+  onAskToast,
 }: {
   onClose: () => void;
   liveModels: Record<string, string[]>;
@@ -5611,6 +5633,9 @@ function SettingsModal({
   lang: Lang;
   onLang: (l: Lang) => void;
   t: T;
+  askToastAuto: boolean;
+  askToastSec: number;
+  onAskToast: (auto: boolean, sec: number) => void;
 }) {
   // 界面主题（并入设置页「外观」）
   const [uiTheme, setUiTheme] = useState("light");
@@ -6540,6 +6565,41 @@ function SettingsModal({
                   </button>
                 ))}
               </div>
+
+              <div className="app-set-group">会话提醒</div>
+              <div className="app-set-row" style={{ cursor: "default" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">提醒自动消失</div>
+                  <div className="app-set-hint">
+                    别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={askToastAuto}
+                  onChange={(e) => onAskToast(e.target.checked, askToastSec)}
+                />
+              </div>
+              {askToastAuto && (
+                <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                  <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>
+                    消失倒计时
+                  </div>
+                  <input
+                    type="range"
+                    min={5}
+                    max={120}
+                    step={5}
+                    value={askToastSec}
+                    onChange={(e) => onAskToast(true, Number(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
+                    {askToastSec} 秒
+                  </div>
+                </div>
+              )}
             </>
           )}
           {/* ── 板块一：模型（选平台 / 打通模型 / 填凭证）── */}
