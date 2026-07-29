@@ -26,7 +26,14 @@ interface Usage {
   lastInput: number;
 }
 // 盖在助手消息上的累计用量快照(本轮末)；UI 据此算每轮 token 增量
-type UsageSnap = { totalInput: number; totalOutput: number; lastInput: number };
+type UsageSnap = {
+  totalInput: number;
+  totalOutput: number;
+  lastInput: number;
+  totalCacheHit?: number;
+  totalCacheMiss?: number;
+  totalSteps?: number;
+};
 interface Pending {
   id: number;
   name: string;
@@ -2546,7 +2553,8 @@ export function App() {
           {(() => {
             const turns = groupTurns(items);
             let userOrd = -1; // 已见的用户输入序号(与主进程 messages 里的用户输入一一对应)
-            let prevCum = { totalInput: 0, totalOutput: 0 }; // 上一 AI 回合末的累计用量，用于算本轮增量
+            // 上一 AI 回合末的累计用量，用于算本轮增量(输入/输出/缓存命中/新增/步数)
+            let prevCum = { totalInput: 0, totalOutput: 0, totalCacheHit: 0, totalCacheMiss: 0, totalSteps: 0 };
             const canDel = !busy; // 运行中不允许删(历史正在变)
             const delExchange = (ord: number) => {
               if (ord < 0) return;
@@ -2595,14 +2603,27 @@ export function App() {
               const lastTurn = i === turns.length - 1; // 只有最后一个回合可能正在流
               // 本轮 token = 本轮末累计 − 上轮末累计(输入含每步重发上下文的真实消耗)；上下文=最近一次请求输入量
               const endCum = aiTurnUsage(t.blocks);
-              let tok: { inT: number; outT: number; ctx: number } | undefined;
+              let tok:
+                | { inT: number; outT: number; ctx: number; steps: number; hit: number; miss: number }
+                | undefined;
               if (endCum) {
+                const hitC = endCum.totalCacheHit ?? 0;
+                const missC = endCum.totalCacheMiss ?? 0;
                 tok = {
                   inT: Math.max(0, endCum.totalInput - prevCum.totalInput),
                   outT: Math.max(0, endCum.totalOutput - prevCum.totalOutput),
                   ctx: endCum.lastInput,
+                  steps: Math.max(0, (endCum.totalSteps ?? 0) - prevCum.totalSteps),
+                  hit: Math.max(0, hitC - prevCum.totalCacheHit),
+                  miss: Math.max(0, missC - prevCum.totalCacheMiss),
                 };
-                prevCum = { totalInput: endCum.totalInput, totalOutput: endCum.totalOutput };
+                prevCum = {
+                  totalInput: endCum.totalInput,
+                  totalOutput: endCum.totalOutput,
+                  totalCacheHit: hitC,
+                  totalCacheMiss: missC,
+                  totalSteps: endCum.totalSteps ?? 0,
+                };
               }
               return (
                 <div className="aiturn" key={i}>
@@ -2635,30 +2656,48 @@ export function App() {
                         </button>
                       )}
                     </div>
+                    {aiTs && (
+                      <span className="tf-time" title={new Date(aiTs).toLocaleString()}>
+                        {relTime(aiTs, now)}
+                      </span>
+                    )}
                     {tok && (
                       <span className="tf-tok">
                         <span className="tf-tok-badge">
                           ↑{fmtTok(tok.inT)} ↓{fmtTok(tok.outT)}
                         </span>
                         <span className="tf-tok-pop">
+                          {tok.steps > 0 && (
+                            <span>
+                              <b>本轮步数</b>
+                              <em>{tok.steps} 步（每步都重发上下文）</em>
+                            </span>
+                          )}
                           <span>
                             <b>本轮输入</b>
                             <em>{tok.inT.toLocaleString()}</em>
                           </span>
+                          {tok.hit > 0 && (
+                            <span className="tf-tok-sub">
+                              <b>· 缓存命中</b>
+                              <em>{tok.hit.toLocaleString()}（便宜）</em>
+                            </span>
+                          )}
+                          {(tok.hit > 0 || tok.miss > 0) && (
+                            <span className="tf-tok-sub">
+                              <b>· 真正新增</b>
+                              <em>{tok.miss.toLocaleString()}</em>
+                            </span>
+                          )}
                           <span>
                             <b>本轮输出</b>
                             <em>{tok.outT.toLocaleString()}</em>
                           </span>
                           <span className="tf-tok-ctx">
-                            <b>累计上下文</b>
-                            <em>{tok.ctx.toLocaleString()}</em>
+                            <b>当前上下文</b>
+                            <em>{tok.ctx.toLocaleString()}（单次请求量）</em>
                           </span>
                         </span>
-                      </span>
-                    )}
-                    {aiTs && (
-                      <span className="tf-time" title={new Date(aiTs).toLocaleString()}>
-                        {relTime(aiTs, now)}
                       </span>
                     )}
                   </div>

@@ -31,6 +31,7 @@ export function App({
     lastInput: 0,
     totalCacheHit: 0,
     totalCacheMiss: 0,
+    totalSteps: 0,
   });
   const alwaysAllow = useRef<Set<string>>(new Set());
   const push = (it: Item) => setItems((prev) => [...prev, it]);

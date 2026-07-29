@@ -1171,7 +1171,7 @@ function getAgent(id: string): Agent | null {
   return a;
 }
 
-const EMPTY_USAGE = { totalInput: 0, totalOutput: 0, lastInput: 0, totalCacheHit: 0, totalCacheMiss: 0 };
+const EMPTY_USAGE = { totalInput: 0, totalOutput: 0, lastInput: 0, totalCacheHit: 0, totalCacheMiss: 0, totalSteps: 0 };
 // 切换/加载会话后推送该会话自己的用量
 function sendUsageFor(id: string) {
   const a = agents.get(id);
@@ -1858,7 +1858,7 @@ ipcMain.on("chat:reset", () => {
   const a = getAgent(currentId);
   if (a) {
     a.setMessages([]);
-    a.setUsage({ totalInput: 0, totalOutput: 0, lastInput: 0, totalCacheHit: 0, totalCacheMiss: 0 });
+    a.setUsage({ totalInput: 0, totalOutput: 0, lastInput: 0, totalCacheHit: 0, totalCacheMiss: 0, totalSteps: 0 });
   }
   send("evt:session-loaded", { id: currentId, messages: [] });
   sendUsageFor(currentId);

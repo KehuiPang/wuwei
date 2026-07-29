@@ -157,10 +157,19 @@ class AnthropicProvider implements Provider {
     return {
       content,
       stopReason,
-      usage: {
-        inputTokens: final.usage?.input_tokens ?? 0,
-        outputTokens: final.usage?.output_tokens ?? 0,
-      },
+      usage: (() => {
+        // Anthropic：input_tokens 不含缓存，缓存读/写另计；累加成"总输入"并拆出命中/新增
+        const au: any = final.usage ?? {};
+        const cacheRead = au.cache_read_input_tokens ?? 0;
+        const cacheCreate = au.cache_creation_input_tokens ?? 0;
+        const freshIn = au.input_tokens ?? 0;
+        return {
+          inputTokens: freshIn + cacheRead + cacheCreate,
+          outputTokens: au.output_tokens ?? 0,
+          cacheHitTokens: cacheRead,
+          cacheMissTokens: freshIn + cacheCreate,
+        };
+      })(),
       rateLimits: this.oauth ? parseUnifiedRate(this.lastHeaders) : undefined,
     };
   }
@@ -485,7 +494,10 @@ class CodexProvider implements Provider {
     let buf = "";
     const content: ContentBlock[] = [];
     let curText = "";
-    let usage = { inputTokens: 0, outputTokens: 0 };
+    let usage: { inputTokens: number; outputTokens: number; cacheHitTokens?: number; cacheMissTokens?: number } = {
+      inputTokens: 0,
+      outputTokens: 0,
+    };
     const toolCalls: { call_id: string; name: string; args: string }[] = [];
 
     while (true) {
@@ -515,9 +527,13 @@ class CodexProvider implements Provider {
               args: ev.item.arguments ?? "{}",
             });
           } else if (ev.type === "response.completed" && ev.response?.usage) {
+            const cached = ev.response.usage.input_tokens_details?.cached_tokens ?? 0;
+            const inTok = ev.response.usage.input_tokens ?? 0;
             usage = {
-              inputTokens: ev.response.usage.input_tokens ?? 0,
+              inputTokens: inTok,
               outputTokens: ev.response.usage.output_tokens ?? 0,
+              cacheHitTokens: cached, // 缓存命中(重复读上下文,便宜);Responses 的 input_tokens 已含缓存
+              cacheMissTokens: Math.max(0, inTok - cached), // 真正新增的输入
             };
           } else if (ev.type === "error" || ev.type === "response.failed") {
             throw new Error(`Codex 流错误: ${JSON.stringify(ev).slice(0, 300)}`);

@@ -22,6 +22,7 @@ export interface SessionUsage {
   lastInput: number; // 最近一次请求的输入 token，≈当前上下文大小
   totalCacheHit: number; // 累计缓存命中输入 token（算钱用）
   totalCacheMiss: number; // 累计缓存未命中输入 token
+  totalSteps: number; // 累计模型请求次数（多步工具时每步一次；用于算"本轮步数"）
 }
 
 export interface AgentHooks {
@@ -103,6 +104,7 @@ export class Agent {
     lastInput: 0,
     totalCacheHit: 0,
     totalCacheMiss: 0,
+    totalSteps: 0,
   };
   private compactThreshold: number;
   private keepRecent: number;
@@ -182,7 +184,12 @@ export class Agent {
 
   setUsage(u: SessionUsage): void {
     // 兼容旧会话存档（无缓存明细字段）
-    this.usage = { ...u, totalCacheHit: u.totalCacheHit ?? 0, totalCacheMiss: u.totalCacheMiss ?? 0 };
+    this.usage = {
+      ...u,
+      totalCacheHit: u.totalCacheHit ?? 0,
+      totalCacheMiss: u.totalCacheMiss ?? 0,
+      totalSteps: u.totalSteps ?? 0,
+    };
   }
 
   async send(
@@ -208,6 +215,7 @@ export class Agent {
         signal,
       });
 
+      this.usage.totalSteps += 1; // 每次模型请求算一步(不管有没有返回 usage)
       if (result.usage) {
         this.usage.totalInput += result.usage.inputTokens;
         this.usage.totalOutput += result.usage.outputTokens;
@@ -216,8 +224,8 @@ export class Agent {
         this.usage.totalCacheMiss +=
           result.usage.cacheMissTokens ??
           Math.max(0, result.usage.inputTokens - (result.usage.cacheHitTokens ?? 0));
-        hooks.onUsage?.(this.usage);
       }
+      hooks.onUsage?.(this.usage); // 每步都上报(即使无 usage 也让步数实时刷新)
       if (result.rateLimits) hooks.onRateLimits?.(result.rateLimits);
 
       // 盖上累计用量快照：UI 据此算"本轮 token"(本轮末累计 − 上轮末累计)，并存进历史供重开后仍可看
@@ -229,6 +237,9 @@ export class Agent {
           totalInput: this.usage.totalInput,
           totalOutput: this.usage.totalOutput,
           lastInput: this.usage.lastInput,
+          totalCacheHit: this.usage.totalCacheHit,
+          totalCacheMiss: this.usage.totalCacheMiss,
+          totalSteps: this.usage.totalSteps,
         },
       });
       hooks.onStep?.(); // 助手段落已入历史，即时落盘(重启不丢)

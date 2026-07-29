@@ -803,7 +803,7 @@ body {
 .turn-foot .tf-tok-pop {
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 0;
+  right: 0;
   z-index: 20;
   display: none;
   flex-direction: column;
@@ -834,6 +834,15 @@ body {
   font-style: normal;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+}
+/* 缓存命中/真正新增：缩进的次级说明行，颜色更淡 */
+.turn-foot .tf-tok-sub {
+  padding-left: 8px;
+  font-size: 11px;
+}
+.turn-foot .tf-tok-sub b,
+.turn-foot .tf-tok-sub em {
+  color: var(--text-dim);
 }
 .turn-foot .tf-tok-ctx {
   margin-top: 2px;

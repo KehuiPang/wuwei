@@ -17,7 +17,14 @@ export interface Message {
   content: ContentBlock[];
   ts?: number; // 本地时间戳(仅持久化/展示"多久之前"，toAnthropic/toOpenAI 会剥掉不发给 API)
   // 累计用量快照(仅盖在助手消息上，供 UI 算"本轮 token"=本轮末累计−上轮末累计；不发给 API)
-  usage?: { totalInput: number; totalOutput: number; lastInput: number };
+  usage?: {
+    totalInput: number;
+    totalOutput: number;
+    lastInput: number;
+    totalCacheHit?: number;
+    totalCacheMiss?: number;
+    totalSteps?: number;
+  };
 }
 
 // 一个工具 = 给模型看的 schema + 本地执行函数
