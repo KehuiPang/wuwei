@@ -303,6 +303,7 @@ body {
   left: 10px;
   right: 10px;
   bottom: calc(100% - 2px);
+  min-width: 268px; /* 保证会员条等内容不被窄侧栏挤换行(小美稿 286) */
   z-index: 41;
   background: var(--bg);
   border: 1px solid var(--border-strong);
@@ -459,6 +460,9 @@ body {
 .acct-hint.zero { color: var(--spark); }
 .acct-hint.pos { color: #5c8a73; }
 .acct-memb { margin: 0 12px 11px; border-radius: 12px; overflow: hidden; position: relative; }
+.acct-memb > div:first-child { min-width: 0; flex: 1; }
+.acct-memb-ttl { white-space: nowrap; }
+.acct-memb-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acct-memb.up {
   padding: 11px 13px;
   background: linear-gradient(120deg, #26414f, #274a63);
