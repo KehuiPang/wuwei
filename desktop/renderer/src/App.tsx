@@ -6250,7 +6250,7 @@ function SettingsModal({
   }
 
   // 落库(可指定 key/token 覆盖，绕开 setState 异步)；close=false 时保存但不关闭弹窗
-  function persist(opts?: { apiKeyOverride?: string; oauthOverride?: string; close?: boolean }) {
+  async function persist(opts?: { apiKeyOverride?: string; oauthOverride?: string; close?: boolean }) {
     const apiKind = preset.kind === "anthropic-apikey" || preset.kind === "openai";
     const prevSlot = credsRef.current[pid] || {};
     const slot: CredSlot = {
@@ -6268,8 +6268,11 @@ function SettingsModal({
       systemPrompt: platPromptOn ? platPrompt : undefined, // 本平台专属提示词(关掉=undefined 跟随全局)
     };
     const newCreds = { ...credsRef.current, [pid]: slot }; // 存进当前平台的槽(用最新creds,别丢其它槽)
+    // 关键：用主进程「最新」settings 作底座，而非打开弹窗时的旧快照 loadedRef——
+    // 否则本页保存会把此后其它页即时写入的小配置(外观 ask-toast/theme、通用 keepRecent 等)覆盖回旧值。
+    const fresh = (await window.minicc.getSettings())?.settings || loadedRef.current || {};
     window.minicc.setSettings({
-      ...loadedRef.current, // 保留 theme / app 等本页不管的字段
+      ...fresh, // 保留 theme / app / askToast* 等本页不管、且可能已被别处即时改过的字段
       kind: preset.kind,
       providerId: pid,
       model: model || undefined,
@@ -6503,13 +6506,6 @@ function SettingsModal({
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.g.compactionHint")}
-              </div>
-              <div className="app-set-group">{t("set.g.claudeSub")}</div>
-              <div className="app-set-row" style={{ cursor: "default" }}>
-                <div className="app-set-text">
-                  <div className="app-set-label">{t("set.g.autoRead")}</div>
-                  <div className="app-set-hint">{t("set.g.autoReadHint")}</div>
-                </div>
               </div>
             </>
           )}
