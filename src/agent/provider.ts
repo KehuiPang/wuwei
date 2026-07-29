@@ -106,28 +106,44 @@ class AnthropicProvider implements Provider {
     tools: ToolSpec[],
     handlers: ProviderStreamHandlers,
   ): Promise<ProviderResult> {
-    // OAuth 模式：system 拆成 [官方身份, 我们的提示词] 两个 text block；
-    // 提示词为空时不能发空文本块(Anthropic 拒收空 text→400)，只保留身份块。
-    const systemParam: string | Anthropic.TextBlockParam[] = this.oauth
+    // —— prompt 缓存断点(Anthropic 需显式标记,否则一律不缓存、cache_read 恒为0) ——
+    // 在 system 末块、tools 末项、历史末条各打一个 ephemeral 断点,缓存"系统提示+工具+历史"这段
+    // 稳定前缀;下一步重发时命中缓存(读价约1/10),多步循环省下绝大部分输入。Claude Code 同款做法。
+    const CC = { type: "ephemeral" as const };
+    // system 统一成 text-block 数组，末块打断点(空提示词不发空块,Anthropic 拒收→400)
+    const sysBlocks: Anthropic.TextBlockParam[] = this.oauth
       ? [
           { type: "text", text: CLAUDE_CODE_IDENTITY },
-          ...(system && system.trim()
-            ? [{ type: "text", text: system } as Anthropic.TextBlockParam]
-            : []),
+          ...(system && system.trim() ? [{ type: "text", text: system } as Anthropic.TextBlockParam] : []),
         ]
-      : system;
+      : system && system.trim()
+        ? [{ type: "text", text: system }]
+        : [];
+    // cache_control 是 GA 特性但当前 SDK 类型未收录,运行时照发→用 any 赋值绕过类型
+    if (sysBlocks.length) (sysBlocks[sysBlocks.length - 1] as any).cache_control = CC;
+    const systemParam: string | Anthropic.TextBlockParam[] = sysBlocks.length ? sysBlocks : system;
+
+    const toolParams = tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+    })) as Anthropic.Tool[];
+    if (toolParams.length) (toolParams[toolParams.length - 1] as any).cache_control = CC;
+
+    const msgParams = toAnthropicMessages(messages);
+    // 历史末条(通常是 user/tool_result)的末块打断点:缓存到当前历史;下一步命中该前缀
+    const lastMsg = msgParams[msgParams.length - 1];
+    if (lastMsg && Array.isArray(lastMsg.content) && lastMsg.content.length) {
+      (lastMsg.content[lastMsg.content.length - 1] as { cache_control?: typeof CC }).cache_control = CC;
+    }
 
     const stream = this.client.messages.stream(
       {
         model: this.cfg.model,
         max_tokens: this.cfg.maxTokens,
         system: systemParam,
-        messages: toAnthropicMessages(messages),
-      tools: tools.map((t) => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
-        })),
+        messages: msgParams,
+        tools: toolParams,
       },
       { signal: handlers.signal },
     );
