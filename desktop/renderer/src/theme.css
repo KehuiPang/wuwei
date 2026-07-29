@@ -3053,15 +3053,10 @@ body {
 }
 .coin-x:hover { background: var(--bg-soft); color: var(--text-dim); }
 .coin-emblem {
-  width: 56px;
-  height: 56px;
-  margin: 2px auto 14px;
+  margin: 4px auto 14px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
   color: var(--text);
-  background: var(--spark-soft);
-  border: 1px solid var(--border);
 }
 .coin-title {
   margin: 0 0 6px;

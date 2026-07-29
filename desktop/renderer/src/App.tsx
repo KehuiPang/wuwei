@@ -3490,7 +3490,7 @@ export function App() {
             </button>
             {/* 无为官方主标「一念之门圆相」(同 WuweiLogo path)，描边随主题、火种点朱赭 */}
             <div className="coin-emblem">
-              <svg width="32" height="32" viewBox="0 0 240 240" fill="none" aria-hidden="true">
+              <svg width="42" height="42" viewBox="0 0 240 240" fill="none" aria-hidden="true">
                 <path d="M152.04 193.48 A82 82 0 1 1 195.48 150.04" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
                 <circle cx="195.48" cy="150.04" r="10" fill="var(--spark)" />
               </svg>
