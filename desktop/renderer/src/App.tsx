@@ -2664,38 +2664,34 @@ export function App() {
                     {tok && (
                       <span className="tf-tok">
                         <span className="tf-tok-badge">
-                          ↑{fmtTok(tok.inT)} ↓{fmtTok(tok.outT)}
+                          {tok.steps > 0 ? `${tok.steps}步 · ` : ""}↑{fmtTok(tok.inT)} ↓{fmtTok(tok.outT)}
                         </span>
                         <span className="tf-tok-pop">
                           {tok.steps > 0 && (
                             <span>
-                              <b>本轮步数</b>
-                              <em>{tok.steps} 步（每步都重发上下文）</em>
+                              <b>本次步数</b>
+                              <em>{tok.steps} 步</em>
                             </span>
                           )}
-                          <span>
-                            <b>本轮输入</b>
+                          {tok.steps > 0 && (
+                            <span>
+                              <b>每步上下文</b>
+                              <em>≈{fmtTok(Math.round(tok.inT / tok.steps))}（平均）</em>
+                            </span>
+                          )}
+                          <span className="tf-tok-div">
+                            <b>总输入</b>
                             <em>{tok.inT.toLocaleString()}</em>
                           </span>
-                          {tok.hit > 0 && (
-                            <span className="tf-tok-sub">
-                              <b>· 缓存命中</b>
-                              <em>{tok.hit.toLocaleString()}（便宜）</em>
-                            </span>
-                          )}
                           {(tok.hit > 0 || tok.miss > 0) && (
                             <span className="tf-tok-sub">
-                              <b>· 真正新增</b>
-                              <em>{tok.miss.toLocaleString()}</em>
+                              <b>· 新增输入</b>
+                              <em>{tok.miss.toLocaleString()}（真正新花的）</em>
                             </span>
                           )}
                           <span>
-                            <b>本轮输出</b>
+                            <b>新增输出</b>
                             <em>{tok.outT.toLocaleString()}</em>
-                          </span>
-                          <span className="tf-tok-ctx">
-                            <b>当前上下文</b>
-                            <em>{tok.ctx.toLocaleString()}（单次请求量）</em>
                           </span>
                         </span>
                       </span>

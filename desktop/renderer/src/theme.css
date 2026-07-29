@@ -844,7 +844,7 @@ body {
 .turn-foot .tf-tok-sub em {
   color: var(--text-dim);
 }
-.turn-foot .tf-tok-ctx {
+.turn-foot .tf-tok-div {
   margin-top: 2px;
   padding-top: 5px;
   border-top: 1px solid var(--border);
