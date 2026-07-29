@@ -7888,18 +7888,18 @@ function SettingsModal({
                           <span className="tools-group-name">{g.source}</span>
                           <span className="tools-group-n">{g.tools.length}</span>
                         </div>
-                        {g.tools.map((t) => (
+                        {g.tools.map((tool) => (
                           <button
-                            key={t.name}
+                            key={tool.name}
                             type="button"
                             className="tool-row"
-                            onClick={() => setToolSel(t)}
+                            onClick={() => setToolSel(tool)}
                           >
                             <span className="tool-name">
-                              {t.name}
-                              {t.readOnly && <span className="tool-ro">{t("set.tools.readOnly")}</span>}
+                              {tool.name}
+                              {tool.readOnly && <span className="tool-ro">{t("set.tools.readOnly")}</span>}
                             </span>
-                            <span className="tool-desc">{t.description}</span>
+                            <span className="tool-desc">{tool.description}</span>
                           </button>
                         ))}
                       </div>
