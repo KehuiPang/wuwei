@@ -6507,6 +6507,40 @@ function SettingsModal({
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.g.compactionHint")}
               </div>
+              <div className="app-set-group">会话提醒</div>
+              <div className="app-set-row" style={{ cursor: "default" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">提醒自动消失</div>
+                  <div className="app-set-hint">
+                    别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={askToastAuto}
+                  onChange={(e) => onAskToast(e.target.checked, askToastSec)}
+                />
+              </div>
+              {askToastAuto && (
+                <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                  <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>
+                    消失倒计时
+                  </div>
+                  <input
+                    type="range"
+                    min={5}
+                    max={120}
+                    step={5}
+                    value={askToastSec}
+                    onChange={(e) => onAskToast(true, Number(e.target.value))}
+                    style={{ flex: 1 }}
+                  />
+                  <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
+                    {askToastSec} 秒
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -6569,41 +6603,6 @@ function SettingsModal({
                   </button>
                 ))}
               </div>
-
-              <div className="app-set-group">会话提醒</div>
-              <div className="app-set-row" style={{ cursor: "default" }}>
-                <div className="app-set-text">
-                  <div className="app-set-label">提醒自动消失</div>
-                  <div className="app-set-hint">
-                    别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="app-set-toggle"
-                  checked={askToastAuto}
-                  onChange={(e) => onAskToast(e.target.checked, askToastSec)}
-                />
-              </div>
-              {askToastAuto && (
-                <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
-                  <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>
-                    消失倒计时
-                  </div>
-                  <input
-                    type="range"
-                    min={5}
-                    max={120}
-                    step={5}
-                    value={askToastSec}
-                    onChange={(e) => onAskToast(true, Number(e.target.value))}
-                    style={{ flex: 1 }}
-                  />
-                  <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
-                    {askToastSec} 秒
-                  </div>
-                </div>
-              )}
             </>
           )}
           {/* ── 板块一：模型（选平台 / 打通模型 / 填凭证）── */}
