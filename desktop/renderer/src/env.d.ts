@@ -64,6 +64,7 @@ export interface MiniccApi {
   brainDeleteNode(id: string): Promise<void>;
   brainAddEdge(from: string, relation: string, to: string): Promise<void>;
   brainDeleteEdge(id: string): Promise<void>;
+  selectFolder(): Promise<string | null>;
   brainDocStats(): Promise<{ chunks: number; files: number; dir: string; builtAt: number }>;
   brainBuildDocs(dir: string): Promise<{ chunks: number; files: number; dir: string; builtAt: number }>;
   brainReadDoc(ref: string): Promise<string>;

@@ -7473,6 +7473,16 @@ function SettingsModal({
                       />
                       <button
                         type="button"
+                        disabled={docBuilding || conExtract?.running}
+                        onClick={async () => {
+                          const picked = await window.minicc.selectFolder();
+                          if (picked) setDocDir(picked);
+                        }}
+                      >
+                        {t("set.brain.docBrowse")}
+                      </button>
+                      <button
+                        type="button"
                         disabled={docBuilding || conExtract?.running || !docDir.trim()}
                         onClick={async () => {
                           setDocBuilding(true);

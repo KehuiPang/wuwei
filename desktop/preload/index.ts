@@ -104,6 +104,7 @@ contextBridge.exposeInMainWorld("minicc", {
   brainAddEdge: (from: string, relation: string, to: string) =>
     ipcRenderer.invoke("brain:add-edge", from, relation, to) as Promise<void>,
   brainDeleteEdge: (id: string) => ipcRenderer.invoke("brain:delete-edge", id) as Promise<void>,
+  selectFolder: () => ipcRenderer.invoke("dialog:select-folder") as Promise<string | null>,
   brainDocStats: () =>
     ipcRenderer.invoke("brain:doc-stats") as Promise<{ chunks: number; files: number; dir: string; builtAt: number }>,
   brainBuildDocs: (dir: string) =>

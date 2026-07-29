@@ -1,6 +1,6 @@
 // Electron 主进程：创建窗口，复用 minicc 核心(agent/tools/config)，
 // 通过 IPC 把 Agent 流式 hooks 推给渲染进程，权限确认走 IPC 往返。
-import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage } from "electron";
+import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage, dialog } from "electron";
 const safeStorageOk = () => {
   try {
     return safeStorage.isEncryptionAvailable();
@@ -2043,6 +2043,16 @@ ipcMain.handle("brain:add-edge", async (_e, from: string, relation: string, to: 
   refreshSysAfterBrain();
 });
 ipcMain.handle("brain:delete-edge", (_e, id: string) => brain.deleteEdgeFromUI(String(id)));
+// 通用：弹系统目录选择框，返回所选绝对路径（取消返回 null）。给知识网络文档库等路径输入用。
+ipcMain.handle("dialog:select-folder", async () => {
+  const parent = win && !win.isDestroyed() ? win : undefined;
+  const r = await dialog.showOpenDialog(parent as BrowserWindow, {
+    title: "选择文件夹",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  if (r.canceled || r.filePaths.length === 0) return null;
+  return r.filePaths[0];
+});
 // 文档冷存储（知识宫殿等）：建索引(带进度事件)/统计/读原文
 ipcMain.handle("brain:doc-stats", () => brain.docStats());
 
