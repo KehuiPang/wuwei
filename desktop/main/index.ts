@@ -1585,6 +1585,11 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
       if (e?.name === "AbortError" || ac.signal.aborted) send("evt:stopped", { sid: useId });
       else {
         if (isHostedProvider(loadSettings()?.providerId)) void refreshWuweiMe(); // 失败也刷新，避免余额提示仍显示旧缓存
+        // 记全量原始错误(含 API 400 body/status),便于排查;友好化仅用于前端展示
+        try {
+          log("turnError", useId.slice(0, 8), "status=", e?.status, "msg=", String(e?.message || e).slice(0, 800),
+              e?.error ? "body=" + JSON.stringify(e.error).slice(0, 800) : "");
+        } catch { /* ignore */ }
         send("evt:error", { sid: useId, message: e.message });
       }
     }

@@ -372,6 +372,9 @@ function parseDataUrl(d: string): { mediaType: string; data: string } {
 }
 
 // 统一 Message[] → Anthropic 格式（text/tool_use/tool_result 直通，image 转 base64 source）
+// 铁律:每个块都复制一份新对象,绝不返回 this.messages 里的原始引用——否则 complete() 给"末块"
+// 打 cache_control 会改到历史原对象、并被持久化,几轮累积后缓存断点数超过 Anthropic 上限(4)→400。
+// 同时剥掉任何历史遗留的 cache_control(清掉已被旧版污染的存档),断点只由 complete() 每次新鲜添加。
 function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
   return messages.map((m) => ({
     role: m.role,
@@ -380,7 +383,9 @@ function toAnthropicMessages(messages: Message[]): Anthropic.MessageParam[] {
         const { mediaType, data } = parseDataUrl(b.dataUrl);
         return { type: "image", source: { type: "base64", media_type: mediaType, data } };
       }
-      return b;
+      const { cache_control, ...rest } = b as Record<string, unknown>; // 剥掉遗留断点
+      void cache_control;
+      return { ...rest }; // 复制新对象,避免按引用改动污染历史
     }),
   })) as unknown as Anthropic.MessageParam[];
 }
