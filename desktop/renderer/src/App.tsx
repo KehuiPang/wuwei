@@ -2604,25 +2604,28 @@ export function App() {
               // 本轮 token = 本轮末累计 − 上轮末累计(输入含每步重发上下文的真实消耗)；上下文=最近一次请求输入量
               const endCum = aiTurnUsage(t.blocks);
               let tok:
-                | { inT: number; outT: number; ctx: number; steps: number; hit: number; miss: number }
+                | { inT: number; outT: number; steps: number; miss: number; hasMiss: boolean }
                 | undefined;
               if (endCum) {
-                const hitC = endCum.totalCacheHit ?? 0;
-                const missC = endCum.totalCacheMiss ?? 0;
+                // 缺字段时沿用上一基线(别重置为0)，避免跨升级/旧快照把增量算爆
+                const hasMiss = typeof endCum.totalCacheMiss === "number";
+                const missC = endCum.totalCacheMiss ?? prevCum.totalCacheMiss;
+                const stepsC = endCum.totalSteps ?? prevCum.totalSteps;
+                const inT = Math.max(0, endCum.totalInput - prevCum.totalInput);
                 tok = {
-                  inT: Math.max(0, endCum.totalInput - prevCum.totalInput),
+                  inT,
                   outT: Math.max(0, endCum.totalOutput - prevCum.totalOutput),
-                  ctx: endCum.lastInput,
-                  steps: Math.max(0, (endCum.totalSteps ?? 0) - prevCum.totalSteps),
-                  hit: Math.max(0, hitC - prevCum.totalCacheHit),
-                  miss: Math.max(0, missC - prevCum.totalCacheMiss),
+                  steps: Math.max(0, stepsC - prevCum.totalSteps),
+                  // 铁律:新增输入是总输入的一部分,绝不可能超过总输入→夹到 [0, inT]
+                  miss: Math.min(inT, Math.max(0, missC - prevCum.totalCacheMiss)),
+                  hasMiss, // 仅当本轮快照真的带 cacheMiss 才展示"新增输入"，否则只显示总量
                 };
                 prevCum = {
                   totalInput: endCum.totalInput,
                   totalOutput: endCum.totalOutput,
-                  totalCacheHit: hitC,
+                  totalCacheHit: endCum.totalCacheHit ?? prevCum.totalCacheHit,
                   totalCacheMiss: missC,
-                  totalSteps: endCum.totalSteps ?? 0,
+                  totalSteps: stepsC,
                 };
               }
               return (
@@ -2683,7 +2686,7 @@ export function App() {
                             <b>总输入</b>
                             <em>{tok.inT.toLocaleString()}</em>
                           </span>
-                          {(tok.hit > 0 || tok.miss > 0) && (
+                          {tok.hasMiss && (
                             <span className="tf-tok-sub">
                               <b>· 新增输入</b>
                               <em>{tok.miss.toLocaleString()}（真正新花的）</em>
