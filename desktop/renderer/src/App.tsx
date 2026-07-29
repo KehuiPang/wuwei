@@ -322,7 +322,7 @@ const PRO_FEATS: [string, string][] = [
 ];
 
 // ② 购买积分包（朱系）：站内选档，付款按钮暂跳 pricing（Paddle 接入待后端产品 ID）
-function CoinPackModal({ onClose }: { onClose: () => void }) {
+function CoinPackModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (pack: CoinPack) => void }) {
   const [sel, setSel] = useState(1); // 默认选中常用档 3,000
   const p = COIN_PACKS[sel];
   return (
@@ -354,7 +354,7 @@ function CoinPackModal({ onClose }: { onClose: () => void }) {
             </button>
           ))}
         </div>
-        <button className="pay-cta red" onClick={() => window.minicc.openExternal("https://wuweiai.io/pricing")}>
+        <button className="pay-cta red" onClick={() => onCheckout(p)}>
           确认购买 ¥{p.price}
         </button>
         <div className="pay-cancel">
@@ -366,8 +366,9 @@ function CoinPackModal({ onClose }: { onClose: () => void }) {
 }
 
 // ③ 升级无为 Pro（金系）：月付/年付选择 + 2×2 权益；付款按钮暂跳 pricing
-function PlanModal({ onClose }: { onClose: () => void }) {
+function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (plan: ProPlan) => void }) {
   const [sel, setSel] = useState<"month" | "year">("year");
+  const selPlan = PRO_PLANS.find((x) => x.id === sel)!;
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className="pay-card" onClick={(e) => e.stopPropagation()}>
@@ -415,12 +416,197 @@ function PlanModal({ onClose }: { onClose: () => void }) {
             </div>
           ))}
         </div>
-        <button className="pay-cta gold" onClick={() => window.minicc.openExternal("https://wuweiai.io/pricing")}>
+        <button className="pay-cta gold" onClick={() => onCheckout(selPlan)}>
           {sel === "year" ? "升级年付 ¥288" : "升级月付 ¥29"}
         </button>
         <div className="pay-fnote">
           <span className="ok">✓</span> 随时可升级　<span className="ok">✓</span> 功能权益与官网一致
         </div>
+      </div>
+    </div>
+  );
+}
+// 付费闭环辅助
+function genOrder(): string {
+  const d = new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  return "WW" + ymd + String(Math.floor(Math.random() * 900 + 100));
+}
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function addMonths(base: Date, n: number): Date {
+  const d = new Date(base);
+  d.setMonth(d.getMonth() + n);
+  return d;
+}
+// 占位二维码（后端下单后替换为真实收款码）
+function QrPlaceholder() {
+  return (
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <rect width="100" height="100" fill="#fff" />
+      <g fill="#16191E">
+        <rect x="6" y="6" width="26" height="26" /><rect x="12" y="12" width="14" height="14" fill="#fff" /><rect x="16" y="16" width="6" height="6" />
+        <rect x="68" y="6" width="26" height="26" /><rect x="74" y="12" width="14" height="14" fill="#fff" /><rect x="78" y="16" width="6" height="6" />
+        <rect x="6" y="68" width="26" height="26" /><rect x="12" y="74" width="14" height="14" fill="#fff" /><rect x="16" y="78" width="6" height="6" />
+        <rect x="40" y="10" width="6" height="6" /><rect x="52" y="10" width="6" height="6" /><rect x="40" y="22" width="6" height="6" /><rect x="60" y="40" width="6" height="6" /><rect x="72" y="40" width="6" height="6" /><rect x="84" y="52" width="6" height="6" /><rect x="40" y="40" width="6" height="6" /><rect x="48" y="48" width="6" height="6" /><rect x="40" y="60" width="6" height="6" /><rect x="52" y="64" width="6" height="6" /><rect x="64" y="60" width="6" height="6" /><rect x="72" y="72" width="6" height="6" /><rect x="84" y="72" width="6" height="6" /><rect x="60" y="84" width="6" height="6" /><rect x="48" y="84" width="6" height="6" />
+      </g>
+    </svg>
+  );
+}
+
+type PayOrder = { kind: "pack"; pack: CoinPack } | { kind: "plan"; plan: ProPlan };
+// 付款页（国内支付宝/微信扫码）。国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
+function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder; onClose: () => void; onPaid: () => void; onFail: () => void }) {
+  const [method, setMethod] = useState<"ali" | "wx">("ali");
+  const isPlan = order.kind === "plan";
+  const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} 无为币` : `无为 Pro · ${order.plan.id === "year" ? "年付" : "月付"}`;
+  const gift = order.kind === "pack" ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}` : order.plan.note || order.plan.sub;
+  const price = order.kind === "pack" ? order.pack.price : order.plan.price;
+  const unit = isPlan ? (order.plan.id === "year" ? "/年" : "/月") : "";
+  const methodName = method === "ali" ? "支付宝" : "微信";
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 8 }}>
+          <PayEnso size={46} />
+          <h2>确认支付</h2>
+        </div>
+        <div className={"paych-order" + (isPlan ? " gold" : "")}>
+          <div className="paych-order-row">
+            <div>
+              <div className="paych-order-nm">{title}</div>
+              <div className="paych-order-gift">{gift}</div>
+            </div>
+            <div className="paych-order-amt">
+              ¥{price}
+              {unit && <span className="u">{unit}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="paych-sect">选择支付方式</div>
+        <div className="paych-pays">
+          <button className={"paych-pay" + (method === "ali" ? " sel-ali" : "")} onClick={() => setMethod("ali")}>
+            <span className="paych-logo ali">支</span>
+            <span className="paych-pay-nm">支付宝</span>
+            <span className="paych-rd" />
+          </button>
+          <button className={"paych-pay" + (method === "wx" ? " sel-wx" : "")} onClick={() => setMethod("wx")}>
+            <span className="paych-logo wx">微</span>
+            <span className="paych-pay-nm">微信支付</span>
+            <span className="paych-rd" />
+          </button>
+        </div>
+        <div className="paych-qr">
+          <QrPlaceholder />
+        </div>
+        <div className="paych-qrtip">
+          请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}
+        </div>
+        {/* 扫码支付由后端下单+webhook确认；此按钮供无后端时走通闭环，接入轮询后可去掉 */}
+        <button className={"pay-cta " + (isPlan ? "gold" : "red")} onClick={onPaid}>
+          我已完成支付
+        </button>
+        <div className="paych-secure">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          支付安全由<b>微信 / 支付宝</b>官方保障
+        </div>
+        <div className="paych-alt">
+          <button onClick={onFail}>支付遇到问题？</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type PayResult =
+  | { kind: "coin"; added: number; bonus: number; balance: number; order: string }
+  | { kind: "pro"; plan: "month" | "year"; expire: string; giftCoins: number; signin: number; perks: string[]; saved?: number; order: string }
+  | { kind: "fail" };
+// 支付结果页：积分到账 / Pro 月付·年付开通 / 失败。真实由 webhook 驱动，此处按订单即时展示。
+function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClose: () => void; onRetry: () => void }) {
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose}>
+      <div className={"pay-card payres-card" + (result.kind === "pro" ? " pro" : "")} onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        {result.kind === "coin" && (
+          <>
+            <div className="payres-ico">
+              <div className="payres-mark ok">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#3E9E6E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              </div>
+              <div className="payres-ttl">支付成功</div>
+              <div className="payres-desc">无为币已到账，尽情使用无为托管模型</div>
+            </div>
+            <div className="payres-box">
+              <div className="payres-b1">本次到账</div>
+              <div className="payres-b2">
+                <span className="pay-coin" /> +{result.added.toLocaleString()}
+                <span className="u">无为币</span>
+              </div>
+              <div className="payres-b3">
+                <span>含赠送 {result.bonus}</span>
+                <span>当前余额 <b>{result.balance.toLocaleString()}</b></span>
+              </div>
+            </div>
+            <div className="payres-btns"><button className="payres-btn pri ok" onClick={onClose}>开始使用</button></div>
+            <div className="payres-foot">订单号 {result.order} · 已开具凭证</div>
+          </>
+        )}
+        {result.kind === "pro" && (
+          <>
+            <div className="payres-ico">
+              <div className="payres-mark gold">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#A97F2E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+              </div>
+              <div className="payres-ttl">
+                开通成功 <span className="payres-pill"><PaySpark size={11} /> Pro {result.plan === "year" ? "年付" : "月付"}</span>
+              </div>
+              <div className="payres-desc">
+                无为 Pro {result.plan === "year" ? "年付" : ""}已开通，{result.plan === "year" ? "全年畅享更省心" : "尊享全部会员权益"}
+              </div>
+            </div>
+            <div className="payres-box gold">
+              <div className="payres-b1">会员有效期</div>
+              <div className="payres-b2">至 {result.expire}</div>
+              <div className="payres-b3">
+                <span>含赠 <b>{result.giftCoins.toLocaleString()}</b> 无为币</span>
+                <span>每日签到 {result.signin}</span>
+              </div>
+            </div>
+            <div className="payres-perks">
+              {result.perks.map((pk) => (<span key={pk}>{pk}</span>))}
+            </div>
+            <div className="payres-btns"><button className="payres-btn pri gold" onClick={onClose}>开始使用</button></div>
+            <div className="payres-foot">
+              {result.saved ? `已省 ¥${result.saved} · 订单号 ${result.order}` : "到期前提醒续费 · 续费享 9 折"}
+            </div>
+          </>
+        )}
+        {result.kind === "fail" && (
+          <>
+            <div className="payres-ico">
+              <div className="payres-mark err">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#C0483C" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </div>
+              <div className="payres-ttl err">支付未完成</div>
+              <div className="payres-desc">这笔订单没有扣款，可重新支付或换个方式</div>
+            </div>
+            <div className="payres-reason">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
+              <span>可能原因：支付超时、主动取消或银行未通过。若已扣款，费用原路退回。</span>
+            </div>
+            <div className="payres-btns">
+              <button className="payres-btn pri err" onClick={onRetry}>重新支付</button>
+              <button className="payres-btn ghost" onClick={onRetry}>更换支付方式</button>
+            </div>
+            <div className="payres-foot">仍有问题？联系客服</div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1058,6 +1244,8 @@ export function App() {
   const [showAcctMenu, setShowAcctMenu] = useState(false);
   const [coinPackOpen, setCoinPackOpen] = useState(false); // ② 购买积分包弹窗
   const [planOpen, setPlanOpen] = useState(false); // ③ 升级套餐弹窗
+  const [payCheckout, setPayCheckout] = useState<PayOrder | null>(null); // ④ 付款页(扫码)
+  const [payResult, setPayResult] = useState<PayResult | null>(null); // ⑤ 支付结果页
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
@@ -3744,8 +3932,65 @@ export function App() {
           </div>
         </div>
       )}
-      {coinPackOpen && <CoinPackModal onClose={() => setCoinPackOpen(false)} />}
-      {planOpen && <PlanModal onClose={() => setPlanOpen(false)} />}
+      {coinPackOpen && (
+        <CoinPackModal
+          onClose={() => setCoinPackOpen(false)}
+          onCheckout={(pack) => {
+            setCoinPackOpen(false);
+            setPayCheckout({ kind: "pack", pack });
+          }}
+        />
+      )}
+      {planOpen && (
+        <PlanModal
+          onClose={() => setPlanOpen(false)}
+          onCheckout={(plan) => {
+            setPlanOpen(false);
+            setPayCheckout({ kind: "plan", plan });
+          }}
+        />
+      )}
+      {payCheckout && (
+        <PayCheckoutModal
+          order={payCheckout}
+          onClose={() => setPayCheckout(null)}
+          onPaid={() => {
+            const o = payCheckout;
+            if (o.kind === "pack") {
+              const added = o.pack.coins + o.pack.bonus;
+              setPayResult({ kind: "coin", added, bonus: o.pack.bonus, balance: (wuwei?.coin.balance ?? 0) + added, order: genOrder() });
+            } else {
+              const isYear = o.plan.id === "year";
+              setPayResult({
+                kind: "pro",
+                plan: o.plan.id,
+                expire: fmtDate(addMonths(new Date(), isYear ? 12 : 1)),
+                giftCoins: isYear ? 1200 : 1000,
+                signin: isYear ? 30 : 20,
+                perks: isYear ? ["托管额度", "256K", "多任务", "云端备份", "优先新功能"] : ["托管额度", "256K", "多任务", "云端备份"],
+                saved: isYear ? 60 : undefined,
+                order: genOrder(),
+              });
+            }
+            setPayCheckout(null);
+            void window.minicc.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新余额/会员(接后端后即真数据)
+          }}
+          onFail={() => {
+            setPayResult({ kind: "fail" });
+            setPayCheckout(null);
+          }}
+        />
+      )}
+      {payResult && (
+        <PayResultModal
+          result={payResult}
+          onClose={() => setPayResult(null)}
+          onRetry={() => {
+            setPayResult(null);
+            setCoinShortage(null);
+          }}
+        />
+      )}
       {secretPrompt && (
         <div className="perm-overlay" onClick={() => setSecretPrompt(null)}>
           <div className="add-st-dialog sec-prompt" onClick={(e) => e.stopPropagation()}>
