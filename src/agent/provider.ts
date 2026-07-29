@@ -424,6 +424,9 @@ function toOpenAIMessages(system: string, messages: Message[], vision: boolean):
 // body 走 Responses 格式(input/instructions/扁平 tools)；model 用主线名 gpt-5.5。
 class CodexProvider implements Provider {
   name = "codex";
+  // 整个会话复用同一 session_id：让 Codex 后端把每步请求路由到 KV cache 还热着的同一实例，
+  // 重发的上下文才能命中 prompt 缓存(便宜)。之前每请求 randomUUID → 每步换后端、缓存全冷 → 输入按新增算、消耗飞快。
+  private readonly sessionId = randomUUID();
   constructor(private cfg: Config) {}
 
   async complete(
@@ -457,7 +460,7 @@ class CodexProvider implements Provider {
         "chatgpt-account-id": this.cfg.codexAccountId,
         "OpenAI-Beta": "responses=experimental",
         originator: "codex_cli_rs",
-        session_id: randomUUID(),
+        session_id: this.sessionId, // 稳定不变→缓存亲和,重发上下文命中 prompt 缓存
         "Content-Type": "application/json",
         Accept: "text/event-stream",
         "User-Agent": "codex_cli_rs/0.0.0",
