@@ -50,6 +50,7 @@ import {
   setSessionProject,
   setGroupsOrder,
   setSessionDone,
+  flushAllSessionsSync,
 } from "./sessions.js";
 import {
   loadSettings,
@@ -890,7 +891,10 @@ function initProvider() {
 }
 
 // 运行时切换模型后端：保存设置、重建 provider、更新所有会话 Agent
-function applySettings(s: Settings) {
+function applySettings(sIn: Settings) {
+  // 合并到磁盘现有配置:调用方只需传自己要改的字段,其余(会话提醒/保留条数/输出方式/主题/app 等
+  // 各走独立 IPC 存的设置)一律保留、不被整体替换覆盖。显式传 undefined 仍可清字段(切平台清 key 用)。
+  const s: Settings = { ...(loadSettings() || {}), ...sIn };
   log("applySettings", "平台=", s.providerId, "模型=", s.model, "有key=", !!s.apiKey);
   saveSettings(s);
   applyEnvFromSettings(s);
@@ -1487,6 +1491,14 @@ if (!gotLock) {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+// 退出前把异步合并写里还没落盘的会话同步刷完，别丢最后一段
+app.on("before-quit", () => {
+  try {
+    flushAllSessionsSync();
+  } catch {
+    /* ignore */
+  }
 });
 
 // —— IPC：渲染 → 主 ——

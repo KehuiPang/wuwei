@@ -5,6 +5,7 @@ import {
   mkdirSync,
   rmSync,
 } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "../../src/types.js";
@@ -186,6 +187,42 @@ export function loadMessages(id: string): Message[] {
   }
 }
 
+// —— 会话正文异步合并写 ——
+// 大会话(可达十几MB)每步全量同步 stringify+writeFileSync 会阻塞主进程事件循环(实测~85ms/次)，
+// 多步任务×多会话并发时把主线程卡住→IPC(如停止)被饿死、点了没反应。改为:
+// 每会话只保留"最新待写快照"，单飞后台写；密集调用自动合并(只写最后一次)、写盘走异步、
+// 每次写后 setImmediate 让出主线程给 IPC 喘息。stringify 仍在主线程但每个 flush 周期只做一次。
+const pendingBody = new Map<string, Message[]>(); // id → 最新待写消息(引用最新态)
+const savingBody = new Set<string>(); // 正在后台写的会话
+async function flushBody(id: string): Promise<void> {
+  savingBody.add(id);
+  try {
+    while (pendingBody.has(id)) {
+      const msgs = pendingBody.get(id)!;
+      pendingBody.delete(id);
+      try {
+        await writeFile(join(SDIR, id + ".json"), JSON.stringify(msgs));
+      } catch {
+        /* 写盘失败不致命：下次 saveSession 会再排一次 */
+      }
+      await new Promise((r) => setImmediate(r)); // 让出主线程,IPC/渲染得以处理
+    }
+  } finally {
+    savingBody.delete(id);
+  }
+}
+// 兜底(退出前)：把还没落盘的会话同步刷完，避免丢最后一段
+export function flushAllSessionsSync(): void {
+  for (const [id, msgs] of pendingBody) {
+    try {
+      writeFileSync(join(SDIR, id + ".json"), JSON.stringify(msgs));
+    } catch {
+      /* ignore */
+    }
+  }
+  pendingBody.clear();
+}
+
 export function saveSession(
   id: string,
   messages: Message[],
@@ -194,8 +231,9 @@ export function saveSession(
   usage?: SessionMeta["usage"],
 ) {
   ensure();
-  writeFileSync(join(SDIR, id + ".json"), JSON.stringify(messages));
-  const all = listSessions();
+  pendingBody.set(id, messages); // 正文异步合并写(不阻塞事件循环)
+  if (!savingBody.has(id)) void flushBody(id);
+  const all = listSessions(); // 元信息小(~KB)，保持同步，列表即时更新
   const prev = all.find((s) => s.id === id); // 保留已设的分组/优先级，别被每轮落盘抹掉
   const l = all.filter((s) => s.id !== id);
   l.unshift({

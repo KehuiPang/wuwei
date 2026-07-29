@@ -6748,11 +6748,9 @@ function SettingsModal({
       systemPrompt: platPromptOn ? platPrompt : undefined, // 本平台专属提示词(关掉=undefined 跟随全局)
     };
     const newCreds = { ...credsRef.current, [pid]: slot }; // 存进当前平台的槽(用最新creds,别丢其它槽)
-    // 关键：用主进程「最新」settings 作底座，而非打开弹窗时的旧快照 loadedRef——
-    // 否则本页保存会把此后其它页即时写入的小配置(外观 ask-toast/theme、通用 keepRecent 等)覆盖回旧值。
-    const fresh = (await window.minicc.getSettings())?.settings || loadedRef.current || {};
+    // 只发本页负责的字段(模型/凭证/平台/系统提示/中转站)。主进程 settings:set 会合并到磁盘,
+    // 其余字段(会话提醒/保留条数/输出方式/主题/app 开关等各走独立 IPC)一律不碰、不覆盖。
     window.minicc.setSettings({
-      ...fresh, // 保留 theme / app / askToast* 等本页不管、且可能已被别处即时改过的字段
       kind: preset.kind,
       providerId: pid,
       model: model || undefined,
