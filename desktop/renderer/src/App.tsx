@@ -3130,7 +3130,9 @@ export function App() {
                     {tok && (
                       <span className="tf-tok">
                         <span className="tf-tok-badge">
-                          {tok.steps > 0 ? `${tok.steps}步 · ` : ""}↑{fmtTok(tok.inT)} ↓{fmtTok(tok.outT)}
+                          {/* ↑ 显示「新增输入」(真正新花的·贵)，不显示总输入(含缓存重发的累计，看着大但没意义)；
+                              无 round 明细的旧快照才回退到总输入。完整拆分见悬浮面板。 */}
+                          {tok.steps > 0 ? `${tok.steps}步 · ` : ""}↑{fmtTok(tok.split ? tok.miss : tok.inT)} ↓{fmtTok(tok.outT)}
                         </span>
                         <span className="tf-tok-pop">
                           {tok.steps > 0 && (
