@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WuweiMe } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
+import { QRCodeSVG } from "qrcode.react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -303,18 +304,19 @@ function PackIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-type CoinPack = { coins: number; bonus: number; price: number; desc: string; badge?: string; badgeType?: "rec" | "val" };
+// sku：下单时传给后端，服务端据此查金额/币量（价格以后端为准，绝不信任客户端）。须与 wuwei-site catalog.ts 一致。
+type CoinPack = { sku: string; coins: number; bonus: number; price: number; desc: string; badge?: string; badgeType?: "rec" | "val" };
 const COIN_PACKS: CoinPack[] = [
-  { coins: 1000, bonus: 50, price: 10, desc: "轻量补充，适合临时使用" },
-  { coins: 3000, bonus: 200, price: 30, desc: "无为本尊常用档", badge: "推荐", badgeType: "rec" },
-  { coins: 10000, bonus: 1000, price: 100, desc: "适合高频使用", badge: "最超值", badgeType: "val" },
+  { sku: "pack_1000", coins: 1000, bonus: 50, price: 10, desc: "轻量补充，适合临时使用" },
+  { sku: "pack_3000", coins: 3000, bonus: 200, price: 30, desc: "无为本尊常用档", badge: "推荐", badgeType: "rec" },
+  { sku: "pack_10000", coins: 10000, bonus: 1000, price: 100, desc: "适合高频使用", badge: "最超值", badgeType: "val" },
 ];
 // ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
-const TEST_COIN_PACK: CoinPack = { coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
-type ProPlan = { id: "month" | "year"; name: string; price: number; unit: string; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
+const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
+type ProPlan = { id: "month" | "year"; sku: string; name: string; price: number; unit: string; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
-  { id: "month", name: "无为 Pro 月付", price: 29, unit: "/月", sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "最受欢迎", tagType: "pop" },
-  { id: "year", name: "无为 Pro 年付", price: 288, unit: "/年", sub: "每月 1200 无为币 · 每日签到 30", note: "付10月送2月，全年省 ¥60", tag: "最省心", tagType: "rec" },
+  { id: "month", sku: "plan_month", name: "无为 Pro 月付", price: 29, unit: "/月", sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "最受欢迎", tagType: "pop" },
+  { id: "year", sku: "plan_year", name: "无为 Pro 年付", price: 288, unit: "/年", sub: "每月 1200 无为币 · 每日签到 30", note: "付10月送2月，全年省 ¥60", tag: "最省心", tagType: "rec" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
@@ -458,15 +460,64 @@ function QrPlaceholder() {
 }
 
 type PayOrder = { kind: "pack"; pack: CoinPack } | { kind: "plan"; plan: ProPlan };
-// 付款页（国内支付宝/微信扫码）。国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
-function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder; onClose: () => void; onPaid: () => void; onFail: () => void }) {
+// 下单错误码 → 用户可读文案
+function payErrMsg(code?: string): string {
+  switch (code) {
+    case "wechat_not_ready": return "微信支付即将开通，请先用支付宝";
+    case "not_logged_in": return "登录已过期，请重新登录后再试";
+    case "alipay_not_configured": return "支付暂未开通，请稍后再试";
+    case "unknown_sku": return "该档位暂不可购买";
+    default: return "下单失败，请稍后重试";
+  }
+}
+// 付款页（国内支付宝/微信扫码）：向后端下单拿二维码串 → 渲染真 QR → 轮询订单状态，到账自动跳成功页。
+// 国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
+function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onFail: () => void }) {
   const [method, setMethod] = useState<"ali" | "wx">("ali");
   const isPlan = order.kind === "plan";
+  const sku = order.kind === "pack" ? order.pack.sku : order.plan.sku;
   const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} 无为币` : `无为 Pro · ${order.plan.id === "year" ? "年付" : "月付"}`;
   const gift = order.kind === "pack" ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}` : order.plan.note || order.plan.sub;
   const price = order.kind === "pack" ? order.pack.price : order.plan.price;
   const unit = isPlan ? (order.plan.id === "year" ? "/年" : "/月") : "";
   const methodName = method === "ali" ? "支付宝" : "微信";
+
+  const [qr, setQr] = useState("");
+  const [orderId, setOrderId] = useState("");
+  const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
+  const [errMsg, setErrMsg] = useState("");
+
+  // 切支付方式 / 首次打开：向后端下单，拿二维码串
+  useEffect(() => {
+    let alive = true;
+    setPhase("loading"); setQr(""); setOrderId(""); setErrMsg("");
+    const channel = method === "ali" ? "alipay" : "wechat";
+    window.minicc
+      .payCreate(sku, channel)
+      .then((r) => {
+        if (!alive) return;
+        if (!r || r.error || !r.qr || !r.orderId) {
+          setPhase("error"); setErrMsg(payErrMsg(r?.error)); return;
+        }
+        setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
+      })
+      .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
+    return () => { alive = false; };
+  }, [method, sku]);
+
+  // 轮询订单状态：到账即走成功页（后端会主动查单兜底 notify）
+  useEffect(() => {
+    if (phase !== "ready" || !orderId) return;
+    let alive = true;
+    const t = setInterval(async () => {
+      const s = await window.minicc.payStatus(orderId).catch(() => null);
+      if (!alive || !s) return;
+      if (s.status === "paid") { clearInterval(t); onPaid(s.balance); }
+      else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg("订单已失效，请重新下单"); }
+    }, 2500);
+    return () => { alive = false; clearInterval(t); };
+  }, [phase, orderId, onPaid]);
+
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className="pay-card" onClick={(e) => e.stopPropagation()}>
@@ -501,15 +552,19 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
           </button>
         </div>
         <div className="paych-qr">
-          <QrPlaceholder />
+          {phase === "ready" && qr ? (
+            <QRCodeSVG value={qr} size={168} level="M" marginSize={2} />
+          ) : (
+            <div style={{ width: 168, height: 168, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: 13, color: phase === "error" ? "#C0392B" : "#8A93A0", padding: 12, boxSizing: "border-box" }}>
+              {phase === "error" ? errMsg : "生成二维码…"}
+            </div>
+          )}
         </div>
         <div className="paych-qrtip">
-          请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}
+          {phase === "ready" ? (
+            <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
+          ) : phase === "error" ? "换个支付方式或稍后重试" : "正在向服务器下单…"}
         </div>
-        {/* 扫码支付由后端下单+webhook确认；此按钮供无后端时走通闭环，接入轮询后可去掉 */}
-        <button className={"pay-cta " + (isPlan ? "gold" : "red")} onClick={onPaid}>
-          我已完成支付
-        </button>
         <div className="paych-secure">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -4002,11 +4057,11 @@ export function App() {
         <PayCheckoutModal
           order={payCheckout}
           onClose={() => setPayCheckout(null)}
-          onPaid={() => {
+          onPaid={(balance) => {
             const o = payCheckout;
             if (o.kind === "pack") {
               const added = o.pack.coins + o.pack.bonus;
-              setPayResult({ kind: "coin", added, bonus: o.pack.bonus, balance: (wuwei?.coin.balance ?? 0) + added, order: genOrder() });
+              setPayResult({ kind: "coin", added, bonus: o.pack.bonus, balance: balance ?? (wuwei?.coin.balance ?? 0) + added, order: genOrder() });
             } else {
               const isYear = o.plan.id === "year";
               setPayResult({

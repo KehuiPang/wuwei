@@ -243,3 +243,62 @@ export async function wuweiFetchMe(accessToken: string): Promise<WuweiMe | "unau
     return null;
   }
 }
+
+// ── 国内扫码支付（支付宝当面付 / 微信 Native）：下单拿二维码 + 轮询订单状态 ──
+export interface PayCreateResult {
+  orderId: string;
+  qr: string; // 二维码串（支付宝 qr_code / 微信 code_url），客户端渲染成 QR
+  channel: string;
+  amountFen: number;
+  coins: number;
+  bonus: number;
+}
+export interface PayStatusResult {
+  status: string; // pending | paid | failed | expired
+  balance?: number; // 到账后的最新余额
+}
+
+/** 下单：只传 sku + channel，金额/币量以后端为准。返回二维码串。 */
+export async function wuweiPayCreate(
+  accessToken: string,
+  sku: string,
+  channel: string,
+): Promise<PayCreateResult | "unauthorized" | { error: string }> {
+  try {
+    const res = await fetch(`${SITE}/api/pay/create`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Device-Id": getDeviceId(),
+      },
+      body: JSON.stringify({ sku, channel }),
+    });
+    if (res.status === 401) return "unauthorized";
+    const j = (await res.json().catch(() => null)) as (PayCreateResult & { error?: string }) | null;
+    if (!res.ok || !j) return { error: j?.error || `http_${res.status}` };
+    if (j.error) return { error: j.error };
+    return j;
+  } catch (e) {
+    log("wuweiAuth", "payCreate 异常", String(e));
+    return { error: "network" };
+  }
+}
+
+/** 轮询订单状态（后端会主动查单兜底）。 */
+export async function wuweiPayStatus(
+  accessToken: string,
+  orderId: string,
+): Promise<PayStatusResult | "unauthorized" | null> {
+  try {
+    const res = await fetch(`${SITE}/api/pay/status?order=${encodeURIComponent(orderId)}`, {
+      headers: { Authorization: `Bearer ${accessToken}`, "X-Device-Id": getDeviceId() },
+    });
+    if (res.status === 401) return "unauthorized";
+    if (!res.ok) return null;
+    return (await res.json()) as PayStatusResult;
+  } catch (e) {
+    log("wuweiAuth", "payStatus 异常", String(e));
+    return null;
+  }
+}

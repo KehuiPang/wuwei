@@ -94,6 +94,8 @@ import {
   wuweiSendCode,
   wuweiCodeLogin,
   wuweiRegister,
+  wuweiPayCreate,
+  wuweiPayStatus,
   type WuweiSession,
 } from "./wuwei-auth.js";
 import { saveWuweiSession, loadWuweiSession, clearWuweiSession } from "./wuwei-session.js";
@@ -2610,6 +2612,38 @@ ipcMain.handle("account:wuwei-logout", () => {
 });
 // 稳定设备指纹（灰度开关 & 免费试用额度共用）
 ipcMain.handle("account:wuwei-device-id", () => getDeviceId());
+
+// ── 扫码支付：下单 / 轮询。带用户 token 调后端，401 自动 refresh 重试（同 wuwei-me）──
+ipcMain.handle("pay:create", async (_e, sku: string, channel: string) => {
+  const sess = loadWuweiSession();
+  if (!sess) return { error: "not_logged_in" };
+  let r = await wuweiPayCreate(sess.accessToken, sku, channel);
+  if (r === "unauthorized") {
+    const fresh = await wuweiRefresh(sess.refreshToken);
+    if (!fresh) {
+      clearWuweiSession();
+      return { error: "not_logged_in" };
+    }
+    saveWuweiSession(fresh);
+    r = await wuweiPayCreate(fresh.accessToken, sku, channel);
+  }
+  return r === "unauthorized" ? { error: "not_logged_in" } : r;
+});
+ipcMain.handle("pay:status", async (_e, orderId: string) => {
+  const sess = loadWuweiSession();
+  if (!sess) return null;
+  let r = await wuweiPayStatus(sess.accessToken, orderId);
+  if (r === "unauthorized") {
+    const fresh = await wuweiRefresh(sess.refreshToken);
+    if (!fresh) {
+      clearWuweiSession();
+      return null;
+    }
+    saveWuweiSession(fresh);
+    r = await wuweiPayStatus(fresh.accessToken, orderId);
+  }
+  return r === "unauthorized" ? null : r;
+});
 
 // 动态拉当前平台的实时模型列表(/models)：OpenAI 兼容用 Bearer，Anthropic 用 x-api-key。
 // 前端并入下拉(与预设去重)，新模型上线自动出现。订阅/无 key 的返回空、走预设。

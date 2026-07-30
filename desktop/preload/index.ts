@@ -199,6 +199,19 @@ contextBridge.exposeInMainWorld("minicc", {
   wuweiMe: () => ipcRenderer.invoke("account:wuwei-me") as Promise<WuweiMe | null>,
   wuweiLogout: () => ipcRenderer.invoke("account:wuwei-logout") as Promise<boolean>,
   wuweiDeviceId: () => ipcRenderer.invoke("account:wuwei-device-id") as Promise<string>,
+  // 扫码支付：下单拿二维码串 + 轮询订单状态
+  payCreate: (sku: string, channel: string) =>
+    ipcRenderer.invoke("pay:create", sku, channel) as Promise<{
+      orderId?: string;
+      qr?: string;
+      channel?: string;
+      amountFen?: number;
+      coins?: number;
+      bonus?: number;
+      error?: string;
+    }>,
+  payStatus: (orderId: string) =>
+    ipcRenderer.invoke("pay:status", orderId) as Promise<{ status: string; balance?: number } | null>,
   // 应用内登录（不跳浏览器）：邮箱密码 / 邮箱注册 / 手机(或邮箱)验证码 / 发验证码
   wuweiPasswordLogin: (identifier: string, password: string) =>
     ipcRenderer.invoke("account:wuwei-password-login", identifier, password) as Promise<{ me?: WuweiMe; error?: string }>,

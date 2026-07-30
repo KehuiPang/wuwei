@@ -126,6 +126,19 @@ export interface MiniccApi {
   wuweiMe(): Promise<WuweiMe | null>;
   wuweiLogout(): Promise<boolean>;
   wuweiDeviceId(): Promise<string>;
+  payCreate(
+    sku: string,
+    channel: string,
+  ): Promise<{
+    orderId?: string;
+    qr?: string;
+    channel?: string;
+    amountFen?: number;
+    coins?: number;
+    bonus?: number;
+    error?: string;
+  }>;
+  payStatus(orderId: string): Promise<{ status: string; balance?: number } | null>;
   wuweiPasswordLogin(identifier: string, password: string): Promise<{ me?: WuweiMe; error?: string }>;
   wuweiRegister(email: string, code: string, password: string): Promise<{ me?: WuweiMe; error?: string }>;
   wuweiCodeLogin(target: string, code: string): Promise<{ me?: WuweiMe; error?: string }>;
