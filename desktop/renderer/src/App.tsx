@@ -309,6 +309,8 @@ const COIN_PACKS: CoinPack[] = [
   { coins: 3000, bonus: 200, price: 30, desc: "无为本尊常用档", badge: "推荐", badgeType: "rec" },
   { coins: 10000, bonus: 1000, price: 100, desc: "适合高频使用", badge: "最超值", badgeType: "val" },
 ];
+// ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
+const TEST_COIN_PACK: CoinPack = { coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
 type ProPlan = { id: "month" | "year"; name: string; price: number; unit: string; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
   { id: "month", name: "无为 Pro 月付", price: 29, unit: "/月", sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "最受欢迎", tagType: "pop" },
@@ -322,9 +324,9 @@ const PRO_FEATS: [string, string][] = [
 ];
 
 // ② 购买积分包（朱系）：站内选档，付款按钮暂跳 pricing（Paddle 接入待后端产品 ID）
-function CoinPackModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (pack: CoinPack) => void }) {
-  const [sel, setSel] = useState(1); // 默认选中常用档 3,000
-  const p = COIN_PACKS[sel];
+function CoinPackModal({ packs, onClose, onCheckout }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void }) {
+  const [sel, setSel] = useState(() => { const i = packs.findIndex((x) => x.badgeType === "rec"); return i >= 0 ? i : 0; }); // 默认选中"推荐"档
+  const p = packs[sel];
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className="pay-card" onClick={(e) => e.stopPropagation()}>
@@ -335,7 +337,7 @@ function CoinPackModal({ onClose, onCheckout }: { onClose: () => void; onCheckou
           <p>按需充值，用多少买多少，即充即用，永久有效</p>
         </div>
         <div className="pay-rows">
-          {COIN_PACKS.map((pack, i) => (
+          {packs.map((pack, i) => (
             <button key={pack.coins} className={"pay-rw" + (i === sel ? " sel" : "")} onClick={() => setSel(i)}>
               {pack.badge && <span className={"pay-rbadge " + pack.badgeType}>{pack.badge}</span>}
               <span className="pay-rw-ic">
@@ -3934,6 +3936,7 @@ export function App() {
       )}
       {coinPackOpen && (
         <CoinPackModal
+          packs={wuwei?.flags?.includes("coinpack_test") ? [TEST_COIN_PACK, ...COIN_PACKS] : COIN_PACKS}
           onClose={() => setCoinPackOpen(false)}
           onCheckout={(pack) => {
             setCoinPackOpen(false);

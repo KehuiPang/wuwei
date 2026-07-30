@@ -3218,7 +3218,8 @@ body {
   border: 1px solid rgba(22, 25, 30, 0.08);
   border-radius: 22px;
   box-shadow: 0 3px 8px rgba(22, 25, 30, 0.05), 0 30px 66px -18px rgba(22, 25, 30, 0.3);
-  overflow: hidden;
+  max-height: calc(100vh - 28px); /* 窗口矮时卡片内部滚动，不溢出 */
+  overflow: hidden auto;
   animation: pay-pop 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @keyframes pay-pop {
@@ -3322,7 +3323,7 @@ body {
 .pay-rbadge.rec { background: linear-gradient(135deg, #c05f3c, #a34e30); }
 .pay-rbadge.val { background: #274a63; }
 /* CTA + 取消 */
-.pay-cta { display: block; box-sizing: border-box; width: calc(100% - 52px); margin: 16px 26px 12px; padding: 15px; border-radius: 14px; text-align: center; font-size: 14.5px; font-weight: 700; color: #fff; cursor: pointer; border: none; }
+.pay-cta { display: block; box-sizing: border-box; width: calc(100% - 52px); margin: 12px 26px 10px; padding: 14px; border-radius: 14px; text-align: center; font-size: 14.5px; font-weight: 700; color: #fff; cursor: pointer; border: none; }
 .pay-cta.red { background: linear-gradient(135deg, #c05f3c, #a34e30); box-shadow: 0 10px 22px -8px rgba(192, 95, 60, 0.6); }
 .pay-cta.gold { background: linear-gradient(135deg, #c9a24b, #a97f2e); box-shadow: 0 10px 22px -8px rgba(169, 127, 46, 0.6); }
 .pay-cancel { text-align: center; padding-bottom: 22px; }
@@ -3357,8 +3358,8 @@ body {
 .paych-order.gold .paych-order-amt { color: #a97f2e; }
 .paych-order-amt .u { font-size: 13px; color: #8a9099; font-weight: 600; }
 .paych-sect { font-size: 11.5px; color: #5a616b; font-weight: 600; letter-spacing: 0.3px; padding: 0 28px 10px; }
-.paych-pays { padding: 0 24px 4px; display: flex; flex-direction: column; gap: 11px; }
-.paych-pay { display: flex; align-items: center; gap: 13px; padding: 14px 16px; border-radius: 14px; border: 1.5px solid rgba(22, 25, 30, 0.08); cursor: pointer; background: #fff; transition: 0.14s; width: 100%; text-align: left; }
+.paych-pays { padding: 0 24px 4px; display: flex; flex-direction: column; gap: 9px; }
+.paych-pay { display: flex; align-items: center; gap: 13px; padding: 12px 15px; border-radius: 14px; border: 1.5px solid rgba(22, 25, 30, 0.08); cursor: pointer; background: #fff; transition: 0.14s; width: 100%; text-align: left; }
 .paych-pay:hover { transform: translateY(-1px); }
 .paych-pay.sel-wx { border-color: #07c160; background: #f2fdf7; }
 .paych-pay.sel-ali { border-color: #1677ff; background: #f0f7ff; }
@@ -3369,13 +3370,13 @@ body {
 .paych-rd { margin-left: auto; width: 19px; height: 19px; border-radius: 50%; border: 2px solid rgba(22, 25, 30, 0.12); flex: 0 0 auto; }
 .paych-pay.sel-wx .paych-rd { border-color: #07c160; background: radial-gradient(circle, #fff 34%, #07c160 38%); }
 .paych-pay.sel-ali .paych-rd { border-color: #1677ff; background: radial-gradient(circle, #fff 34%, #1677ff 38%); }
-.paych-qr { margin: 14px auto 6px; width: 150px; height: 150px; border-radius: 14px; border: 1px solid rgba(22, 25, 30, 0.08); padding: 11px; background: #fff; }
+.paych-qr { margin: 12px auto 5px; width: 128px; height: 128px; border-radius: 14px; border: 1px solid rgba(22, 25, 30, 0.08); padding: 10px; background: #fff; }
 .paych-qr svg { width: 100%; height: 100%; }
 .paych-qrtip { text-align: center; font-size: 12px; color: #5a616b; margin-top: 2px; }
-.paych-secure { text-align: center; font-size: 11px; color: #8a9099; padding: 12px 20px 20px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.paych-secure { text-align: center; font-size: 11px; color: #8a9099; padding: 10px 20px 12px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .paych-secure svg { width: 13px; height: 13px; color: #5c8a73; flex: 0 0 auto; }
 .paych-secure b { color: #5a616b; font-weight: 650; }
-.paych-alt { text-align: center; padding-bottom: 18px; }
+.paych-alt { text-align: center; padding-bottom: 12px; }
 .paych-alt button { border: none; background: transparent; font-size: 12px; color: #8a9099; cursor: pointer; }
 /* 支付结果页 */
 .payres-card { text-align: center; }
