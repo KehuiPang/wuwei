@@ -2979,6 +2979,9 @@ body {
   gap: 8px;
   margin: 2px 0 16px;
 }
+.settings .model-caps-head { font-size: 12px; color: var(--text-dim); }
+.settings .model-caps-head b { color: var(--text); font-weight: 600; }
+.settings .cap-row input:disabled { opacity: 0.4; }
 .settings .cap-row {
   display: flex;
   align-items: flex-start;
@@ -3284,6 +3287,21 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.prov-manage-bar { margin: 0 0 10px; }
+.prov-mini {
+  flex: none;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  border-radius: 7px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.prov-mini:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.prov-mini.del { color: var(--red); }
+.prov-mini.del:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+.prov-mini:disabled { opacity: 0.35; cursor: default; }
 .prov-eye {
   display: inline-flex;
   align-items: center;
@@ -3319,7 +3337,7 @@ body {
   box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
 }
 .add-st-dialog h3 {
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   font-size: 15px;
 }
 /* ── 付费三界面 v2「大气版」(小笨定稿 2026-07-30；朱=积分包 / 金=会员) ── */
@@ -3526,6 +3544,31 @@ body {
 .payres-btn.pri.err { background: linear-gradient(135deg, #c05f3c, #a34e30); box-shadow: 0 9px 20px -8px rgba(192, 95, 60, 0.5); }
 .payres-btn.ghost { background: none; color: #5a616b; border: 1.5px solid rgba(22, 25, 30, 0.08); }
 .payres-foot { font-size: 10.5px; color: #8a9099; padding-bottom: 20px; }
+/* 添加/编辑 供应商弹窗：竖排字段，风格对齐设置页(该弹窗在 .settings 作用域外，需自带样式) */
+.add-st-dialog .st-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.add-st-dialog .st-label { font-size: 12.5px; color: var(--text-dim); }
+.add-st-dialog .st-input {
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.add-st-dialog .st-input:focus { border-color: var(--accent); }
+.add-st-dialog .st-hint { margin: 2px 0 0; font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+.add-st-dialog .st-note { margin: 4px 0 16px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.add-st-dialog .btns { display: flex; gap: 8px; justify-content: flex-end; }
+.add-st-dialog .btns button {
+  padding: 7px 18px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: transparent; color: var(--text); cursor: pointer; font-size: 13px;
+}
+.add-st-dialog .btns button.allow {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
 /* 设置里 API Key 自动检测反馈 */
 .skey-msg {
   margin: 6px 0 0;

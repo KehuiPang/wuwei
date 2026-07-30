@@ -133,8 +133,9 @@ export interface CredSlot {
   webHeaders?: Record<string, string>; // 额度接口所需的整套自定义头(如 Kimi 的 x-msh-*)：登录时抓真实请求头存下，静默刷新原样重放
   systemPrompt?: string; // 本平台专属系统提示词(覆盖全局)；未设=跟随全局默认。含空串=本平台强制空
   model?: string; // 该平台上次选用的模型：切平台带出各自记住的模型，别被目标平台默认值冲掉
-  noTools?: boolean; // 该平台/模型不发 tools 参数(自建 vLLM/llama-server 未开工具支持时,一带 tools 就报错)
-  vision?: boolean; // 该平台/模型强制按多模态处理(模型名不含 vl/vision 但确实能看图时手动开)
+  noTools?: boolean; // 【旧·平台级兜底】不发 tools 参数；新逻辑用 modelCaps 按模型存，这个仅作迁移兜底
+  vision?: boolean; // 【旧·平台级兜底】强制多模态；同上
+  modelCaps?: Record<string, { noTools?: boolean; vision?: boolean }>; // 按模型名各存能力开关(工具调用/看图)
   customModels?: string[]; // 用户为该平台手动增加的模型名(并入模型下拉/快切，可增删)
 }
 
@@ -163,11 +164,12 @@ export interface Settings {
   askToastDismissSec?: number; // 自动消失倒计时秒数(默认 30)
 }
 
-// 自定义中转站：名称 + OpenAI 兼容端点(key 存 creds[id] 槽，同其它平台)
+// 自定义供应商/中转站：名称 + OpenAI 兼容端点(key 存 creds[id] 槽，同其它平台)
 export interface CustomStation {
   id: string;
   label: string;
   baseUrl: string;
+  relay?: boolean; // true=中转站(显示「（中转）」后缀) / false|undefined=自建供应商
 }
 
 // 应用级设置：放在专门的「设置」弹窗里，跨平台通用
@@ -222,10 +224,11 @@ export function applyEnvFromSettings(s: Settings | null) {
   }
   if (!s) return; // 无设置：走 loadConfig 自动推断（有 ~/.codex 即 codex）
   if (s.model) process.env.MINICC_MODEL = s.model;
-  // 当前生效平台的能力开关(按供应商槽存)：看图/工具调用，接到 loadConfig 的 vision/disableTools
+  // 当前生效模型的能力开关：优先按模型(modelCaps[model])，回退到旧的平台级(迁移兼容)
   const slot = s.creds?.[s.providerId || ""] || {};
-  if (slot.vision) process.env.MINICC_VISION = "1";
-  if (slot.noTools) process.env.MINICC_NO_TOOLS = "1";
+  const caps = slot.modelCaps?.[s.model || ""] || {};
+  if (caps.vision ?? slot.vision) process.env.MINICC_VISION = "1";
+  if (caps.noTools ?? slot.noTools) process.env.MINICC_NO_TOOLS = "1";
   switch (s.kind) {
     case "codex":
       process.env.MINICC_PROVIDER = "codex";

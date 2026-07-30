@@ -5295,18 +5295,20 @@ interface Preset {
 }
 
 // 用户自定义中转站
-type Station = { id: string; label: string; baseUrl: string };
-// 中转站 → 伪预设(OpenAI 兼容)，并入平台下拉
+type Station = { id: string; label: string; baseUrl: string; relay?: boolean };
+// 自定义供应商/中转站 → 伪预设(OpenAI 兼容)，并入平台下拉。relay=true 才加「（中转）」后缀
 function stationToPreset(s: Station): Preset {
   return {
     id: s.id,
-    label: s.label + "（中转）",
+    label: s.relay ? s.label + "（中转）" : s.label,
     kind: "openai",
     baseUrl: s.baseUrl,
     keyUrl: "",
     keyHint: "sk-...",
     models: [],
-    note: "自定义中转站（OpenAI 兼容）。模型名按该站文档填，可自定义输入。",
+    note: s.relay
+      ? "自定义中转站（OpenAI 兼容，一个 key 直连多平台）。模型名按该站文档填，可自定义输入。"
+      : "自建/自定义供应商（OpenAI 兼容端点，如公司 vLLM/Ollama）。模型名可自定义输入。",
     fixedBaseUrl: true,
     custom: true,
   };
@@ -5653,7 +5655,8 @@ function arrangePresets(
   return includeHidden ? sorted : sorted.filter((p) => !hide.has(p.id));
 }
 
-type CredSlot = { apiKey?: string; baseUrl?: string; oauthToken?: string; nickname?: string; model?: string; noTools?: boolean; vision?: boolean; customModels?: string[] };
+type ModelCap = { noTools?: boolean; vision?: boolean };
+type CredSlot = { apiKey?: string; baseUrl?: string; oauthToken?: string; nickname?: string; model?: string; noTools?: boolean; vision?: boolean; modelCaps?: Record<string, ModelCap>; customModels?: string[] };
 
 // 简约线条眼睛图标：off=true 显示"划掉的眼睛"(当前明文，点击隐藏)
 function EyeIcon({ off }: { off: boolean }) {
@@ -6263,8 +6266,6 @@ function SettingsModal({
   const [toastSecDraft, setToastSecDraft] = useState(askToastSec);
   const [pid, setPid] = useState("codex");
   const [model, setModel] = useState(PRESETS[0].models[0]);
-  const [noTools, setNoTools] = useState(false); // 当前平台/模型：不发 tools 参数(自建端点不支持工具调用时)
-  const [visionOn, setVisionOn] = useState(false); // 当前平台/模型：强制看图(多模态)
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [oauthToken, setOauthToken] = useState("");
@@ -6316,6 +6317,7 @@ function SettingsModal({
   const [newStUrl, setNewStUrl] = useState(""); // 新增中转站：baseURL
   const [newModelName, setNewModelName] = useState(""); // 给当前平台手动加模型：输入框
   const [editStationId, setEditStationId] = useState<string | null>(null); // 非空=编辑该中转站(改名/改URL)，空=新增
+  const [newStRelay, setNewStRelay] = useState(false); // 新增/编辑：类型 false=自建供应商 true=中转站(仅影响显示后缀/用途说明)
   const [showAddStation, setShowAddStation] = useState(false); // 添加中转站独立弹窗
   const stationsRef = useRef(stations);
   stationsRef.current = stations;
@@ -6548,6 +6550,18 @@ function SettingsModal({
     setCreds(next);
     if (model === name) setModel(preset.models[0] || (next[pid].customModels || [])[0] || "");
   }
+  // 当前「模型」的能力开关(工具调用/看图)：按模型名存 modelCaps[model]，回退旧的平台级(迁移兼容)
+  const curCaps: ModelCap =
+    creds[pid]?.modelCaps?.[model] || { noTools: creds[pid]?.noTools, vision: creds[pid]?.vision };
+  function setModelCap(patch: ModelCap) {
+    if (!model) return;
+    const slot = credsRef.current[pid] || {};
+    const caps = { ...(slot.modelCaps || {}) };
+    caps[model] = { ...(caps[model] || { noTools: slot.noTools, vision: slot.vision }), ...patch };
+    const next = { ...credsRef.current, [pid]: { ...slot, modelCaps: caps } };
+    credsRef.current = next;
+    setCreds(next);
+  }
 
   // 把某平台槽里的凭证取出来填进字段(没存过就空/回退默认 baseUrl)
   function slotFields(c: Record<string, CredSlot>, id: string, p: Preset) {
@@ -6724,8 +6738,6 @@ function SettingsModal({
       setNickname(f.nickname);
       setPlatPromptOn(typeof f.systemPrompt === "string");
       setPlatPrompt(typeof f.systemPrompt === "string" ? f.systemPrompt : "");
-      setNoTools(f.noTools);
-      setVisionOn(f.vision);
       setCustomModel(!!curModel && !p.models.includes(curModel));
       // 系统提示词：有自定义(含空串)就用它+标记已改；否则显示默认模板(未改，保存时不写入=跟随默认)
       const def = r?.defaultPrompt || "";
@@ -6775,8 +6787,6 @@ function SettingsModal({
         oauthToken,
         nickname,
         model: model || undefined, // 切走前记住当前平台选的模型
-        noTools: noTools || undefined,
-        vision: visionOn || undefined,
         systemPrompt: platPromptOn ? platPrompt : undefined,
       },
     };
@@ -6784,8 +6794,6 @@ function SettingsModal({
     setCreds(merged);
     const f = slotFields(merged, id, p);
     setPid(id);
-    setNoTools(f.noTools);
-    setVisionOn(f.vision);
     // 优先用目标平台记住的模型，没有才回退到预设默认(不再无脑重置成默认，切回来模型还在)
     const targetModel = f.model || p.models[0] || "";
     setModel(targetModel);
@@ -6927,8 +6935,7 @@ function SettingsModal({
       nickname: nickname.trim() || prevSlot.nickname || undefined,
       systemPrompt: platPromptOn ? platPrompt : undefined, // 本平台专属提示词(关掉=undefined 跟随全局)
       model: model || prevSlot.model || undefined, // 记住本平台选的模型，切走再切回不丢
-      noTools: noTools || undefined, // 该平台/模型不发 tools 参数
-      vision: visionOn || undefined, // 该平台/模型强制看图
+      // noTools/vision/modelCaps 由 ...prevSlot 原样保留(按模型存在 modelCaps，切模型时即时更新 creds)
       // 手输的自定义模型自动收进列表(下次在下拉里可选/可删)；预设自带的不入
       customModels: (() => {
         const base = prevSlot.customModels || [];
@@ -6969,7 +6976,7 @@ function SettingsModal({
     }
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
     const id = "st_" + crypto.randomUUID().slice(0, 8);
-    const st: Station = { id, label, baseUrl: url };
+    const st: Station = { id, label, baseUrl: url, relay: newStRelay || undefined };
     const next = [...stationsRef.current, st];
     stationsRef.current = next;
     setStations(next);
@@ -7001,13 +7008,14 @@ function SettingsModal({
     window.minicc.setSettings({ ...s, customStations: next });
   }
 
-  // 打开「编辑中转站」弹窗：带出当前中转站的名称/URL
-  function openEditStation() {
-    const st = stationsRef.current.find((x) => x.id === pid);
+  // 打开「编辑供应商」弹窗：带出该自定义供应商的名称/URL/类型(缺省编辑当前选中的)
+  function openEditStation(id?: string) {
+    const st = stationsRef.current.find((x) => x.id === (id || pid));
     if (!st) return;
     setEditStationId(st.id);
     setNewStName(st.label);
     setNewStUrl(st.baseUrl);
+    setNewStRelay(!!st.relay);
     setShowAddStation(true);
   }
   // 保存中转站改名/改 URL(编辑态)；名称/URL 落库，baseUrl 同步到该站槽与输入框
@@ -7019,7 +7027,9 @@ function SettingsModal({
       return;
     }
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-    const next = stationsRef.current.map((s) => (s.id === editStationId ? { ...s, label, baseUrl: url } : s));
+    const next = stationsRef.current.map((s) =>
+      s.id === editStationId ? { ...s, label, baseUrl: url, relay: newStRelay || undefined } : s,
+    );
     stationsRef.current = next;
     setStations(next);
     if (pid === editStationId) setBaseUrl(url); // 改的是当前选中站→同步端点输入框
@@ -7348,6 +7358,7 @@ function SettingsModal({
                     setEditStationId(null);
                     setNewStName("");
                     setNewStUrl("");
+                    setNewStRelay(false);
                     setShowAddStation(true);
                   }}
                 >
@@ -7432,13 +7443,17 @@ function SettingsModal({
                 </div>
               </div>
 
-              {/* 该模型能力开关(按平台/模型各存各的，保存后生效) */}
+              {/* 该模型能力开关(按【模型】各存各的，切模型即时切换；保存后生效) */}
               <div className="model-caps">
+                <div className="model-caps-head">
+                  能力开关 · 针对模型 <b>{model || "（未选）"}</b>
+                </div>
                 <label className="cap-row" title="关掉后请求不带 tools 参数——自建 vLLM/llama-server 未开工具支持时(一带 tools 就报错)请关掉；关掉后该模型只能纯对话、不能调工具/跑 agent">
                   <input
                     type="checkbox"
-                    checked={!noTools}
-                    onChange={(e) => setNoTools(!e.target.checked)}
+                    checked={!curCaps.noTools}
+                    disabled={!model}
+                    onChange={(e) => setModelCap({ noTools: !e.target.checked })}
                   />
                   <span className="cap-text">
                     <b>工具调用 / Agent</b>
@@ -7448,8 +7463,9 @@ function SettingsModal({
                 <label className="cap-row" title="模型名含 vl/vision/omni 等会自动按多模态处理；名字不含但确实能看图的模型，在这里手动开启">
                   <input
                     type="checkbox"
-                    checked={visionOn}
-                    onChange={(e) => setVisionOn(e.target.checked)}
+                    checked={!!curCaps.vision}
+                    disabled={!model}
+                    onChange={(e) => setModelCap({ vision: e.target.checked })}
                   />
                   <span className="cap-text">
                     <b>看图 / 视觉</b>
@@ -7617,6 +7633,21 @@ function SettingsModal({
           {tab === "platforms" && (
             <>
               <p className="prov-manage-hint">{t("set.p.hint")}</p>
+              <div className="prov-manage-bar">
+                <button
+                  type="button"
+                  className="station-add-btn"
+                  onClick={() => {
+                    setEditStationId(null);
+                    setNewStName("");
+                    setNewStUrl("");
+                    setNewStRelay(false);
+                    setShowAddStation(true);
+                  }}
+                >
+                  ＋ 添加供应商 / 中转站
+                </button>
+              </div>
               <div className="prov-list">
                 {orderedPresets.map((p, i) => {
                   const isHidden = hidden.includes(p.id);
@@ -7653,6 +7684,27 @@ function SettingsModal({
                         ⋮⋮
                       </span>
                       <span className="prov-name">{p.label}</span>
+                      {p.custom && (
+                        <button
+                          type="button"
+                          className="prov-mini"
+                          title="编辑名称 / 端点"
+                          onClick={() => openEditStation(p.id)}
+                        >
+                          编辑
+                        </button>
+                      )}
+                      {p.custom && (
+                        <button
+                          type="button"
+                          className="prov-mini del"
+                          title="删除该自定义供应商"
+                          disabled={lockOn}
+                          onClick={() => deleteStation(p.id)}
+                        >
+                          删除
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="prov-eye"
@@ -8984,32 +9036,62 @@ function SettingsModal({
       </div>
     </div>
 
-    {/* 添加/编辑中转站：独立小弹窗，不撑爆主设置页 */}
+    {/* 添加/编辑 供应商/中转站：独立小弹窗，不撑爆主设置页 */}
     {showAddStation && (
       <div className="perm-overlay add-st-overlay" onClick={() => { setShowAddStation(false); setEditStationId(null); }}>
         <div className="add-st-dialog" onClick={(e) => e.stopPropagation()}>
-          <h3>{editStationId ? "编辑中转站" : "添加中转站"}</h3>
-          <label className="field">
-            <span>名称</span>
+          <h3>{editStationId ? "编辑" : "添加"}供应商 / 中转站</h3>
+
+          <div className="st-field">
+            <span className="st-label">类型</span>
+            <div className="theme-pick">
+              <button
+                type="button"
+                className={"theme-opt" + (!newStRelay ? " on" : "")}
+                onClick={() => setNewStRelay(false)}
+              >
+                自建供应商
+              </button>
+              <button
+                type="button"
+                className={"theme-opt" + (newStRelay ? " on" : "")}
+                onClick={() => setNewStRelay(true)}
+              >
+                中转站
+              </button>
+            </div>
+            <p className="st-hint">
+              {newStRelay
+                ? "中转站：一个 key 直连多平台（OpenAI 兼容）。名字会带「（中转）」后缀。"
+                : "自建供应商：你自己的 OpenAI 兼容端点，如公司 vLLM / Ollama / llama-server。"}
+            </p>
+          </div>
+
+          <div className="st-field">
+            <span className="st-label">名称</span>
             <input
+              className="st-input"
               autoFocus
               value={newStName}
               onChange={(e) => setNewStName(e.target.value)}
-              placeholder="如：公司 Qwen / 我的便宜中转"
+              placeholder={newStRelay ? "如：我的便宜中转" : "如：公司 Qwen"}
             />
-          </label>
-          <label className="field">
-            <span>Base URL（OpenAI 兼容端点）</span>
+          </div>
+
+          <div className="st-field">
+            <span className="st-label">Base URL（OpenAI 兼容端点）</span>
             <input
+              className="st-input"
               value={newStUrl}
               onChange={(e) => setNewStUrl(e.target.value)}
               placeholder="如 http://192.168.2.195:8000/v1"
             />
-          </label>
-          <p className="s-note">
+          </div>
+
+          <p className="st-note">
             {editStationId
-              ? "改名/改端点地址；API Key 与模型在上一页各自保留不变。"
-              : "⚠️ 填入 key = 把 key 交给该站，请只添加你信任的中转站。添加后回上一页填 API Key。"}
+              ? "改名 / 改类型 / 改端点地址；API Key 与模型在上一页各自保留不变。"
+              : "添加后回上一页填 API Key、模型名。⚠️ 填 key = 把 key 交给该端点，请只添加你信任的。"}
           </p>
           <div className="btns">
             <button onClick={() => { setShowAddStation(false); setEditStationId(null); }}>取消</button>
