@@ -2051,35 +2051,62 @@ body {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
 }
 
-/* 崩溃恢复框：复用 .ask 的定位/外观(贴输入框上方)，内部列出被中断任务，逐个继续/忽略 */
+/* 崩溃恢复框：复用 .ask 的定位/外观(贴输入框上方)，按钮沿用 ask 的 pill 风格 */
 .resume-ask .resume-rows {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 8px;
+  margin-top: 12px;
   max-height: 40vh;
   overflow-y: auto;
 }
 .resume-ask .resume-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
+  gap: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--border, #ddd);
   border-radius: 10px;
   background: var(--bg-raised, var(--bg));
 }
 .resume-ask .resume-title {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.resume-ask .resume-btns { display: flex; gap: 6px; flex-shrink: 0; }
-.resume-ask .resume-foot { margin-top: 10px; text-align: right; }
+.resume-ask .resume-btns { display: flex; gap: 8px; flex-shrink: 0; }
+/* 按钮照抄 .ask-foot button 的 pill 观感：描边圆角、悬停描边高亮、继续=主色填充 */
+.resume-ask .resume-btns button,
+.resume-ask .resume-foot button {
+  padding: 6px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.12s;
+}
+.resume-ask .resume-btns button:hover,
+.resume-ask .resume-foot button:hover {
+  border-color: var(--accent, #e0533d);
+  background: rgba(127, 127, 127, 0.06);
+}
+.resume-ask .resume-btns button.allow {
+  background: var(--accent, #e0533d);
+  border-color: var(--accent, #e0533d);
+  color: #fff;
+}
+.resume-ask .resume-btns button.allow:hover {
+  background: var(--accent, #e0533d);
+  filter: brightness(1.06);
+}
+.resume-ask .resume-foot { margin-top: 12px; text-align: right; }
 
 /* ===== ask_user：AI 弹的选择框 =====
    非模态：fixed 定位对齐到输入框(内联 left/width/bottom = 同左同宽、贴其正上方)，
