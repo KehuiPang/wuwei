@@ -132,6 +132,7 @@ export interface CredSlot {
   webToken?: string; // 控制台 Bearer token：存下来后静默刷新账号信息，过期才需重登
   webHeaders?: Record<string, string>; // 额度接口所需的整套自定义头(如 Kimi 的 x-msh-*)：登录时抓真实请求头存下，静默刷新原样重放
   systemPrompt?: string; // 本平台专属系统提示词(覆盖全局)；未设=跟随全局默认。含空串=本平台强制空
+  model?: string; // 该平台上次选用的模型：切平台带出各自记住的模型，别被目标平台默认值冲掉
 }
 
 export interface Settings {

@@ -1467,9 +1467,14 @@ export function App() {
     false,
   );
   const curPreset = providerList.find((p) => p.id === curProviderId);
-  // 动态实时模型(从平台 /models 拉)并入预设，去重；预设在前(保证旗舰置顶)，实时补充新模型
+  // 动态实时模型(从平台 /models 拉)并入预设，去重；预设在前(保证旗舰置顶)，实时补充新模型；
+  // 再并入当前生效的模型(meta.model)——自建端点等没有预设列表时，配好的模型也能在快切里看到/切换。
   const quickModels = [
-    ...new Set([...(curPreset?.models ?? []), ...(liveModels[curProviderId] || [])]),
+    ...new Set(
+      [...(curPreset?.models ?? []), ...(liveModels[curProviderId] || []), meta.model].filter(
+        Boolean,
+      ) as string[],
+    ),
   ];
   // 切换模型下拉展示：常用=预设旗舰(+当前选中项)，全部=预设+实时拉取全量
   const commonModels = curPreset?.models ?? [];
@@ -5648,7 +5653,7 @@ function arrangePresets(
   return includeHidden ? sorted : sorted.filter((p) => !hide.has(p.id));
 }
 
-type CredSlot = { apiKey?: string; baseUrl?: string; oauthToken?: string; nickname?: string };
+type CredSlot = { apiKey?: string; baseUrl?: string; oauthToken?: string; nickname?: string; model?: string };
 
 // 简约线条眼睛图标：off=true 显示"划掉的眼睛"(当前明文，点击隐藏)
 function EyeIcon({ off }: { off: boolean }) {
@@ -6502,8 +6507,18 @@ function SettingsModal({
   const allPresets = [...PRESETS, ...stations.map(stationToPreset)];
   const orderedPresets = arrangePresets(allPresets, order, hidden, true);
   const preset = allPresets.find((p) => p.id === pid) ?? PRESETS[0];
-  // 模型下拉：预设在前(旗舰置顶)+ 平台实时拉到的新模型(liveModels，与底栏同源)，去重
-  const modelOptions = [...new Set([...(preset.models ?? []), ...(liveModels[pid] || [])])];
+  // 模型下拉：预设在前(旗舰置顶)+ 平台实时拉到的新模型(liveModels) + 该平台记住/当前选的模型(自建端点等
+  // 没有预设列表时也能在下拉里看到并切换)，去重去空。
+  const modelOptions = [
+    ...new Set(
+      [
+        ...(preset.models ?? []),
+        ...(liveModels[pid] || []),
+        creds[pid]?.model,
+        model,
+      ].filter(Boolean) as string[],
+    ),
+  ];
 
   // 把某平台槽里的凭证取出来填进字段(没存过就空/回退默认 baseUrl)
   function slotFields(c: Record<string, CredSlot>, id: string, p: Preset) {
@@ -6515,6 +6530,7 @@ function SettingsModal({
       oauthToken: slot.oauthToken || "",
       nickname: slot.nickname || "",
       systemPrompt: slot.systemPrompt, // string=有专属覆盖 / undefined=跟随全局
+      model: slot.model || "", // 该平台记住的模型(空=用预设默认)
     };
   }
 
@@ -6668,14 +6684,16 @@ function SettingsModal({
       credsRef.current = c;
       const f = slotFields(c, p.id, p);
       setPid(p.id);
-      setModel(s.model || p.models[0] || "");
+      // 当前平台的模型：顶层 s.model(上次生效值) 优先，其次槽记住的，再回退预设默认
+      const curModel = s.model || f.model || p.models[0] || "";
+      setModel(curModel);
       setApiKey(f.apiKey);
       setBaseUrl(f.baseUrl);
       setOauthToken(f.oauthToken);
       setNickname(f.nickname);
       setPlatPromptOn(typeof f.systemPrompt === "string");
       setPlatPrompt(typeof f.systemPrompt === "string" ? f.systemPrompt : "");
-      setCustomModel(p.models.length === 0 || (!!s.model && !p.models.includes(s.model)));
+      setCustomModel(!!curModel && !p.models.includes(curModel));
       // 系统提示词：有自定义(含空串)就用它+标记已改；否则显示默认模板(未改，保存时不写入=跟随默认)
       const def = r?.defaultPrompt || "";
       setSysPromptDefault(def);
@@ -6723,6 +6741,7 @@ function SettingsModal({
         baseUrl,
         oauthToken,
         nickname,
+        model: model || undefined, // 切走前记住当前平台选的模型
         systemPrompt: platPromptOn ? platPrompt : undefined,
       },
     };
@@ -6730,14 +6749,16 @@ function SettingsModal({
     setCreds(merged);
     const f = slotFields(merged, id, p);
     setPid(id);
-    setModel(p.models[0] || "");
+    // 优先用目标平台记住的模型，没有才回退到预设默认(不再无脑重置成默认，切回来模型还在)
+    const targetModel = f.model || p.models[0] || "";
+    setModel(targetModel);
     setApiKey(f.apiKey);
     setBaseUrl(f.baseUrl);
     setOauthToken(f.oauthToken);
     setNickname(f.nickname);
     setPlatPromptOn(typeof f.systemPrompt === "string");
     setPlatPrompt(typeof f.systemPrompt === "string" ? f.systemPrompt : "");
-    setCustomModel(p.models.length === 0);
+    setCustomModel(!!targetModel && !p.models.includes(targetModel)); // 记住的模型不在预设列表→自定义输入态
     setShowKey(false);
     setSKeyWaiting(false); // 切平台：清掉上一个平台的 key 自动检测态
     setSKeyMsg("");
@@ -6868,6 +6889,7 @@ function SettingsModal({
           : undefined,
       nickname: nickname.trim() || prevSlot.nickname || undefined,
       systemPrompt: platPromptOn ? platPrompt : undefined, // 本平台专属提示词(关掉=undefined 跟随全局)
+      model: model || prevSlot.model || undefined, // 记住本平台选的模型，切走再切回不丢
     };
     const newCreds = { ...credsRef.current, [pid]: slot }; // 存进当前平台的槽(用最新creds,别丢其它槽)
     // 只发本页负责的字段(模型/凭证/平台/系统提示/中转站)。主进程 settings:set 会合并到磁盘,
@@ -6905,8 +6927,11 @@ function SettingsModal({
     setStations(next);
     setNewStName("");
     setNewStUrl("");
-    // 直接切到新站(带出空槽)，并持久化列表
-    const merged = { ...credsRef.current, [pid]: { apiKey, baseUrl, oauthToken, nickname } };
+    // 直接切到新站(带出空槽)，并持久化列表；旧平台槽展开保留 model/systemPrompt/avatar 等本页不动的字段
+    const merged = {
+      ...credsRef.current,
+      [pid]: { ...(credsRef.current[pid] || {}), apiKey, baseUrl, oauthToken, nickname, model: model || undefined },
+    };
     credsRef.current = merged;
     setCreds(merged);
     setPid(id);
