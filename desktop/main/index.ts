@@ -1506,14 +1506,16 @@ if (!gotLock) {
     } catch {
       // 凭证等问题：窗口起来后提示
     }
-    createWindow();
-    // 任务栏图标/分组用无为标识
+    // 任务栏图标/分组标识：必须在创建窗口【之前】设置，Windows 才会把窗口归到无为身份下。
     try {
       app.setName("无为");
-      if (process.platform === "win32") app.setAppUserModelId("io.wuweiai.app");
+      // ⚠️ 必须与打包 appId(package.json build.appId = com.wuwei.app)一致，
+      //    否则安装版快捷方式的 AppUserModelId 与运行时不匹配，任务栏图标关联不上、回退默认图标。
+      if (process.platform === "win32") app.setAppUserModelId("com.wuwei.app");
     } catch {
       /* ignore */
     }
+    createWindow();
     createTray();
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
