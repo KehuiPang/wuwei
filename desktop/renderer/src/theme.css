@@ -2942,6 +2942,53 @@ body {
   font-size: 11.5px;
   margin: -8px 0 14px 2px;
 }
+/* 模型列表管理(增删) */
+.settings .model-list-mgr { margin: 2px 0 14px; }
+.settings .mlm-head { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.settings .mlm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.settings .mlm-empty { font-size: 12px; color: var(--text-dim); }
+.settings .mlm-chip {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--border, #ddd); border-radius: 8px; overflow: hidden;
+  background: transparent;
+}
+.settings .mlm-chip.on { border-color: var(--accent, #e0533d); background: color-mix(in srgb, var(--accent, #e0533d) 12%, transparent); }
+.settings .mlm-pick {
+  padding: 4px 10px; border: none; background: transparent; color: var(--text);
+  cursor: pointer; font-size: 12.5px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.settings .mlm-del {
+  padding: 4px 8px; border: none; border-left: 1px solid var(--border, #ddd);
+  background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px;
+}
+.settings .mlm-del:hover { color: #fff; background: var(--accent, #e0533d); }
+.settings .mlm-add { display: flex; gap: 6px; }
+.settings .mlm-add input {
+  flex: 1; min-width: 0; padding: 6px 10px; font-size: 13px;
+  border: 1px solid var(--border, #ddd); border-radius: 8px; background: transparent; color: var(--text);
+}
+.settings .mlm-add button {
+  flex: none; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border, #ddd);
+  background: transparent; color: var(--text); cursor: pointer; font-size: 13px;
+}
+.settings .mlm-add button:hover { border-color: var(--accent, #e0533d); background: rgba(127,127,127,0.06); }
+/* 模型能力开关(工具调用/看图) */
+.settings .model-caps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 16px;
+}
+.settings .cap-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+}
+.settings .cap-row input { margin-top: 2px; flex-shrink: 0; }
+.settings .cap-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.settings .cap-text b { font-size: 13px; font-weight: 500; color: var(--text); }
+.settings .cap-text em { font-size: 11.5px; color: var(--text-dim); font-style: normal; line-height: 1.4; }
 /* 应用设置弹窗的分组与开关行 */
 .settings .app-set-group {
   font-size: 12px;
@@ -3146,6 +3193,16 @@ body {
 .station-add-btn:hover {
   background: var(--accent-soft);
 }
+.station-edit {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.station-edit:hover { border-color: var(--accent); color: var(--accent); }
 .station-del {
   border: 1px solid var(--border-strong);
   background: transparent;

@@ -5653,7 +5653,7 @@ function arrangePresets(
   return includeHidden ? sorted : sorted.filter((p) => !hide.has(p.id));
 }
 
-type CredSlot = { apiKey?: string; baseUrl?: string; oauthToken?: string; nickname?: string; model?: string };
+type CredSlot = { apiKey?: string; baseUrl?: string; oauthToken?: string; nickname?: string; model?: string; noTools?: boolean; vision?: boolean; customModels?: string[] };
 
 // 简约线条眼睛图标：off=true 显示"划掉的眼睛"(当前明文，点击隐藏)
 function EyeIcon({ off }: { off: boolean }) {
@@ -6263,6 +6263,8 @@ function SettingsModal({
   const [toastSecDraft, setToastSecDraft] = useState(askToastSec);
   const [pid, setPid] = useState("codex");
   const [model, setModel] = useState(PRESETS[0].models[0]);
+  const [noTools, setNoTools] = useState(false); // 当前平台/模型：不发 tools 参数(自建端点不支持工具调用时)
+  const [visionOn, setVisionOn] = useState(false); // 当前平台/模型：强制看图(多模态)
   const [apiKey, setApiKey] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [oauthToken, setOauthToken] = useState("");
@@ -6312,6 +6314,8 @@ function SettingsModal({
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [newStName, setNewStName] = useState(""); // 新增中转站：名称
   const [newStUrl, setNewStUrl] = useState(""); // 新增中转站：baseURL
+  const [newModelName, setNewModelName] = useState(""); // 给当前平台手动加模型：输入框
+  const [editStationId, setEditStationId] = useState<string | null>(null); // 非空=编辑该中转站(改名/改URL)，空=新增
   const [showAddStation, setShowAddStation] = useState(false); // 添加中转站独立弹窗
   const stationsRef = useRef(stations);
   stationsRef.current = stations;
@@ -6513,12 +6517,37 @@ function SettingsModal({
     ...new Set(
       [
         ...(preset.models ?? []),
+        ...(creds[pid]?.customModels ?? []), // 用户为该平台手动加的模型
         ...(liveModels[pid] || []),
         creds[pid]?.model,
         model,
       ].filter(Boolean) as string[],
     ),
   ];
+  // 给当前平台增/删自定义模型(存进该平台槽的 customModels，保存时随 creds 落盘)
+  function addCustomModel(name: string) {
+    const m = name.trim();
+    if (!m) return;
+    const slot = credsRef.current[pid] || {};
+    if ((slot.customModels || []).includes(m) || (preset.models || []).includes(m)) {
+      setModel(m); // 已在列表→直接选中
+      return;
+    }
+    const next = { ...credsRef.current, [pid]: { ...slot, customModels: [...(slot.customModels || []), m] } };
+    credsRef.current = next;
+    setCreds(next);
+    setModel(m); // 加完即选中
+  }
+  function delCustomModel(name: string) {
+    const slot = credsRef.current[pid] || {};
+    const next = {
+      ...credsRef.current,
+      [pid]: { ...slot, customModels: (slot.customModels || []).filter((x) => x !== name) },
+    };
+    credsRef.current = next;
+    setCreds(next);
+    if (model === name) setModel(preset.models[0] || (next[pid].customModels || [])[0] || "");
+  }
 
   // 把某平台槽里的凭证取出来填进字段(没存过就空/回退默认 baseUrl)
   function slotFields(c: Record<string, CredSlot>, id: string, p: Preset) {
@@ -6531,6 +6560,8 @@ function SettingsModal({
       nickname: slot.nickname || "",
       systemPrompt: slot.systemPrompt, // string=有专属覆盖 / undefined=跟随全局
       model: slot.model || "", // 该平台记住的模型(空=用预设默认)
+      noTools: !!slot.noTools, // 该平台/模型不发 tools 参数
+      vision: !!slot.vision, // 该平台/模型强制看图
     };
   }
 
@@ -6693,6 +6724,8 @@ function SettingsModal({
       setNickname(f.nickname);
       setPlatPromptOn(typeof f.systemPrompt === "string");
       setPlatPrompt(typeof f.systemPrompt === "string" ? f.systemPrompt : "");
+      setNoTools(f.noTools);
+      setVisionOn(f.vision);
       setCustomModel(!!curModel && !p.models.includes(curModel));
       // 系统提示词：有自定义(含空串)就用它+标记已改；否则显示默认模板(未改，保存时不写入=跟随默认)
       const def = r?.defaultPrompt || "";
@@ -6742,6 +6775,8 @@ function SettingsModal({
         oauthToken,
         nickname,
         model: model || undefined, // 切走前记住当前平台选的模型
+        noTools: noTools || undefined,
+        vision: visionOn || undefined,
         systemPrompt: platPromptOn ? platPrompt : undefined,
       },
     };
@@ -6749,6 +6784,8 @@ function SettingsModal({
     setCreds(merged);
     const f = slotFields(merged, id, p);
     setPid(id);
+    setNoTools(f.noTools);
+    setVisionOn(f.vision);
     // 优先用目标平台记住的模型，没有才回退到预设默认(不再无脑重置成默认，切回来模型还在)
     const targetModel = f.model || p.models[0] || "";
     setModel(targetModel);
@@ -6890,6 +6927,17 @@ function SettingsModal({
       nickname: nickname.trim() || prevSlot.nickname || undefined,
       systemPrompt: platPromptOn ? platPrompt : undefined, // 本平台专属提示词(关掉=undefined 跟随全局)
       model: model || prevSlot.model || undefined, // 记住本平台选的模型，切走再切回不丢
+      noTools: noTools || undefined, // 该平台/模型不发 tools 参数
+      vision: visionOn || undefined, // 该平台/模型强制看图
+      // 手输的自定义模型自动收进列表(下次在下拉里可选/可删)；预设自带的不入
+      customModels: (() => {
+        const base = prevSlot.customModels || [];
+        return model && !(preset.models || []).includes(model) && !base.includes(model)
+          ? [...base, model]
+          : base.length
+            ? base
+            : undefined;
+      })(),
     };
     const newCreds = { ...credsRef.current, [pid]: slot }; // 存进当前平台的槽(用最新creds,别丢其它槽)
     // 只发本页负责的字段(模型/凭证/平台/系统提示/中转站)。主进程 settings:set 会合并到磁盘,
@@ -6951,6 +6999,33 @@ function SettingsModal({
     const r = await window.minicc.getSettings();
     const s = r?.settings || {};
     window.minicc.setSettings({ ...s, customStations: next });
+  }
+
+  // 打开「编辑中转站」弹窗：带出当前中转站的名称/URL
+  function openEditStation() {
+    const st = stationsRef.current.find((x) => x.id === pid);
+    if (!st) return;
+    setEditStationId(st.id);
+    setNewStName(st.label);
+    setNewStUrl(st.baseUrl);
+    setShowAddStation(true);
+  }
+  // 保存中转站改名/改 URL(编辑态)；名称/URL 落库，baseUrl 同步到该站槽与输入框
+  function saveStationEdit() {
+    const label = newStName.trim();
+    let url = newStUrl.trim();
+    if (!label || !url) {
+      alert("请填写中转站名称和 Base URL。");
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    const next = stationsRef.current.map((s) => (s.id === editStationId ? { ...s, label, baseUrl: url } : s));
+    stationsRef.current = next;
+    setStations(next);
+    if (pid === editStationId) setBaseUrl(url); // 改的是当前选中站→同步端点输入框
+    setShowAddStation(false);
+    setEditStationId(null);
+    void persistStationsOnly(next);
   }
 
   // 只更新平台顺序/隐藏(拉最新 settings 再合并，避免覆盖本页不管的字段)
@@ -7270,6 +7345,7 @@ function SettingsModal({
                   type="button"
                   className="station-add-btn"
                   onClick={() => {
+                    setEditStationId(null);
                     setNewStName("");
                     setNewStUrl("");
                     setShowAddStation(true);
@@ -7277,6 +7353,11 @@ function SettingsModal({
                 >
                   {t("set.m.addStation")}
                 </button>
+                {preset.custom && (
+                  <button type="button" className="station-edit" onClick={openEditStation}>
+                    编辑
+                  </button>
+                )}
                 {preset.custom && (
                   <button type="button" className="station-del" onClick={() => deleteStation(pid)}>
                     {t("set.m.delete")}「{preset.label.replace(/（中转）$/, "")}」
@@ -7314,6 +7395,68 @@ function SettingsModal({
                 )}
               </label>
               {preset.modelLabels?.[model] && <p className="model-sub">{preset.modelLabels[model]}</p>}
+
+              {/* 模型列表管理：手动加/删该平台的模型(自定义加的可删，预设自带的不可删) */}
+              <div className="model-list-mgr">
+                <div className="mlm-head">该平台模型列表</div>
+                <div className="mlm-chips">
+                  {modelOptions.length === 0 && <span className="mlm-empty">还没有模型，下面加一个</span>}
+                  {modelOptions.map((m) => {
+                    const isCustom = (creds[pid]?.customModels || []).includes(m);
+                    return (
+                      <span key={m} className={"mlm-chip" + (m === model ? " on" : "")}>
+                        <button type="button" className="mlm-pick" title="选用该模型" onClick={() => { setModel(m); setCustomModel(false); }}>
+                          {m}
+                        </button>
+                        {isCustom && (
+                          <button type="button" className="mlm-del" title="从列表删除" onClick={() => delCustomModel(m)}>
+                            ✕
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="mlm-add">
+                  <input
+                    value={newModelName}
+                    onChange={(e) => setNewModelName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); addCustomModel(newModelName); setNewModelName(""); }
+                    }}
+                    placeholder="加模型名，如 qwen2.5-vl-72b-instruct"
+                  />
+                  <button type="button" onClick={() => { addCustomModel(newModelName); setNewModelName(""); }}>
+                    ＋ 添加
+                  </button>
+                </div>
+              </div>
+
+              {/* 该模型能力开关(按平台/模型各存各的，保存后生效) */}
+              <div className="model-caps">
+                <label className="cap-row" title="关掉后请求不带 tools 参数——自建 vLLM/llama-server 未开工具支持时(一带 tools 就报错)请关掉；关掉后该模型只能纯对话、不能调工具/跑 agent">
+                  <input
+                    type="checkbox"
+                    checked={!noTools}
+                    onChange={(e) => setNoTools(!e.target.checked)}
+                  />
+                  <span className="cap-text">
+                    <b>工具调用 / Agent</b>
+                    <em>关掉=请求不带 tools 参数（自建端点不支持工具调用时关掉，否则报错；关掉后只能纯对话）</em>
+                  </span>
+                </label>
+                <label className="cap-row" title="模型名含 vl/vision/omni 等会自动按多模态处理；名字不含但确实能看图的模型，在这里手动开启">
+                  <input
+                    type="checkbox"
+                    checked={visionOn}
+                    onChange={(e) => setVisionOn(e.target.checked)}
+                  />
+                  <span className="cap-text">
+                    <b>看图 / 视觉</b>
+                    <em>强制按多模态处理并发送真图片；纯文本模型别开（会 400）。名字含 vl/vision 的已自动识别</em>
+                  </span>
+                </label>
+              </div>
 
               {(preset.kind === "anthropic-apikey" || preset.kind === "openai") && preset.keyUrl && (
                 <div className="key-guide">
@@ -8841,18 +8984,18 @@ function SettingsModal({
       </div>
     </div>
 
-    {/* 添加中转站：独立小弹窗，不撑爆主设置页 */}
+    {/* 添加/编辑中转站：独立小弹窗，不撑爆主设置页 */}
     {showAddStation && (
-      <div className="perm-overlay add-st-overlay" onClick={() => setShowAddStation(false)}>
+      <div className="perm-overlay add-st-overlay" onClick={() => { setShowAddStation(false); setEditStationId(null); }}>
         <div className="add-st-dialog" onClick={(e) => e.stopPropagation()}>
-          <h3>添加中转站</h3>
+          <h3>{editStationId ? "编辑中转站" : "添加中转站"}</h3>
           <label className="field">
             <span>名称</span>
             <input
               autoFocus
               value={newStName}
               onChange={(e) => setNewStName(e.target.value)}
-              placeholder="如：我的便宜中转"
+              placeholder="如：公司 Qwen / 我的便宜中转"
             />
           </label>
           <label className="field">
@@ -8860,16 +9003,18 @@ function SettingsModal({
             <input
               value={newStUrl}
               onChange={(e) => setNewStUrl(e.target.value)}
-              placeholder="如 https://xxx.com/v1"
+              placeholder="如 http://192.168.2.195:8000/v1"
             />
           </label>
           <p className="s-note">
-            ⚠️ 填入 key = 把 key 交给该站，请只添加你信任的中转站。添加后回上一页填 API Key。
+            {editStationId
+              ? "改名/改端点地址；API Key 与模型在上一页各自保留不变。"
+              : "⚠️ 填入 key = 把 key 交给该站，请只添加你信任的中转站。添加后回上一页填 API Key。"}
           </p>
           <div className="btns">
-            <button onClick={() => setShowAddStation(false)}>取消</button>
-            <button className="allow" onClick={addStation}>
-              添加
+            <button onClick={() => { setShowAddStation(false); setEditStationId(null); }}>取消</button>
+            <button className="allow" onClick={editStationId ? saveStationEdit : addStation}>
+              {editStationId ? "保存" : "添加"}
             </button>
           </div>
         </div>

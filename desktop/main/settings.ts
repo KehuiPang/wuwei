@@ -133,6 +133,9 @@ export interface CredSlot {
   webHeaders?: Record<string, string>; // 额度接口所需的整套自定义头(如 Kimi 的 x-msh-*)：登录时抓真实请求头存下，静默刷新原样重放
   systemPrompt?: string; // 本平台专属系统提示词(覆盖全局)；未设=跟随全局默认。含空串=本平台强制空
   model?: string; // 该平台上次选用的模型：切平台带出各自记住的模型，别被目标平台默认值冲掉
+  noTools?: boolean; // 该平台/模型不发 tools 参数(自建 vLLM/llama-server 未开工具支持时,一带 tools 就报错)
+  vision?: boolean; // 该平台/模型强制按多模态处理(模型名不含 vl/vision 但确实能看图时手动开)
+  customModels?: string[]; // 用户为该平台手动增加的模型名(并入模型下拉/快切，可增删)
 }
 
 export interface Settings {
@@ -212,11 +215,17 @@ export function applyEnvFromSettings(s: Settings | null) {
     "MINICC_BASE_URL",
     "MINICC_API_KEY",
     "ANTHROPIC_API_KEY",
+    "MINICC_VISION",
+    "MINICC_NO_TOOLS",
   ]) {
     delete process.env[k];
   }
   if (!s) return; // 无设置：走 loadConfig 自动推断（有 ~/.codex 即 codex）
   if (s.model) process.env.MINICC_MODEL = s.model;
+  // 当前生效平台的能力开关(按供应商槽存)：看图/工具调用，接到 loadConfig 的 vision/disableTools
+  const slot = s.creds?.[s.providerId || ""] || {};
+  if (slot.vision) process.env.MINICC_VISION = "1";
+  if (slot.noTools) process.env.MINICC_NO_TOOLS = "1";
   switch (s.kind) {
     case "codex":
       process.env.MINICC_PROVIDER = "codex";
