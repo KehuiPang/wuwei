@@ -1155,6 +1155,8 @@ export function App() {
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [providerOrder, setProviderOrder] = useState<string[]>([]); // 平台自定义顺序
   const [hiddenProviders, setHiddenProviders] = useState<string[]>([]); // 隐藏的平台
+  const [removedProviders, setRemovedProviders] = useState<string[]>([]); // 已删除的平台
+  const [providerOverrides, setProviderOverrides] = useState<Record<string, { label?: string; baseUrl?: string }>>({}); // 平台改名/改端点
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
   const [sidebarW, setSidebarW] = useState(
@@ -1443,6 +1445,8 @@ export function App() {
       setStations(r?.settings?.customStations || []);
       setProviderOrder(r?.settings?.providerOrder || []);
       setHiddenProviders(r?.settings?.hiddenProviders || []);
+      setRemovedProviders((r?.settings as any)?.removedProviders || []);
+      setProviderOverrides((r?.settings as any)?.providerOverrides || {});
       setGroupMode((r?.settings as any)?.groupMode || "manual");
       setStreamMode((r?.settings as any)?.streamMode || "stream");
       setStreamSpeed((r?.settings as any)?.streamSpeed || 400);
@@ -1455,11 +1459,12 @@ export function App() {
     });
     document.documentElement.setAttribute("data-platform", window.minicc.platform);
   }, [showSettings]);
-  // 内置平台 + 用户自定义中转站，按用户自定义顺序、隐藏项不进切换菜单
+  // 内置平台 + 用户自定义供应商：先应用用户的删除/改名/改端点覆盖，再按托管登录+后台可见性过滤，
+  // 最后按用户自定义顺序排、隐藏项不进切换菜单
   const backendHidden = wuwei?.providers?.hidden ?? []; // 后台下发的隐藏供应商(全局+按用户)
   const providerList = arrangePresets(
     // 托管平台需登录可见；后台隐藏的一律不显示(供应商上下架由后台控制)
-    [...PRESETS, ...stations.map(stationToPreset)].filter(
+    applyProviderEdits([...PRESETS, ...stations.map(stationToPreset)], providerOverrides, removedProviders).filter(
       (p) => (!p.hosted || !!wuwei) && !backendHidden.includes(p.id),
     ),
     providerOrder,
@@ -5314,6 +5319,21 @@ function stationToPreset(s: Station): Preset {
   };
 }
 
+// 应用用户对平台的「删除/改名/改端点」覆盖：过滤掉 removed，再按 overrides 改 label/baseUrl(含内置平台)
+function applyProviderEdits(
+  presets: Preset[],
+  overrides: Record<string, { label?: string; baseUrl?: string }>,
+  removed: string[],
+): Preset[] {
+  return presets
+    .filter((p) => !removed.includes(p.id))
+    .map((p) => {
+      const o = overrides[p.id];
+      if (!o) return p;
+      return { ...p, label: o.label ?? p.label, baseUrl: o.baseUrl ?? p.baseUrl };
+    });
+}
+
 // 私有版：保留 Codex/Claude 两种订阅后端，其余为各平台 API Key 预设（模型 id 均取自官网 2026-07）
 const PRESETS: Preset[] = [
   {
@@ -6327,6 +6347,13 @@ function SettingsModal({
   orderRef.current = order;
   const hiddenRef = useRef(hidden);
   hiddenRef.current = hidden;
+  const [removed, setRemoved] = useState<string[]>([]); // 已删除的平台(含内置)
+  const removedRef = useRef(removed);
+  removedRef.current = removed;
+  const [overrides, setOverrides] = useState<Record<string, { label?: string; baseUrl?: string }>>({}); // 改名/改端点
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
+  const [editIsBuiltin, setEditIsBuiltin] = useState(false); // 编辑对象是否内置平台(内置只改名)
   const [dragOverIdx, setDragOverIdx] = useState(-1); // 拖拽悬停到第几行(高亮)
   const dragIdxRef = useRef(-1); // 拖起始行
   const [tab, setTab] = useState<
@@ -6510,7 +6537,11 @@ function SettingsModal({
     } else setSecErr(r.error || "导入失败");
   }
   // 内置平台 + 中转站(合并成一份预设列表；下拉与查找都用它)
-  const allPresets = [...PRESETS, ...stations.map(stationToPreset)];
+  const allPresets = applyProviderEdits(
+    [...PRESETS, ...stations.map(stationToPreset)],
+    overrides,
+    removed,
+  );
   const orderedPresets = arrangePresets(allPresets, order, hidden, true);
   const preset = allPresets.find((p) => p.id === pid) ?? PRESETS[0];
   // 模型下拉：预设在前(旗舰置顶)+ 平台实时拉到的新模型(liveModels) + 该平台记住/当前选的模型(自建端点等
@@ -6715,6 +6746,12 @@ function SettingsModal({
       const hid = s.hiddenProviders || [];
       setHidden(hid);
       hiddenRef.current = hid;
+      const rmv = (s as any).removedProviders || [];
+      setRemoved(rmv);
+      removedRef.current = rmv;
+      const ovr = (s as any).providerOverrides || {};
+      setOverrides(ovr);
+      overridesRef.current = ovr;
       const pool = [...PRESETS, ...sts.map(stationToPreset)];
       const p =
         pool.find((x) => x.id === s.providerId) ??
@@ -7008,22 +7045,54 @@ function SettingsModal({
     window.minicc.setSettings({ ...s, customStations: next });
   }
 
-  // 打开「编辑供应商」弹窗：带出该自定义供应商的名称/URL/类型(缺省编辑当前选中的)
+  // 打开「编辑供应商」弹窗：自定义站带出名称/URL/类型；内置平台只改名(带出当前显示名)
   function openEditStation(id?: string) {
-    const st = stationsRef.current.find((x) => x.id === (id || pid));
-    if (!st) return;
-    setEditStationId(st.id);
-    setNewStName(st.label);
-    setNewStUrl(st.baseUrl);
-    setNewStRelay(!!st.relay);
+    const tid = id || pid;
+    const st = stationsRef.current.find((x) => x.id === tid);
+    if (st) {
+      setEditIsBuiltin(false);
+      setEditStationId(st.id);
+      setNewStName(st.label);
+      setNewStUrl(st.baseUrl);
+      setNewStRelay(!!st.relay);
+      setShowAddStation(true);
+      return;
+    }
+    // 内置平台：只改显示名(端点仍在上一页 Base URL 改)
+    const bp = PRESETS.find((x) => x.id === tid);
+    if (!bp) return;
+    setEditIsBuiltin(true);
+    setEditStationId(tid);
+    setNewStName(overridesRef.current[tid]?.label ?? bp.label);
+    setNewStUrl("");
     setShowAddStation(true);
   }
-  // 保存中转站改名/改 URL(编辑态)；名称/URL 落库，baseUrl 同步到该站槽与输入框
+  // 保存编辑：内置→写 providerOverrides.label；自定义站→改 label/URL/类型
   function saveStationEdit() {
     const label = newStName.trim();
+    if (!label) {
+      alert("请填写名称。");
+      return;
+    }
+    if (editIsBuiltin) {
+      const id = editStationId!;
+      const bp = PRESETS.find((x) => x.id === id);
+      const ovr = { ...overridesRef.current };
+      // 与预设原名相同=清掉覆盖(恢复默认名)，否则存 label 覆盖
+      if (bp && label === bp.label) delete ovr[id];
+      else ovr[id] = { ...(ovr[id] || {}), label };
+      overridesRef.current = ovr;
+      setOverrides(ovr);
+      loadedRef.current = { ...loadedRef.current, providerOverrides: ovr };
+      setShowAddStation(false);
+      setEditStationId(null);
+      setEditIsBuiltin(false);
+      void persistProviderMeta({ providerOverrides: ovr });
+      return;
+    }
     let url = newStUrl.trim();
-    if (!label || !url) {
-      alert("请填写中转站名称和 Base URL。");
+    if (!url) {
+      alert("请填写 Base URL。");
       return;
     }
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
@@ -7036,6 +7105,36 @@ function SettingsModal({
     setShowAddStation(false);
     setEditStationId(null);
     void persistStationsOnly(next);
+  }
+  // 删除平台：自定义站→删站；内置→加入 removedProviders(可一键恢复)。删到当前平台则切回第一个可用平台
+  function deleteProvider(id: string) {
+    const isStation = stationsRef.current.some((x) => x.id === id);
+    if (isStation) {
+      deleteStation(id);
+      return;
+    }
+    const rmv = removedRef.current.includes(id) ? removedRef.current : [...removedRef.current, id];
+    removedRef.current = rmv;
+    setRemoved(rmv);
+    loadedRef.current = { ...loadedRef.current, removedProviders: rmv };
+    void persistProviderMeta({ removedProviders: rmv });
+    if (pid === id) {
+      const fallback = applyProviderEdits([...PRESETS, ...stationsRef.current.map(stationToPreset)], overridesRef.current, rmv)[0];
+      if (fallback) changePreset(fallback.id);
+    }
+  }
+  // 一键恢复所有已删除的平台
+  function restoreRemovedProviders() {
+    removedRef.current = [];
+    setRemoved([]);
+    loadedRef.current = { ...loadedRef.current, removedProviders: [] };
+    void persistProviderMeta({ removedProviders: [] });
+  }
+  // 拉最新 settings 再合并 removedProviders/providerOverrides(别覆盖本页不管的字段)
+  async function persistProviderMeta(patch: { removedProviders?: string[]; providerOverrides?: Record<string, { label?: string; baseUrl?: string }> }) {
+    const r = await window.minicc.getSettings();
+    const s = r?.settings || {};
+    window.minicc.setSettings({ ...s, ...patch });
   }
 
   // 只更新平台顺序/隐藏(拉最新 settings 再合并，避免覆盖本页不管的字段)
@@ -7088,7 +7187,7 @@ function SettingsModal({
 
   return (
     <>
-    <div className="perm-overlay">
+    <div className="perm-overlay settings-overlay">
       <div className={"settings tabbed sidenav" + (maxed ? " maxed" : "")} onClick={(e) => e.stopPropagation()}>
         {/* 左侧竖排菜单 */}
         <aside className="set-side">
@@ -7359,6 +7458,7 @@ function SettingsModal({
                     setNewStName("");
                     setNewStUrl("");
                     setNewStRelay(false);
+                    setEditIsBuiltin(false);
                     setShowAddStation(true);
                   }}
                 >
@@ -7642,6 +7742,7 @@ function SettingsModal({
                     setNewStName("");
                     setNewStUrl("");
                     setNewStRelay(false);
+                    setEditIsBuiltin(false);
                     setShowAddStation(true);
                   }}
                 >
@@ -7684,27 +7785,23 @@ function SettingsModal({
                         ⋮⋮
                       </span>
                       <span className="prov-name">{p.label}</span>
-                      {p.custom && (
-                        <button
-                          type="button"
-                          className="prov-mini"
-                          title="编辑名称 / 端点"
-                          onClick={() => openEditStation(p.id)}
-                        >
-                          编辑
-                        </button>
-                      )}
-                      {p.custom && (
-                        <button
-                          type="button"
-                          className="prov-mini del"
-                          title="删除该自定义供应商"
-                          disabled={lockOn}
-                          onClick={() => deleteStation(p.id)}
-                        >
-                          删除
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        className="prov-mini"
+                        title={p.custom ? "编辑名称 / 端点 / 类型" : "重命名该平台"}
+                        onClick={() => openEditStation(p.id)}
+                      >
+                        编辑
+                      </button>
+                      <button
+                        type="button"
+                        className="prov-mini del"
+                        title={p.custom ? "删除该自定义供应商" : "删除该平台(可一键恢复默认)"}
+                        disabled={orderedPresets.length <= 1}
+                        onClick={() => deleteProvider(p.id)}
+                      >
+                        删除
+                      </button>
                       <button
                         type="button"
                         className="prov-eye"
@@ -7718,6 +7815,14 @@ function SettingsModal({
                   );
                 })}
               </div>
+              {removed.length > 0 && (
+                <div className="prov-restore">
+                  已删除 {removed.length} 个默认平台
+                  <button type="button" className="link-inline" onClick={restoreRemovedProviders}>
+                    恢复默认平台
+                  </button>
+                </div>
+              )}
             </>
           )}
 
@@ -9038,34 +9143,36 @@ function SettingsModal({
 
     {/* 添加/编辑 供应商/中转站：独立小弹窗，不撑爆主设置页 */}
     {showAddStation && (
-      <div className="perm-overlay add-st-overlay" onClick={() => { setShowAddStation(false); setEditStationId(null); }}>
+      <div className="perm-overlay add-st-overlay" onClick={() => { setShowAddStation(false); setEditStationId(null); setEditIsBuiltin(false); }}>
         <div className="add-st-dialog" onClick={(e) => e.stopPropagation()}>
-          <h3>{editStationId ? "编辑" : "添加"}供应商 / 中转站</h3>
+          <h3>{editIsBuiltin ? "重命名平台" : editStationId ? "编辑" : "添加"}{editIsBuiltin ? "" : "供应商 / 中转站"}</h3>
 
-          <div className="st-field">
-            <span className="st-label">类型</span>
-            <div className="theme-pick">
-              <button
-                type="button"
-                className={"theme-opt" + (!newStRelay ? " on" : "")}
-                onClick={() => setNewStRelay(false)}
-              >
-                自建供应商
-              </button>
-              <button
-                type="button"
-                className={"theme-opt" + (newStRelay ? " on" : "")}
-                onClick={() => setNewStRelay(true)}
-              >
-                中转站
-              </button>
+          {!editIsBuiltin && (
+            <div className="st-field">
+              <span className="st-label">类型</span>
+              <div className="theme-pick">
+                <button
+                  type="button"
+                  className={"theme-opt" + (!newStRelay ? " on" : "")}
+                  onClick={() => setNewStRelay(false)}
+                >
+                  自建供应商
+                </button>
+                <button
+                  type="button"
+                  className={"theme-opt" + (newStRelay ? " on" : "")}
+                  onClick={() => setNewStRelay(true)}
+                >
+                  中转站
+                </button>
+              </div>
+              <p className="st-hint">
+                {newStRelay
+                  ? "中转站：一个 key 直连多平台（OpenAI 兼容）。名字会带「（中转）」后缀。"
+                  : "自建供应商：你自己的 OpenAI 兼容端点，如公司 vLLM / Ollama / llama-server。"}
+              </p>
             </div>
-            <p className="st-hint">
-              {newStRelay
-                ? "中转站：一个 key 直连多平台（OpenAI 兼容）。名字会带「（中转）」后缀。"
-                : "自建供应商：你自己的 OpenAI 兼容端点，如公司 vLLM / Ollama / llama-server。"}
-            </p>
-          </div>
+          )}
 
           <div className="st-field">
             <span className="st-label">名称</span>
@@ -9074,27 +9181,31 @@ function SettingsModal({
               autoFocus
               value={newStName}
               onChange={(e) => setNewStName(e.target.value)}
-              placeholder={newStRelay ? "如：我的便宜中转" : "如：公司 Qwen"}
+              placeholder={editIsBuiltin ? "显示名" : newStRelay ? "如：我的便宜中转" : "如：公司 Qwen"}
             />
           </div>
 
-          <div className="st-field">
-            <span className="st-label">Base URL（OpenAI 兼容端点）</span>
-            <input
-              className="st-input"
-              value={newStUrl}
-              onChange={(e) => setNewStUrl(e.target.value)}
-              placeholder="如 http://192.168.2.195:8000/v1"
-            />
-          </div>
+          {!editIsBuiltin && (
+            <div className="st-field">
+              <span className="st-label">Base URL（OpenAI 兼容端点）</span>
+              <input
+                className="st-input"
+                value={newStUrl}
+                onChange={(e) => setNewStUrl(e.target.value)}
+                placeholder="如 http://192.168.2.195:8000/v1"
+              />
+            </div>
+          )}
 
           <p className="st-note">
-            {editStationId
-              ? "改名 / 改类型 / 改端点地址；API Key 与模型在上一页各自保留不变。"
-              : "添加后回上一页填 API Key、模型名。⚠️ 填 key = 把 key 交给该端点，请只添加你信任的。"}
+            {editIsBuiltin
+              ? "只改这个平台的显示名（端点/密钥/模型都不变；改回原名即恢复默认）。"
+              : editStationId
+                ? "改名 / 改类型 / 改端点地址；API Key 与模型在上一页各自保留不变。"
+                : "添加后回上一页填 API Key、模型名。⚠️ 填 key = 把 key 交给该端点，请只添加你信任的。"}
           </p>
           <div className="btns">
-            <button onClick={() => { setShowAddStation(false); setEditStationId(null); }}>取消</button>
+            <button onClick={() => { setShowAddStation(false); setEditStationId(null); setEditIsBuiltin(false); }}>取消</button>
             <button className="allow" onClick={editStationId ? saveStationEdit : addStation}>
               {editStationId ? "保存" : "添加"}
             </button>

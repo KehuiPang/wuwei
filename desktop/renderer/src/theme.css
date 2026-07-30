@@ -2040,7 +2040,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 150; /* 权限/询问/恢复等弹窗默认层级 */
 }
+/* 设置页放到较低层：这样待确认的权限/询问弹窗能浮在设置页之上，不必先关设置才看得到 */
+.perm-overlay.settings-overlay { z-index: 100; }
 .perm {
   background: var(--bg);
   border: 1px solid var(--border-strong);
@@ -2113,7 +2116,7 @@ body {
    卡片外不设遮罩，上方历史仍可滚动/交互 */
 .ask {
   position: fixed;
-  z-index: 90;
+  z-index: 160;
   box-sizing: border-box; /* width 精确=输入框内容区宽，padding/border 不再撑宽 */
   background: var(--bg);
   border: 1px solid var(--border-strong);
@@ -2130,7 +2133,7 @@ body {
   position: fixed;
   top: 44px;
   right: 16px;
-  z-index: 95;
+  z-index: 170;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -3288,6 +3291,7 @@ body {
   white-space: nowrap;
 }
 .prov-manage-bar { margin: 0 0 10px; }
+.prov-restore { margin-top: 12px; font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
 .prov-mini {
   flex: none;
   border: 1px solid var(--border-strong);
@@ -3322,9 +3326,9 @@ body {
   cursor: default;
 }
 
-/* 添加中转站独立弹窗(叠在设置之上) */
+/* 添加供应商/工具详情等 设置内的子弹窗(必须叠在设置页 100 之上) */
 .add-st-overlay {
-  z-index: 60;
+  z-index: 180;
   background: rgba(10, 12, 15, 0.5);
 }
 .add-st-dialog {

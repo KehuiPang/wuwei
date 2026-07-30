@@ -1232,7 +1232,7 @@ function persistQuiet(id: string, draft?: string) {
 // 流式草稿节流落盘(~1.2s 一次)：既保存半截又不狂写盘
 function saveDraftThrottled(id: string) {
   const now = Date.now();
-  if (now - (draftSaveAt.get(id) || 0) < 1200) return;
+  if (now - (draftSaveAt.get(id) || 0) < 600) return; // 更勤落盘：强杀时少丢正在生成的回复
   draftSaveAt.set(id, now);
   persistQuiet(id, streamDrafts.get(id));
 }

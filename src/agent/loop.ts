@@ -409,12 +409,13 @@ export class Agent {
     const last = this.messages[this.messages.length - 1];
     if (!last) return;
     if (last.role === "assistant") {
-      // 悬空 tool_use(没配对 tool_result)→ 换成占位文本，避免 API 报 tool_use 无结果
+      // 悬空 tool_use(没配对 tool_result 会 400)→ 只剥掉 tool_use 块，保留已写的文字，别把整段回复丢了
       const hasToolUse = last.content.some((b) => b.type === "tool_use");
       if (hasToolUse) {
+        const keptText = last.content.filter((b) => b.type === "text" && (b as any).text?.trim());
         this.messages[this.messages.length - 1] = {
           role: "assistant",
-          content: [{ type: "text", text: "(已停止)" }],
+          content: keptText.length ? keptText : [{ type: "text", text: "(已停止)" }],
         };
       }
       return;
