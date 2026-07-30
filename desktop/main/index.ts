@@ -50,6 +50,10 @@ import {
   setSessionProject,
   setGroupsOrder,
   setSessionDone,
+  setSessionRunning,
+  clearInterrupted,
+  dismissResume,
+  markInterruptedOnStartup,
   flushAllSessionsSync,
 } from "./sessions.js";
 import {
@@ -66,6 +70,7 @@ import {
   secretsDetectEnabled,
   brainEnabled,
   brainDocsEnabled,
+  resumeDetectEnabled,
   type Settings,
   type SessionBal,
 } from "./settings.js";
@@ -131,6 +136,8 @@ const pendingAsk = new Map<number, (answers: any) => void>();
 const pendingAskSid = new Map<number, string>();
 let askSeq = 0;
 let turnSid = "";
+// 崩溃恢复：本进程是否已做过一次「残留 running→interrupted」检测(在首个 bootstrap 请求里同步做，避免时序竞争)
+let interruptDetected = false;
 // 多任务：每个会话各自的中断控制器；keys = 正在运行的会话集(用于任务计数)
 const runs = new Map<string, AbortController>();
 // 广播当前所有运行中的会话(前端据此显示"N 个任务运行中"+侧栏运行点)
@@ -1244,6 +1251,15 @@ function msgText(m: any): string {
     .join(" ")
     .slice(0, 200);
 }
+// 保留末尾 n 字：助手回复的「下一步问题/建议」几乎都在结尾，从头截断会把它切掉，故取尾。
+function msgTextTail(m: any, n: number): string {
+  return (m.content || [])
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join(" ")
+    .trim()
+    .slice(-n);
+}
 async function maybeSmartTitle(id: string) {
   if (titleInFlight.has(id) || !provider) return;
   const a0 = agents.get(id);
@@ -1309,15 +1325,31 @@ async function suggestNextAction(id: string) {
   suggestInFlight.add(id);
   const recent = msgs.slice(-4);
   const convo = recent
-    .map((m: any) => `${m.role === "user" ? "用户" : "助手"}: ${msgText(m)}`)
+    .map((m: any, i: number) =>
+      // 最后一条助手回复取「结尾」(下一步问题/待办常在末尾)，中间几条取开头做背景即可。
+      `${m.role === "user" ? "用户" : "助手"}: ${i === recent.length - 1 ? msgTextTail(m, 600) : msgText(m)}`,
+    )
     .filter((s: string) => s.length > 3)
     .join("\n");
+  const lastReplyTail = msgTextTail(last, 600); // 助手最后回复的结尾——预测下一步只认它
   try {
     const res = await provider.complete(
-      "你是输入建议助手。下面是用户与编码助手的对话，助手最后的回复常以一个问题或建议的下一步动作结尾。" +
-        "请用中文写出用户接下来最可能输入的一句话(第一人称或祈使句，像用户自己会打的话，不超过20字)，" +
-        "直接输出这句话，不要引号、解释或前缀。若助手在等用户自由发挥、没有明确下一步，只输出：无",
-      [{ role: "user", content: [{ type: "text", text: `对话:\n${convo}\n\n用户接下来最可能输入:` }] }] as any,
+      "你是输入建议助手。下面对话里，助手『最后一条回复』的结尾通常会提出一个问题、或建议一个待确认的下一步动作。" +
+        "请【只针对助手最后回复结尾的那个问题/下一步】，用中文写出用户最可能的回应(第一人称或祈使句，像用户自己会打的话，不超过20字)——" +
+        "比如结尾问『要我继续部署吗?』就回『继续部署』/『先本地验证』这类。" +
+        "务必忽略对话中间的其它话题，别自己另起一件事。直接输出这句话，不要引号、解释或前缀。" +
+        "若结尾没有明确的问题或待确认的下一步(助手在等用户自由发挥)，只输出：无",
+      [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `完整对话(供参考):\n${convo}\n\n【助手最后回复的结尾，就针对它作答】:\n${lastReplyTail}\n\n用户接下来最可能输入:`,
+            },
+          ],
+        },
+      ] as any,
       [],
       {},
     );
@@ -1587,6 +1619,7 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
       images,
     );
     persist(useId); // 用户消息已同步入队,立即落盘让(新)会话进侧栏、带上运行点
+    setSessionRunning(useId, true); // 跨重启存活的运行标记(须在 persist 后:新会话此刻才有元信息)；崩溃/强杀残留→下次启动识别为中断
     await runP;
     if (isHostedProvider(loadSettings()?.providerId)) void refreshWuweiMe(); // 托管平台：扣币后刷新顶栏/菜单余额
     if (runs.get(useId) === ac)
@@ -1613,6 +1646,7 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     streamDrafts.delete(useId); // 清掉流式草稿(真实消息已在历史)
     draftSaveAt.delete(useId);
     persist(useId); // 该会话跑完落盘
+    if (!runs.has(useId)) setSessionRunning(useId, false); // 无残留活跃轮→清运行标记(须在 persist 后,它会保留旧标记)
     void emitAccount(); // 刷新余额/本会话已消耗(DeepSeek 等)
     if (useId === currentId && !ac.signal.aborted) void suggestNextAction(useId); // 仅当前会话、正常跑完才提建议
   }
@@ -1777,9 +1811,33 @@ ipcMain.on("report:generate", (_e, group: string, sessionIds: string[]) => {
 ipcMain.on("session:switch", (_e, id: string) => {
   currentId = id;
   const a = getAgent(id);
-  send("evt:session-loaded", { id, messages: a ? a.getMessages() : [] });
+  // getDisplayMessages：带上还没并入历史的注入消息，否则切回正在跑的会话时「刚发的那条」会不见
+  send("evt:session-loaded", { id, messages: a ? a.getDisplayMessages() : [] });
   sendUsageFor(id);
   void emitAccount();
+});
+
+// 崩溃恢复——用户点「继续」：切到该会话、清中断标记，注入一句续跑指令让 AI 接着未完成的工作。
+// 历史在 getAgent→loadMessages 里已自愈(补齐悬空 tool_result/交替角色)，可直接续跑。
+ipcMain.on("session:resume", (_e, id: string) => {
+  const sid = id || currentId;
+  clearInterrupted(sid);
+  currentId = sid;
+  const a = getAgent(sid);
+  send("evt:session-loaded", { id: sid, messages: a ? a.getDisplayMessages() : [] });
+  sendUsageFor(sid);
+  send("evt:sessions", listSessions());
+  void startTurn(
+    sid,
+    "（这个任务上次运行时被强制中断了。请先回顾上面已完成到哪一步，然后接着把没做完的部分继续完成；若已经做完了，简要说明结果即可。）",
+  );
+});
+
+// 崩溃恢复——用户点「忽略」：只清中断标记，不续跑。
+ipcMain.on("session:dismiss-interrupted", (_e, id: string) => {
+  const sid = id || currentId;
+  dismissResume(sid); // 清中断标记 + 记忽略，内容启发式不再重复提示
+  send("evt:sessions", listSessions());
 });
 
 ipcMain.on("session:delete", (_e, id: string) => {
@@ -1791,7 +1849,7 @@ ipcMain.on("session:delete", (_e, id: string) => {
     const list = listSessions();
     currentId = list[0]?.id ?? randomUUID();
     const a = getAgent(currentId);
-    send("evt:session-loaded", { id: currentId, messages: a ? a.getMessages() : [] });
+    send("evt:session-loaded", { id: currentId, messages: a ? a.getDisplayMessages() : [] });
     sendUsageFor(currentId);
   }
   send("evt:sessions", listSessions());
@@ -1908,14 +1966,26 @@ ipcMain.handle("session:bootstrap", () => {
     const list = listSessions();
     currentId = list[0]?.id ?? randomUUID();
   }
+  // 崩溃恢复(设置开关开时)：首个 bootstrap 同步检测(无时序竞争)。running 残留=强杀(强信号);
+  // 再对最近半截会话做内容启发式。返回所有 interrupted(含历史遗留未处理的)，多个不漏。
+  const resumeOn = resumeDetectEnabled(loadSettings());
+  if (!interruptDetected) {
+    interruptDetected = true;
+    if (resumeOn) markInterruptedOnStartup(true);
+  }
   const a = getAgent(currentId);
   return {
     sessions: listSessions(),
     groups: listGroups(),
     currentId,
-    messages: a ? a.getMessages() : [],
+    messages: a ? a.getDisplayMessages() : [],
     usage: a ? a.getUsage() : EMPTY_USAGE,
     rateLimits: loadRateLimits(curProviderId()) || null,
+    interrupted: resumeOn
+      ? listSessions()
+          .filter((s) => s.interrupted)
+          .map((s) => ({ id: s.id, title: s.title }))
+      : [], // 待恢复的会话(全部)；开关关=不提示
   };
 });
 

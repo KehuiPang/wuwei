@@ -2051,6 +2051,36 @@ body {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
 }
 
+/* 崩溃恢复框：复用 .ask 的定位/外观(贴输入框上方)，内部列出被中断任务，逐个继续/忽略 */
+.resume-ask .resume-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.resume-ask .resume-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised, var(--bg));
+}
+.resume-ask .resume-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resume-ask .resume-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.resume-ask .resume-foot { margin-top: 10px; text-align: right; }
+
 /* ===== ask_user：AI 弹的选择框 =====
    非模态：fixed 定位对齐到输入框(内联 left/width/bottom = 同左同宽、贴其正上方)，
    卡片外不设遮罩，上方历史仍可滚动/交互 */

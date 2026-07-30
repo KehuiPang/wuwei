@@ -172,6 +172,7 @@ export interface AppSettings {
   secretsDetect?: boolean; // 发送前扫描/拦截疑似新密钥(默认开=undefined 视为 true)；关掉后长 token 不再被切成一堆弹窗
   brainEnabled?: boolean; // 启用本地知识网络 Brain：注入系统提示 + 提供 brain_* 工具(默认开)
   brainDocs?: boolean; // brain_recall 是否连带扫描文档冷存储的『相关文档』(默认开)
+  resumeDetect?: boolean; // 启动时检测被中断/干到一半的任务并提示恢复(默认开=undefined 视为 true)
 }
 
 // 三个开关的取值：undefined 一律按「开」处理，保持历史默认行为，只让用户能主动关
@@ -183,6 +184,9 @@ export function brainEnabled(s: Settings | null): boolean {
 }
 export function brainDocsEnabled(s: Settings | null): boolean {
   return s?.app?.brainDocs !== false;
+}
+export function resumeDetectEnabled(s: Settings | null): boolean {
+  return s?.app?.resumeDetect !== false;
 }
 
 export function loadSettings(): Settings | null {

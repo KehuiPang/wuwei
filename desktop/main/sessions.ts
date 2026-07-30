@@ -26,6 +26,9 @@ export interface SessionMeta {
   order?: number; // 手动拖拽排序键(同优先级内按此升序；未拖过=按 -updatedAt)
   project?: string; // AI 推断的项目/主题(用于「按项目智能分组」)
   done?: boolean; // 已完成：排到最后、置灰
+  running?: boolean; // 正在跑一轮(开跑置 true、结束置 false)；能跨重启存活→崩溃/强杀时残留 true
+  interrupted?: boolean; // 上次运行被强制中断(启动时检测到残留 running=true 或内容明显干到一半)→提示恢复
+  resumeDismissed?: boolean; // 用户点过「忽略」→内容启发式不再重复提示该会话(强杀 running 仍会重新提示)
 }
 
 function ensure() {
@@ -116,6 +119,94 @@ export function setSessionDone(id: string, done: boolean) {
   if (!s) return;
   s.done = !!done || undefined;
   saveList(l);
+}
+
+// 标记一轮是否在跑(跨重启存活)：开跑 true、结束 false。硬崩溃跳过收尾→残留 true=下次启动可识别。
+export function setSessionRunning(id: string, running: boolean) {
+  const l = listSessions();
+  const s = l.find((x) => x.id === id);
+  if (!s) return; // 会话还没落盘(空会话)：无需标记
+  const next = running || undefined;
+  if (s.running === next) return; // 无变化不写盘
+  s.running = next;
+  if (running) s.interrupted = undefined; // 重新开跑→清掉旧的中断标记
+  saveList(l);
+}
+
+// 清掉中断标记(用户点「继续」后：要恢复，别再拦)
+export function clearInterrupted(id: string) {
+  const l = listSessions();
+  const s = l.find((x) => x.id === id);
+  if (!s || !s.interrupted) return;
+  s.interrupted = undefined;
+  saveList(l);
+}
+
+// 用户点「忽略」：清中断标记 + 记 resumeDismissed，内容启发式不再重复提示(强杀 running 仍会重新提示)
+export function dismissResume(id: string) {
+  const l = listSessions();
+  const s = l.find((x) => x.id === id);
+  if (!s) return;
+  s.interrupted = undefined;
+  s.resumeDismissed = true;
+  saveList(l);
+}
+
+// 读原始消息(不修复)：内容启发式要看真实末尾结构，repair 会补占位掩盖"半截"特征
+function readRaw(id: string): any[] {
+  try {
+    const m = JSON.parse(readFileSync(join(SDIR, id + ".json"), "utf8"));
+    return Array.isArray(m) ? m : [];
+  } catch {
+    return [];
+  }
+}
+// 内容启发式：会话是否"明显干到一半"——正常收尾=末条助手纯文字回复；否则视为半截：
+//  ① 末条助手带 tool_use(调了工具没等到结果/没继续) ② 末条纯 tool_result(工具跑完助手没给结论)
+//  ③ 末条用户消息(用户发了就退、AI 一个字没回)
+function looksIncomplete(msgs: any[]): boolean {
+  if (!msgs.length) return false;
+  const last = msgs[msgs.length - 1];
+  const blocks = last?.content || [];
+  if (last.role === "assistant") return blocks.some((b: any) => b.type === "tool_use");
+  if (last.role === "user")
+    return (
+      blocks.some((b: any) => b.type === "tool_result") ||
+      blocks.some((b: any) => b.type === "text" && b.text?.trim())
+    );
+  return false;
+}
+
+// 启动时调用一次(设置开关开时)：
+//  - 残留 running=true → 上次被强制中断/崩溃 → 置 interrupted、清 running(强信号，无条件)。
+//  - heuristic=true 时，额外对「最近 24h、未完成标记、未忽略过」的会话做内容启发式，明显半截的也置 interrupted。
+// 返回所有 interrupted 会话(含历史遗留未处理的)。
+export function markInterruptedOnStartup(heuristic: boolean): { id: string; title: string }[] {
+  const l = listSessions();
+  const now = Date.now();
+  const RECENT = 24 * 3600 * 1000;
+  let changed = false;
+  for (const s of l) {
+    if (s.running) {
+      s.running = undefined;
+      s.interrupted = true;
+      changed = true;
+      continue;
+    }
+    if (
+      heuristic &&
+      !s.interrupted &&
+      !s.resumeDismissed &&
+      !s.done &&
+      s.updatedAt >= now - RECENT &&
+      looksIncomplete(readRaw(s.id))
+    ) {
+      s.interrupted = true;
+      changed = true;
+    }
+  }
+  if (changed) saveList(l);
+  return l.filter((s) => s.interrupted).map((s) => ({ id: s.id, title: s.title }));
 }
 
 // 组顺序整体重排(拖拽组头)
@@ -247,6 +338,9 @@ export function saveSession(
     order: prev?.order,
     project: prev?.project,
     done: prev?.done,
+    running: prev?.running, // 保留运行/中断标记，别被每轮落盘抹掉(否则崩溃检测失效)
+    interrupted: prev?.interrupted,
+    resumeDismissed: prev?.resumeDismissed,
   });
   saveList(l);
 }

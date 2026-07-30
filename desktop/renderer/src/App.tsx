@@ -1083,6 +1083,7 @@ export function App() {
     return () => window.removeEventListener("keydown", h);
   }, [lightbox, imgMenu]);
   const [suggestion, setSuggestion] = useState(""); // 输入框幽灵提示：下一步动作建议(Tab 补全)
+  const [interruptedSessions, setInterruptedSessions] = useState<{ id: string; title: string }[]>([]); // 上次被强杀、待恢复的任务
   const [autoMode, setAutoMode] = useState(true);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const sessionsRef = useRef<SessionMeta[]>([]); // 事件回调里取会话标题(ask 通知文案)
@@ -1180,13 +1181,34 @@ export function App() {
         draftLoadedRef.current = true;
       });
   }, []);
+  // 草稿落盘：节流+trailing，而非纯防抖。纯防抖在连续快速打字时每次输入都重置计时器→一直不落盘→
+  // 重启就丢一大段。节流保证连打时也每 ~400ms 落一次(最多丢最后一小段)；用 ref 读最新值，
+  // 避免 trailing 触发时存到旧文本。
+  const draftValsRef = useRef<{ text: string; images: string[] }>({ text: input, images: pendingImages });
+  draftValsRef.current = { text: input, images: pendingImages };
+  const draftTimerRef = useRef<number | null>(null);
+  const draftLastSaveRef = useRef(0);
   useEffect(() => {
     if (!draftLoadedRef.current) return;
-    const t = setTimeout(() => {
-      window.minicc.draftSet({ text: input, images: pendingImages });
-    }, 250);
-    return () => clearTimeout(t);
+    const flush = () => {
+      draftTimerRef.current = null;
+      draftLastSaveRef.current = Date.now();
+      window.minicc.draftSet(draftValsRef.current); // 读 ref=最新文字/图片
+    };
+    const since = Date.now() - draftLastSaveRef.current;
+    const GAP = 400;
+    if (since >= GAP) flush(); // 距上次够久→立即落盘(leading)
+    else if (draftTimerRef.current == null)
+      draftTimerRef.current = window.setTimeout(flush, GAP - since); // 否则排一次 trailing，别在每次输入时清它
   }, [input, pendingImages]);
+  // 关窗/刷新前兜底再落一次(尽量少丢；硬 kill 无法拦，靠上面的节流兜底)
+  useEffect(() => {
+    const onUnload = () => {
+      if (draftLoadedRef.current) window.minicc.draftSet(draftValsRef.current);
+    };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, []);
   // 知识网络后台进度：主进程为真相源，无论设置弹窗开没开都持续订阅，供底部状态栏实时显示。
   const [idxProg, setIdxProg] = useState<{
     building: boolean;
@@ -1872,8 +1894,19 @@ export function App() {
       setItems(messagesToItems(r.messages || []));
       if (r.usage) setUsage(r.usage);
       if (r.rateLimits) setRate(r.rateLimits);
+      if (r.interrupted?.length) setInterruptedSessions(r.interrupted); // 上次被强杀的任务→提示恢复
     });
   }, []);
+
+  // 崩溃恢复：点「继续」让 AI 接着未完成的工作；点「忽略」只清标记。
+  function resumeInterrupted(id: string) {
+    window.minicc.resumeSession(id);
+    setInterruptedSessions((l) => l.filter((x) => x.id !== id));
+  }
+  function dismissInterrupted(id: string) {
+    window.minicc.dismissInterrupted(id);
+    setInterruptedSessions((l) => l.filter((x) => x.id !== id));
+  }
 
   // API Key 等待态：轮询剪贴板，检测到像 key 的新内容就自动验证+设置(零手填)
   useEffect(() => {
@@ -4181,6 +4214,17 @@ export function App() {
         </div>
       )}
 
+      {/* 崩溃恢复：上次被强制中断的任务→贴输入框上方的非模态框(仿 ask_user)，问是否继续 */}
+      {interruptedSessions.length > 0 && (
+        <ResumeBox
+          sessions={interruptedSessions}
+          anchor={composerRef}
+          onResume={resumeInterrupted}
+          onDismiss={dismissInterrupted}
+          onDismissAll={() => interruptedSessions.forEach((s) => dismissInterrupted(s.id))}
+        />
+      )}
+
       {pending && (
         <div className="perm-overlay">
           <div className="perm">
@@ -4573,6 +4617,76 @@ function ResendIcon() {
 // ask_user：AI 弹出的可点击选择框(单选/多选/可多问)
 type AskOption = { label: string; description?: string };
 type AskQuestion = { question: string; header?: string; multiSelect?: boolean; options: AskOption[] };
+// 崩溃恢复框：仿 ask_user，贴输入框上方对齐，非模态。列出被中断的任务，逐个「继续 / 忽略」。
+function ResumeBox({
+  sessions,
+  anchor,
+  onResume,
+  onDismiss,
+  onDismissAll,
+}: {
+  sessions: { id: string; title: string }[];
+  anchor: React.RefObject<HTMLDivElement | null>;
+  onResume: (id: string) => void;
+  onDismiss: (id: string) => void;
+  onDismissAll: () => void;
+}) {
+  // 对齐到输入框：同左、同宽、贴其正上方 8px(与 AskModal 一致)
+  const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
+  useLayoutEffect(() => {
+    const upd = () => {
+      const el = anchor.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const padL = parseFloat(cs.paddingLeft) || 0;
+      const padR = parseFloat(cs.paddingRight) || 0;
+      const padT = parseFloat(cs.paddingTop) || 0;
+      setBox({ left: r.left + padL, width: r.width - padL - padR, bottom: window.innerHeight - (r.top + padT) + 8 });
+    };
+    upd();
+    window.addEventListener("resize", upd);
+    return () => window.removeEventListener("resize", upd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor]);
+  const many = sessions.length > 1;
+  return (
+    <div
+      className="ask resume-ask"
+      style={box ? { left: box.left, width: box.width, bottom: box.bottom } : { visibility: "hidden" }}
+    >
+      <div className="ask-qhead">
+        <span className="ask-tag">⚠ 任务被中断</span>
+        <span className="ask-title">
+          {many ? `上次退出时有 ${sessions.length} 个任务正在运行，要让 AI 接着继续吗？` : "上次这个任务运行时被中断，要让 AI 接着继续吗？"}
+        </span>
+      </div>
+      <div className="resume-rows">
+        {sessions.map((s) => (
+          <div key={s.id} className="resume-row">
+            <span className="resume-title" title={s.title}>💬 {s.title || "新对话"}</span>
+            <span className="resume-btns">
+              <button type="button" className="allow" onClick={() => onResume(s.id)}>
+                继续
+              </button>
+              <button type="button" onClick={() => onDismiss(s.id)}>
+                忽略
+              </button>
+            </span>
+          </div>
+        ))}
+      </div>
+      {many && (
+        <div className="resume-foot">
+          <button type="button" onClick={onDismissAll}>
+            全部忽略
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AskModal({
   data,
   anchor,
@@ -6136,6 +6250,10 @@ function SettingsModal({
     const r: any = await window.minicc.getSettings();
     window.minicc.setSettings({ ...(r?.settings || {}), theme: t });
   }
+  // 会话提醒(自动消失/倒计时)：本页先暂存草稿,点「保存」才提交——走独立 IPC(setAskToast),
+  // 与模型/凭证的大配置(settings:set)分开落盘、互不覆盖。弹窗每次开都重新挂载,草稿从 props 初始化=最新已存值。
+  const [toastAutoDraft, setToastAutoDraft] = useState(askToastAuto);
+  const [toastSecDraft, setToastSecDraft] = useState(askToastSec);
   const [pid, setPid] = useState("codex");
   const [model, setModel] = useState(PRESETS[0].models[0]);
   const [apiKey, setApiKey] = useState("");
@@ -6178,6 +6296,7 @@ function SettingsModal({
   const [secretsDetect, setSecretsDetect] = useState(true); // 发送前扫描/拦截疑似新密钥
   const [brainOn, setBrainOn] = useState(true); // 启用本地知识网络 Brain
   const [brainDocsOn, setBrainDocsOn] = useState(true); // recall 连带扫描『相关文档』
+  const [resumeDetect, setResumeDetect] = useState(true); // 启动时检测被中断/干到一半的任务并提示恢复
   const setAppToggle = (patch: Record<string, boolean>) => {
     const cur = loadedRef.current || {};
     loadedRef.current = { ...cur, app: { ...(cur.app || {}), ...patch } }; // 同步本地，避免后续「保存」把开关刷回
@@ -6523,6 +6642,7 @@ function SettingsModal({
       setSecretsDetect(s.app?.secretsDetect !== false);
       setBrainOn(s.app?.brainEnabled !== false);
       setBrainDocsOn(s.app?.brainDocs !== false);
+      setResumeDetect(s.app?.resumeDetect !== false);
       const sts: Station[] = s.customStations || [];
       setStations(sts);
       stationsRef.current = sts;
@@ -6849,6 +6969,8 @@ function SettingsModal({
   // oauthOverride：一键授权拿到 token 后直接传入保存并关闭
   // 防呆：若被当 onClick 直接调用会收到事件对象，只认字符串，别把事件塞给 cleanKey
   function save(oauthOverride?: string) {
+    // 先提交本页暂存的小配置(会话提醒)——走各自独立 IPC,与下面的大配置(模型/凭证)分开落盘、互不覆盖。
+    onAskToast(toastAutoDraft, toastSecDraft);
     persist({ oauthOverride: typeof oauthOverride === "string" ? oauthOverride : undefined, close: true });
   }
 
@@ -6990,18 +7112,18 @@ function SettingsModal({
                 <div className="app-set-text">
                   <div className="app-set-label">提醒自动消失</div>
                   <div className="app-set-hint">
-                    别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。
+                    别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。改动点「保存」后生效。
                   </div>
                 </div>
                 <input
                   type="checkbox"
                   className="app-set-toggle"
-                  checked={askToastAuto}
-                  onChange={(e) => onAskToast(e.target.checked, askToastSec)}
+                  checked={toastAutoDraft}
+                  onChange={(e) => setToastAutoDraft(e.target.checked)}
                 />
               </div>
-              {askToastAuto && (
-                <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+              {toastAutoDraft && (
+                <div className="app-set-row" style={{ cursor: "default", gap: "10px", marginBottom: "16px" }}>
                   <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>
                     消失倒计时
                   </div>
@@ -7010,15 +7132,33 @@ function SettingsModal({
                     min={5}
                     max={120}
                     step={5}
-                    value={askToastSec}
-                    onChange={(e) => onAskToast(true, Number(e.target.value))}
+                    value={toastSecDraft}
+                    onChange={(e) => setToastSecDraft(Number(e.target.value))}
                     style={{ flex: 1 }}
                   />
                   <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
-                    {askToastSec} 秒
+                    {toastSecDraft} 秒
                   </div>
                 </div>
               )}
+              <div className="app-set-group">任务恢复</div>
+              <div className="app-set-row" style={{ cursor: "default", marginBottom: "16px" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">检测中断的任务并提示恢复</div>
+                  <div className="app-set-hint">
+                    打开时若发现被强制关闭、或明显干到一半就退出的任务，在输入框上方提示是否让 AI 接着继续。关闭则不再提示。
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={resumeDetect}
+                  onChange={(e) => {
+                    setResumeDetect(e.target.checked);
+                    setAppToggle({ resumeDetect: e.target.checked });
+                  }}
+                />
+              </div>
             </>
           )}
 

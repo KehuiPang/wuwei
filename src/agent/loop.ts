@@ -166,6 +166,24 @@ export class Agent {
     return this.messages;
   }
 
+  // 供 UI 显示用：正式历史 + 尚未并入历史的注入消息(还在 pendingInject 缓冲里)。
+  // 修复「运行中发的消息切走再切回就不见了」——切回时用正式历史整体重建，pending 注入还没 drain 进历史故被抹掉。
+  // 只影响显示，不动 getMessages()(模型历史/标题/建议仍用它)。drain 后 pendingInject 清空，下次重建走正式历史，不重复。
+  getDisplayMessages(): Message[] {
+    if (this.pendingInject.length === 0) return this.messages;
+    const pend: Message[] = this.pendingInject
+      .filter((p) => (p.text && p.text.trim()) || p.images.length)
+      .map((p) => ({
+        role: "user" as const,
+        content: [
+          ...(p.text && p.text.trim() ? [{ type: "text", text: p.text } as ContentBlock] : []),
+          ...p.images.map((im) => ({ type: "image", dataUrl: im }) as ContentBlock),
+        ],
+        ts: Date.now(),
+      }));
+    return [...this.messages, ...pend];
+  }
+
   // 载入已保存的会话历史（切换/恢复会话时用）
   setMessages(msgs: Message[]): void {
     this.messages = msgs;

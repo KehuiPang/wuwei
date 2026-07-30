@@ -31,6 +31,8 @@ export interface MiniccApi {
   undoLast(): void;
   newSession(): void;
   switchSession(id: string): void;
+  resumeSession(id: string): void;
+  dismissInterrupted(id: string): void;
   deleteSession(id: string): void;
   setSessionGroup(id: string, group?: string | null): void;
   setSessionPriority(id: string, priority: number, tag?: string): void;
@@ -48,7 +50,7 @@ export interface MiniccApi {
   setBrainPrompt(text: string | null): void;
   setSecretsPrompt(text: string | null): void;
   deleteExchange(sid: string, ordinal: number): void;
-  bootstrap(): Promise<{ sessions: any[]; groups?: string[]; currentId: string; messages: any[]; usage?: any; rateLimits?: any }>;
+  bootstrap(): Promise<{ sessions: any[]; groups?: string[]; currentId: string; messages: any[]; usage?: any; rateLimits?: any; interrupted?: { id: string; title: string }[] }>;
   getSettings(): Promise<{ settings: any; backend: string; model: string; defaultPrompt?: string; defaultBrainPrompt?: string; defaultSecretsPrompt?: string }>;
   setSettings(s: any): void;
   getMemory(): Promise<string>;
