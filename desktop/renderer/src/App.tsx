@@ -486,8 +486,10 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
   const [orderId, setOrderId] = useState("");
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [errMsg, setErrMsg] = useState("");
+  const [reloadKey, setReloadKey] = useState(0); // 递增即重新下单，刷新二维码
+  const refresh = () => setReloadKey((k) => k + 1);
 
-  // 切支付方式 / 首次打开：向后端下单，拿二维码串
+  // 切支付方式 / 首次打开 / 手动刷新：向后端下单，拿二维码串
   useEffect(() => {
     let alive = true;
     setPhase("loading"); setQr(""); setOrderId(""); setErrMsg("");
@@ -503,7 +505,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
       })
       .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
     return () => { alive = false; };
-  }, [method, sku]);
+  }, [method, sku, reloadKey]);
 
   // 轮询订单状态：到账即走成功页（后端会主动查单兜底 notify）
   useEffect(() => {
@@ -554,9 +556,18 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
         <div className="paych-qr">
           {phase === "ready" && qr ? (
             <QRCodeSVG value={qr} size={168} level="M" marginSize={2} />
+          ) : phase === "error" ? (
+            <div style={{ width: 168, height: 168, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 12, boxSizing: "border-box" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C0392B" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5" /><circle cx="12" cy="16.4" r="0.4" fill="#C0392B" stroke="none" />
+              </svg>
+              <div style={{ fontSize: 13, color: "#C0392B", textAlign: "center", lineHeight: 1.5 }}>{errMsg}</div>
+            </div>
           ) : (
-            <div style={{ width: 168, height: 168, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: 13, color: phase === "error" ? "#C0392B" : "#8A93A0", padding: 12, boxSizing: "border-box" }}>
-              {phase === "error" ? errMsg : "生成二维码…"}
+            <div style={{ width: 168, height: 168, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, boxSizing: "border-box" }}>
+              {/* 朱赭品牌色转圈(复用全局 tspin 动画) */}
+              <div style={{ width: 34, height: 34, borderRadius: "50%", border: "3px solid #ECEFF2", borderTopColor: "#C05F3C", animation: "tspin 0.8s linear infinite" }} />
+              <div style={{ fontSize: 12.5, color: "#8A93A0" }}>生成支付二维码…</div>
             </div>
           )}
         </div>
@@ -565,6 +576,20 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
             <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
           ) : phase === "error" ? "换个支付方式或稍后重试" : "正在向服务器下单…"}
         </div>
+        {phase !== "loading" && (
+          <button
+            type="button"
+            className="paych-refresh"
+            onClick={refresh}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, margin: "2px auto 0", width: "fit-content", background: "none", border: "none", color: "#8A93A0", fontSize: 12, cursor: "pointer", padding: "2px 6px" }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <path d="M21 3v5h-5" />
+            </svg>
+            刷新二维码
+          </button>
+        )}
         <div className="paych-secure">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="11" width="18" height="11" rx="2" />
