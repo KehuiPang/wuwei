@@ -263,7 +263,7 @@ export async function wuweiPayCreate(
   accessToken: string,
   sku: string,
   channel: string,
-): Promise<PayCreateResult | "unauthorized" | { error: string }> {
+): Promise<PayCreateResult | "unauthorized" | { error: string; message?: string }> {
   try {
     const res = await fetch(`${SITE}/api/pay/create`, {
       method: "POST",
@@ -275,9 +275,9 @@ export async function wuweiPayCreate(
       body: JSON.stringify({ sku, channel }),
     });
     if (res.status === 401) return "unauthorized";
-    const j = (await res.json().catch(() => null)) as (PayCreateResult & { error?: string }) | null;
-    if (!res.ok || !j) return { error: j?.error || `http_${res.status}` };
-    if (j.error) return { error: j.error };
+    const j = (await res.json().catch(() => null)) as (PayCreateResult & { error?: string; message?: string }) | null;
+    if (!res.ok || !j) return { error: j?.error || `http_${res.status}`, message: j?.message };
+    if (j.error) return { error: j.error, message: j.message };
     return j;
   } catch (e) {
     log("wuweiAuth", "payCreate 异常", String(e));

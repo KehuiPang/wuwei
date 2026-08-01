@@ -209,6 +209,7 @@ contextBridge.exposeInMainWorld("minicc", {
       coins?: number;
       bonus?: number;
       error?: string;
+      message?: string;
     }>,
   payStatus: (orderId: string) =>
     ipcRenderer.invoke("pay:status", orderId) as Promise<{ status: string; balance?: number } | null>,

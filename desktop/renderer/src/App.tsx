@@ -3,6 +3,7 @@ import type { WuweiMe } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
 import { QRCodeSVG } from "qrcode.react";
+import { ALIPAY_LOGO } from "./payLogos.js";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -460,6 +461,20 @@ function QrPlaceholder() {
 }
 
 type PayOrder = { kind: "pack"; pack: CoinPack } | { kind: "plan"; plan: ProPlan };
+// 微信支付图标：清晰矢量微信标（用户 .ico 仅 16px 会糊，改用 SVG）
+function WechatMark() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 48 48" style={{ borderRadius: 9, flex: "0 0 auto", display: "block" }} role="img" aria-label="微信支付">
+      <rect width="48" height="48" rx="12" fill="#07C160" />
+      <path d="M20 12.5C12.8 12.5 7 17.2 7 23c0 3.3 1.9 6.2 4.9 8.1l-1.2 3.7 4.4-2.2c1.4.4 2.9.6 4.5.6.4 0 .9 0 1.3-.06-.3-1-.5-2-.5-3.1 0-6 5.6-10.8 12.6-10.8.5 0 1 .01 1.5.07C32.9 16.1 27 12.5 20 12.5z" fill="#fff" />
+      <circle cx="15.5" cy="20.5" r="1.7" fill="#07C160" />
+      <circle cx="24.5" cy="20.5" r="1.7" fill="#07C160" />
+      <path d="M43 31.2c0-4.7-4.7-8.5-10.5-8.5-6.1 0-10.6 4.3-10.6 9 0 4.7 4.7 8.5 10.6 8.5 1.4 0 2.8-.2 4-.6l3.6 1.9-1-3.2c2.4-1.6 3.9-4 3.9-6.6z" fill="#fff" />
+      <circle cx="29" cy="30" r="1.4" fill="#07C160" />
+      <circle cx="36.5" cy="30" r="1.4" fill="#07C160" />
+    </svg>
+  );
+}
 // 下单错误码 → 用户可读文案
 function payErrMsg(code?: string): string {
   switch (code) {
@@ -486,20 +501,21 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
   const [orderId, setOrderId] = useState("");
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [errMsg, setErrMsg] = useState("");
+  const [errDetail, setErrDetail] = useState(""); // 后端/支付宝真实报错，便于诊断
   const [reloadKey, setReloadKey] = useState(0); // 递增即重新下单，刷新二维码
   const refresh = () => setReloadKey((k) => k + 1);
 
   // 切支付方式 / 首次打开 / 手动刷新：向后端下单，拿二维码串
   useEffect(() => {
     let alive = true;
-    setPhase("loading"); setQr(""); setOrderId(""); setErrMsg("");
+    setPhase("loading"); setQr(""); setOrderId(""); setErrMsg(""); setErrDetail("");
     const channel = method === "ali" ? "alipay" : "wechat";
     window.minicc
       .payCreate(sku, channel)
       .then((r) => {
         if (!alive) return;
         if (!r || r.error || !r.qr || !r.orderId) {
-          setPhase("error"); setErrMsg(payErrMsg(r?.error)); return;
+          setPhase("error"); setErrMsg(payErrMsg(r?.error)); setErrDetail(r?.message || (r?.error ? String(r.error) : "")); return;
         }
         setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
       })
@@ -543,12 +559,12 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
         <div className="paych-sect">选择支付方式</div>
         <div className="paych-pays">
           <button className={"paych-pay" + (method === "ali" ? " sel-ali" : "")} onClick={() => setMethod("ali")}>
-            <span className="paych-logo ali">支</span>
+            <img src={ALIPAY_LOGO} alt="支付宝" style={{ width: 34, height: 34, borderRadius: 9, objectFit: "cover", flex: "0 0 auto", display: "block" }} />
             <span className="paych-pay-nm">支付宝</span>
             <span className="paych-rd" />
           </button>
           <button className={"paych-pay" + (method === "wx" ? " sel-wx" : "")} onClick={() => setMethod("wx")}>
-            <span className="paych-logo wx">微</span>
+            <WechatMark />
             <span className="paych-pay-nm">微信支付</span>
             <span className="paych-rd" />
           </button>
@@ -557,24 +573,26 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
           {phase === "ready" && qr ? (
             <QRCodeSVG value={qr} size={168} level="M" marginSize={2} />
           ) : phase === "error" ? (
-            <div style={{ width: 168, height: 168, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 12, boxSizing: "border-box" }}>
-              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C0392B" strokeWidth="1.8" strokeLinecap="round">
+            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, padding: 8, boxSizing: "border-box" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C0392B" strokeWidth="1.8" strokeLinecap="round">
                 <circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5" /><circle cx="12" cy="16.4" r="0.4" fill="#C0392B" stroke="none" />
               </svg>
-              <div style={{ fontSize: 13, color: "#C0392B", textAlign: "center", lineHeight: 1.5 }}>{errMsg}</div>
+              <div style={{ fontSize: 11.5, color: "#C0392B", textAlign: "center", lineHeight: 1.4 }}>{errMsg}</div>
             </div>
           ) : (
-            <div style={{ width: 168, height: 168, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, boxSizing: "border-box" }}>
+            <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, boxSizing: "border-box" }}>
               {/* 朱赭品牌色转圈(复用全局 tspin 动画) */}
-              <div style={{ width: 34, height: 34, borderRadius: "50%", border: "3px solid #ECEFF2", borderTopColor: "#C05F3C", animation: "tspin 0.8s linear infinite" }} />
-              <div style={{ fontSize: 12.5, color: "#8A93A0" }}>生成支付二维码…</div>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #ECEFF2", borderTopColor: "#C05F3C", animation: "tspin 0.8s linear infinite" }} />
+              <div style={{ fontSize: 12, color: "#8A93A0", whiteSpace: "nowrap" }}>生成支付二维码…</div>
             </div>
           )}
         </div>
         <div className="paych-qrtip">
           {phase === "ready" ? (
             <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
-          ) : phase === "error" ? "换个支付方式或稍后重试" : "正在向服务器下单…"}
+          ) : phase === "error" ? (
+            errDetail ? <span style={{ color: "#C0392B", wordBreak: "break-all" }}>{errDetail}</span> : "换个支付方式或稍后重试"
+          ) : "正在向服务器下单…"}
         </div>
         {phase !== "loading" && (
           <button

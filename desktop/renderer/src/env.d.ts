@@ -137,6 +137,7 @@ export interface MiniccApi {
     coins?: number;
     bonus?: number;
     error?: string;
+    message?: string;
   }>;
   payStatus(orderId: string): Promise<{ status: string; balance?: number } | null>;
   wuweiPasswordLogin(identifier: string, password: string): Promise<{ me?: WuweiMe; error?: string }>;
