@@ -2661,6 +2661,26 @@ ipcMain.handle("login:remember-clear-password", (_e, email: string) => {
   clearRememberedPassword(email);
   return true;
 });
+// 每日签到：带 token 调后端 /api/signin（幂等，当天重复调不重复发）。返回 {success, amount, balanceAfter, streak, message}。
+ipcMain.handle("account:checkin", async () => {
+  const sess = await getFreshWuweiSession();
+  if (!sess) return null;
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const res = await fetch(`${site}/api/signin`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sess.accessToken}`, "X-Device-Id": getDeviceId() },
+    });
+    const j = (await res.json().catch(() => null)) as
+      | { success?: boolean; amount?: number; balanceAfter?: number; streak?: number; message?: string; error?: string }
+      | null;
+    if (!res.ok || !j) return null;
+    return j;
+  } catch (e) {
+    log("checkin", "签到异常", String(e));
+    return null;
+  }
+});
 // 客服留言：POST 到 wuwei-site，后端存库供「留言管理」查看（用户/时间/内容/图片）。带 token 则后端能关联用户。
 ipcMain.handle(
   "support:message",

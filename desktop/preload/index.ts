@@ -215,6 +215,9 @@ const api = {
   // 客服留言：留言内容 + 图片(data URL) + 联系方式 → 后端(wuwei-site 留言管理可见)
   submitSupportMessage: (payload: { message: string; contact: string; images: string[] }) =>
     ipcRenderer.invoke("support:message", payload) as Promise<{ ok?: boolean; error?: string }>,
+  // 每日签到（幂等）：返回 {success, amount, balanceAfter, streak, message} 或 null
+  checkin: () =>
+    ipcRenderer.invoke("account:checkin") as Promise<{ success?: boolean; amount?: number; balanceAfter?: number; streak?: number; message?: string } | null>,
   // 扫码支付：下单拿二维码串 + 轮询订单状态
   payCreate: (sku: string, channel: string) =>
     ipcRenderer.invoke("pay:create", sku, channel) as Promise<{

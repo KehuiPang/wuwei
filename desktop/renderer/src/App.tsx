@@ -1869,6 +1869,7 @@ export function App() {
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」进入）
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
+  const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
   const t = makeT(lang);
@@ -2485,7 +2486,25 @@ export function App() {
 
   useEffect(() => {
     window.wuwei.getAccount().then(setAccount);
-    window.wuwei.wuweiMe().then(setWuwei).catch(() => {});
+    window.wuwei
+      .wuweiMe()
+      .then((me) => {
+        setWuwei(me);
+        // 登录后自动每日签到（后端幂等，当天只发一次）；到账弹轻量 toast + 刷新余额
+        if (me) {
+          void window.wuwei
+            .checkin()
+            .then((r) => {
+              if (r?.success && (r.amount ?? 0) > 0) {
+                setCheckinToast(`每日签到 +${r.amount} 无为币${r.streak && r.streak > 1 ? ` · 连续 ${r.streak} 天` : ""}`);
+                setTimeout(() => setCheckinToast(""), 4200);
+                window.wuwei.wuweiMe().then((m) => { if (m) setWuwei(m); }).catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
     // 主动拉取当前后端/模型，避免 evt:ready 推送早于订阅被丢导致显示「…」
     window.wuwei.getSettings().then((r: any) => {
       if (r?.backend) setMeta((m) => ({ ...m, backend: r.backend, model: r.model || m.model }));
@@ -4534,6 +4553,32 @@ export function App() {
             setShowBrainIntro(true);
           }}
         />
+      )}
+      {/* 每日签到到账：顶部居中轻量 toast，自动消失 */}
+      {checkinToast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 46,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 1400,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 16px",
+            borderRadius: 999,
+            background: "var(--bg-raised)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            boxShadow: "0 10px 30px -8px rgba(0,0,0,.35)",
+            fontSize: 13,
+            fontWeight: 600,
+            animation: "pay-pop 0.2s ease",
+          }}
+        >
+          <CoinIcon size={15} /> {checkinToast}
+        </div>
       )}
       {/* 脑网络功能介绍：欢迎页案例 / 非会员点灰置菜单弹出；点开通跳升级 Pro */}
       {showBrainIntro && (
