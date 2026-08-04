@@ -1,4 +1,4 @@
-// Electron 主进程：创建窗口，复用 minicc 核心(agent/tools/config)，
+// Electron 主进程：创建窗口，复用核心(agent/tools/config)，
 // 通过 IPC 把 Agent 流式 hooks 推给渲染进程，权限确认走 IPC 往返。
 import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage, dialog } from "electron";
 const safeStorageOk = () => {
@@ -76,6 +76,30 @@ import {
 } from "./settings.js";
 
 // 数据目录 .minicc→.wuwei 改名后的一次性迁移，须在任何数据读取前执行。
+// —— 应用版本(edition)：wuwei(默认) / minicc。两者完全独立：appId、数据目录、单实例锁、窗口标题。
+function resolveEdition(): "wuwei" | "minicc" {
+  const fromArgv = process.argv.find((a) => a.startsWith("--edition="));
+  let raw = (fromArgv ? fromArgv.split("=")[1] : "") || process.env.WUWEI_EDITION || "";
+  if (!raw) {
+    try {
+      const exeName = (process.execPath || "").toLowerCase();
+      const appName = (app.getName() || "").toLowerCase();
+      if (exeName.includes("minicc") || appName.includes("minicc")) raw = "minicc";
+    } catch {
+      /* ignore */
+    }
+  }
+  return raw.trim().toLowerCase() === "minicc" ? "minicc" : "wuwei";
+}
+const EDITION = resolveEdition();
+const IS_MINICC = EDITION === "minicc";
+const APP_NAME = IS_MINICC ? "minicc" : "无为";
+const APP_ID = IS_MINICC ? "com.minicc.app" : "com.wuwei.app";
+const DATA_DIR_NAME = IS_MINICC ? ".minicc" : ".wuwei";
+process.env.WUWEI_DATA_DIR_NAME = DATA_DIR_NAME;
+process.env.WUWEI_EDITION = EDITION;
+
+// 数据目录 .minicc→.wuwei 改名后的一次性迁移，须在任何数据读取前执行。
 migrateFromMinicc();
 import { getAccount, logout } from "./account.js";
 import {
@@ -102,7 +126,7 @@ import { saveWuweiSession, loadWuweiSession, clearWuweiSession } from "./wuwei-s
 import { getDeviceId } from "../../src/device-id.js";
 import { log, LOG_FILE } from "./logger.js";
 
-log("boot", "minicc 主进程启动", "日志文件:", LOG_FILE);
+log("boot", `${APP_NAME} 主进程启动 (edition=${EDITION})`, "日志文件:", LOG_FILE);
 process.on("uncaughtException", (e) => log("uncaught", e?.stack || String(e)));
 process.on("unhandledRejection", (e) => log("unhandledRejection", String(e)));
 
@@ -1383,7 +1407,7 @@ function createWindow() {
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     minWidth: 640,
     minHeight: 480,
-    title: "无为",
+    title: APP_NAME,
     backgroundColor: "#16191e", // 无为·玄墨黑，避免加载时白闪
     // 无边框自绘：mac 保留悬浮红绿灯(hiddenInset)，Windows/Linux 全去原生边框+菜单，标题栏自绘
     ...(process.platform === "darwin"
@@ -1439,7 +1463,7 @@ function createWindow() {
 }
 
 // 单例锁：防御纵深——即使被意外多次启动也只存活一个实例，杜绝 fork bomb 类问题
-const gotLock = app.requestSingleInstanceLock();
+const gotLock = app.requestSingleInstanceLock({ edition: EDITION });
 if (!gotLock) {
   app.quit();
 } else {
@@ -1456,11 +1480,11 @@ if (!gotLock) {
       const iconFile = join(__dirname, "../../build/tray.ico");
       const img = nativeImage.createFromPath(iconFile);
       tray = new Tray(img);
-      tray.setToolTip("无为");
+      tray.setToolTip(APP_NAME);
       tray.setContextMenu(
         Menu.buildFromTemplate([
           {
-            label: "打开无为",
+            label: `打开${APP_NAME}`,
             click: () => {
               win?.show();
               win?.focus();
@@ -1510,10 +1534,10 @@ if (!gotLock) {
     }
     // 任务栏图标/分组标识：必须在创建窗口【之前】设置，Windows 才会把窗口归到无为身份下。
     try {
-      app.setName("无为");
+      app.setName(APP_NAME);
       // ⚠️ 必须与打包 appId(package.json build.appId = com.wuwei.app)一致，
       //    否则安装版快捷方式的 AppUserModelId 与运行时不匹配，任务栏图标关联不上、回退默认图标。
-      if (process.platform === "win32") app.setAppUserModelId("com.wuwei.app");
+      if (process.platform === "win32") app.setAppUserModelId(APP_ID);
     } catch {
       /* ignore */
     }
@@ -1543,27 +1567,42 @@ app.on("before-quit", () => {
 function isHostedProvider(pid?: string): boolean {
   return !!pid && pid.startsWith("wuwei-");
 }
+// 无为会话统一取新：所有要用 token 的地方都走这里。
+// 为什么要收口：Supabase 的 refresh_token 是「一次性轮换」——用一次就换新的、旧的立刻作废。
+// 过去 injectWuwei / wuwei-me / pay:create / pay:status 各自独立 refresh，一旦并发（如启动拉 me 时点了充值），
+// 第二个用的就是已被轮换作废的旧 refresh_token → 后端 refresh_failed → 误清会话 → 表现为「登录莫名很快就过期」。
+// 这里用「在途 Promise 单飞」让并发只跑一次 refresh，并提前 90s 主动续期，access_token 永不踩着过期线用。
+let refreshInflight: Promise<WuweiSession | null> | null = null;
+async function getFreshWuweiSession(): Promise<WuweiSession | null> {
+  const sess = loadWuweiSession();
+  if (!sess) return null;
+  const BUFFER = 90 * 1000; // 距过期 <90s 就提前续
+  if (!sess.expiresAt || sess.expiresAt - Date.now() > BUFFER) return sess;
+  if (!refreshInflight) {
+    refreshInflight = (async () => {
+      const fresh = await wuweiRefresh(sess.refreshToken);
+      if (!fresh) { clearWuweiSession(); return null; }
+      saveWuweiSession(fresh);
+      return fresh;
+    })().finally(() => { refreshInflight = null; });
+  }
+  return refreshInflight;
+}
 // 托管平台每轮开跑前：把新鲜的无为 access_token 注入为网关的 apiKey(快过期先续期)，重建 provider。
 async function ensureHostedProviderReady(): Promise<void> {
   const st = loadSettings();
   if (!st || !isHostedProvider(st.providerId)) return;
-  let sess = loadWuweiSession();
-  if (!sess) return; // 未登录：发送门槛已拦，这里兜底不注入
-  if (sess.expiresAt && sess.expiresAt - Date.now() < 2 * 60 * 1000) {
-    const fresh = await wuweiRefresh(sess.refreshToken);
-    if (fresh) {
-      saveWuweiSession(fresh);
-      sess = fresh;
-    }
-  }
+  const sess = await getFreshWuweiSession();
+  if (!sess) return; // 未登录/续期失败：发送门槛已拦，这里兜底不注入
   applyEnvFromSettings(st); // 平台 baseUrl(网关)等按设置
-  process.env.MINICC_API_KEY = sess.accessToken; // 网关的"key"=用户无为 token(只 env、不落 config)
+  process.env.WUWEI_API_KEY = sess.accessToken; // 网关的"key"=用户无为 token(只 env、不落 config)
+  process.env.MINICC_API_KEY = sess.accessToken; // 兼容：config.ts 仍读旧名，过渡期内双写
   provider = makeProvider(loadConfig());
   for (const a of agents.values()) a.setProvider(provider);
 }
 // 托管平台每轮结束后：拉最新余额推给渲染层(账号菜单余额随扣币刷新)。
 async function refreshWuweiMe(): Promise<void> {
-  const sess = loadWuweiSession();
+  const sess = await getFreshWuweiSession();
   if (!sess) return;
   const me = await wuweiFetchMe(sess.accessToken);
   if (me && me !== "unauthorized") send("evt:wuwei-me", me);
@@ -2460,7 +2499,7 @@ ipcMain.on("browser:detach", () => {
     browserAttached = false;
   }
   if (!browserPopWin || browserPopWin.isDestroyed()) {
-    browserPopWin = new BrowserWindow({ width: 1040, height: 780, title: "minicc 浏览器" });
+    browserPopWin = new BrowserWindow({ width: 1040, height: 780, title: "无为 浏览器" });
     const fit = () => {
       if (!browserPopWin || browserPopWin.isDestroyed()) return;
       const [w, h] = browserPopWin.getContentSize();
@@ -2592,10 +2631,11 @@ ipcMain.handle("account:wuwei-send-code", (_e, target: string, lang?: string, pu
 );
 // 冷启动/刷新：读本地会话 → /api/me；401 走 /api/refresh 续期后重试。
 ipcMain.handle("account:wuwei-me", async () => {
-  const sess = loadWuweiSession();
+  const sess = await getFreshWuweiSession(); // 提前续期 + 单飞，避免并发把 refresh_token 用作废
   if (!sess) return null;
   let me = await wuweiFetchMe(sess.accessToken);
   if (me === "unauthorized") {
+    // 提前续过还被拒(时钟偏差/刚好失效)：再强制续一次
     const fresh = await wuweiRefresh(sess.refreshToken);
     if (!fresh) {
       clearWuweiSession();
@@ -2615,7 +2655,7 @@ ipcMain.handle("account:wuwei-device-id", () => getDeviceId());
 
 // ── 扫码支付：下单 / 轮询。带用户 token 调后端，401 自动 refresh 重试（同 wuwei-me）──
 ipcMain.handle("pay:create", async (_e, sku: string, channel: string) => {
-  const sess = loadWuweiSession();
+  const sess = await getFreshWuweiSession(); // 下单前先确保 token 新鲜，减少 401 与误登出
   if (!sess) return { error: "not_logged_in" };
   let r = await wuweiPayCreate(sess.accessToken, sku, channel);
   if (r === "unauthorized") {
@@ -2630,7 +2670,7 @@ ipcMain.handle("pay:create", async (_e, sku: string, channel: string) => {
   return r === "unauthorized" ? { error: "not_logged_in" } : r;
 });
 ipcMain.handle("pay:status", async (_e, orderId: string) => {
-  const sess = loadWuweiSession();
+  const sess = await getFreshWuweiSession();
   if (!sess) return null;
   let r = await wuweiPayStatus(sess.accessToken, orderId);
   if (r === "unauthorized") {
