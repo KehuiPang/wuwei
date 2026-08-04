@@ -31,7 +31,13 @@ const EVENTS = [
   "evt:brain-concepts",
 ] as const;
 
-contextBridge.exposeInMainWorld("minicc", {
+// 把当前 edition(wuwei/minicc)暴露给渲染层，供动态设置窗口/文档标题。
+contextBridge.exposeInMainWorld("wuweiEdition", {
+  edition: process.env.WUWEI_EDITION || "wuwei",
+  appName: (process.env.WUWEI_EDITION || "wuwei") === "minicc" ? "minicc" : "无为",
+});
+
+const api = {
   send: (sid: string, text: string, images?: string[]) =>
     ipcRenderer.send("chat:send", sid, text, images),
   inject: (sid: string, text: string, images?: string[]) =>
@@ -199,6 +205,16 @@ contextBridge.exposeInMainWorld("minicc", {
   wuweiMe: () => ipcRenderer.invoke("account:wuwei-me") as Promise<WuweiMe | null>,
   wuweiLogout: () => ipcRenderer.invoke("account:wuwei-logout") as Promise<boolean>,
   wuweiDeviceId: () => ipcRenderer.invoke("account:wuwei-device-id") as Promise<string>,
+  // 记住登录：多账号历史(自动填充 + 账号下拉)
+  rememberGet: () =>
+    ipcRenderer.invoke("login:remember-get") as Promise<{ last?: string; accounts: { email: string; password: string }[] }>,
+  rememberSet: (email: string, password: string) =>
+    ipcRenderer.invoke("login:remember-set", email, password) as Promise<boolean>,
+  rememberClearPassword: (email: string) =>
+    ipcRenderer.invoke("login:remember-clear-password", email) as Promise<boolean>,
+  // 客服留言：留言内容 + 图片(data URL) + 联系方式 → 后端(wuwei-site 留言管理可见)
+  submitSupportMessage: (payload: { message: string; contact: string; images: string[] }) =>
+    ipcRenderer.invoke("support:message", payload) as Promise<{ ok?: boolean; error?: string }>,
   // 扫码支付：下单拿二维码串 + 轮询订单状态
   payCreate: (sku: string, channel: string) =>
     ipcRenderer.invoke("pay:create", sku, channel) as Promise<{
@@ -253,4 +269,8 @@ contextBridge.exposeInMainWorld("minicc", {
       for (const [ch, h] of handlers) ipcRenderer.removeListener(ch, h);
     };
   },
-});
+};
+
+// 渲染进程桥接对象：暴露为 window.wuwei
+contextBridge.exposeInMainWorld("wuwei", api);
+

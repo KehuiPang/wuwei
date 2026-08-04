@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WuweiMe } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
+import { WECHAT_CS_QR } from "./wechatCsQr.js";
 import { QRCodeSVG } from "qrcode.react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -252,7 +253,7 @@ function WuweiLogo({ size = 46 }: { size?: number }) {
       <path
         d="M152.04 193.48 A82 82 0 1 1 195.48 150.04"
         fill="none"
-        stroke="#16191E"
+        stroke="currentColor"
         strokeWidth="12"
         strokeLinecap="round"
       />
@@ -313,16 +314,18 @@ const COIN_PACKS: CoinPack[] = [
 ];
 // ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
-type ProPlan = { id: "month" | "year"; sku: string; name: string; price: number; unit: string; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
+// 月付阶梯（去年付，3 档简洁）：1x / 10x / 100x，越高档每千币单价越低（29 → 19.9 → 9.99 元/千币）。saved=按基础价买同量能省多少。
+type ProPlan = { id: "pro" | "pro10x" | "pro100x"; sku: string; name: string; price: number; unit: string; coins: number; signin: number; saved: number; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
-  { id: "month", sku: "plan_month", name: "无为 Pro 月付", price: 29, unit: "/月", sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "最受欢迎", tagType: "pop" },
-  { id: "year", sku: "plan_year", name: "无为 Pro 年付", price: 288, unit: "/年", sub: "每月 1200 无为币 · 每日签到 30", note: "付10月送2月，全年省 ¥60", tag: "最省心", tagType: "rec" },
+  { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 29, unit: "/月", coins: 1000, signin: 20, saved: 0, sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "入门", tagType: "pop" },
+  { id: "pro10x", sku: "plan_pro_10x", name: "无为 Pro 10×", price: 199, unit: "/月", coins: 10000, signin: 50, saved: 91, sub: "每月 10000 无为币 · 每日签到 50", note: "省 31%", tag: "最受欢迎", tagType: "rec" },
+  { id: "pro100x", sku: "plan_pro_100x", name: "无为 Pro 100×", price: 999, unit: "/月", coins: 100000, signin: 100, saved: 1901, sub: "每月 100000 无为币 · 每日签到 100", note: "省 66%", tag: "顶配", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
-  ["上下文 256K", "长任务更不断线"],
+  ["专属客服", "问题优先响应处理"],
   ["多任务并行", "同时跑多个会话"],
-  ["云端备份", "重要会话可恢复"],
+  ["脑网络记忆", "持续学习，长期记忆"],
 ];
 
 // ② 购买积分包（朱系）：站内选档，付款按钮暂跳 pricing（Paddle 接入待后端产品 ID）
@@ -371,16 +374,16 @@ function CoinPackModal({ packs, onClose, onCheckout }: { packs: CoinPack[]; onCl
 
 // ③ 升级无为 Pro（金系）：月付/年付选择 + 2×2 权益；付款按钮暂跳 pricing
 function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (plan: ProPlan) => void }) {
-  const [sel, setSel] = useState<"month" | "year">("year");
+  const [sel, setSel] = useState<ProPlan["id"]>("pro10x");
   const selPlan = PRO_PLANS.find((x) => x.id === sel)!;
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
-      <div className="pay-card" onClick={(e) => e.stopPropagation()}>
+      <div className="pay-card plan" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
         <div className="pay-top">
           <PayEnso />
           <h2>升级无为 Pro</h2>
-          <p>托管额度、更长上下文、多任务并行。长期使用选年付更省心。</p>
+          <p>托管额度、专属客服、多任务并行。用得越多，选越高档越划算。</p>
         </div>
         <div className="pay-plans">
           {PRO_PLANS.map((plan) => (
@@ -421,7 +424,7 @@ function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (
           ))}
         </div>
         <button className="pay-cta gold" onClick={() => onCheckout(selPlan)}>
-          {sel === "year" ? "升级年付 ¥288" : "升级月付 ¥29"}
+          升级 {selPlan.name} ¥{selPlan.price}/月
         </button>
         <div className="pay-fnote">
           <span className="ok">✓</span> 随时可升级　<span className="ok">✓</span> 功能权益与官网一致
@@ -495,16 +498,238 @@ function payErrMsg(code?: string): string {
 }
 // 微信支付开关：微信商户尚未开通，先隐藏，只留支付宝；开通后翻成 true 即恢复。
 const WECHAT_PAY_ENABLED = false;
+
+// 客服微信号（二维码 WECHAT_CS_QR 从 ./wechatCsQr 引入，默认显示大成微信码）。
+const WECHAT_CS_ID = "dacheng8803";
+// 联系客服弹窗（共享）：支付遇到问题 / 账号菜单都可打开。扫码或搜号加客服微信，加不上可点「直接留言」进留言表单。
+function ContactSupportModal({ onClose, onLeaveMessage }: { onClose: () => void; onLeaveMessage: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const copyId = () => {
+    void navigator.clipboard
+      ?.writeText(WECHAT_CS_ID)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  };
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 4 }}>
+          <PayEnso size={44} />
+          <h2>联系客服</h2>
+        </div>
+        <div style={{ padding: "0 30px 28px" }}>
+        <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 14px" }}>
+          遇到问题？扫码或搜索微信号，添加客服「大成」
+        </p>
+        <div
+          style={{
+            width: 184,
+            height: 184,
+            margin: "0 auto 12px",
+            borderRadius: 14,
+            background: "#fff",
+            border: "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          {WECHAT_CS_QR ? (
+            <img src={WECHAT_CS_QR} alt="客服微信二维码" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          ) : (
+            <span style={{ fontSize: 12, color: "#8A93A0" }}>客服微信二维码</span>
+          )}
+        </div>
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 10,
+            background: "var(--bg-soft)",
+            borderRadius: 10,
+            padding: "8px 12px",
+            marginBottom: 14,
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--text)" }}>
+            微信号 <b style={{ letterSpacing: 0.5 }}>{WECHAT_CS_ID}</b>
+          </span>
+          <button
+            onClick={copyId}
+            style={{ border: "none", background: "var(--spark)", color: "#fff", fontSize: 12, borderRadius: 7, padding: "4px 10px", cursor: "pointer" }}
+          >
+            {copied ? "已复制" : "复制"}
+          </button>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
+          加不上微信？
+          <span onClick={onLeaveMessage} style={{ color: "var(--spark)", cursor: "pointer", fontWeight: 600 }}>
+            直接留言
+          </span>
+          ，客服会尽快回复你。
+        </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 留言表单：加不上微信时走这里。留言内容 + 可粘贴图片 + 联系方式 → 提交到后端（wuwei-site 留言管理可见）。
+function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: () => void }) {
+  const [msg, setMsg] = useState("");
+  const [contact, setContact] = useState("");
+  const [images, setImages] = useState<string[]>([]); // data URL 缩略
+  const [phase, setPhase] = useState<"edit" | "sending" | "done">("edit");
+  const [err, setErr] = useState("");
+  const [preview, setPreview] = useState<string | null>(null); // 点击缩略图看大图
+  const onPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const it of Array.from(items)) {
+      if (it.type.startsWith("image/")) {
+        const f = it.getAsFile();
+        if (!f) continue;
+        const r = new FileReader();
+        r.onload = () => setImages((xs) => (xs.length >= 4 ? xs : [...xs, String(r.result)]));
+        r.readAsDataURL(f);
+      }
+    }
+  };
+  const submit = async () => {
+    if (!msg.trim()) return setErr("请先填写留言内容");
+    setPhase("sending");
+    setErr("");
+    try {
+      const r = await window.wuwei.submitSupportMessage?.({ message: msg.trim(), contact: contact.trim(), images });
+      if (r?.ok) setPhase("done");
+      else {
+        setPhase("edit");
+        setErr(r?.error || `提交失败，请稍后重试，或直接加客服微信 ${WECHAT_CS_ID}`);
+      }
+    } catch {
+      setPhase("edit");
+      setErr(`提交失败，请稍后重试，或直接加客服微信 ${WECHAT_CS_ID}`);
+    }
+  };
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    boxSizing: "border-box",
+    border: "1px solid var(--border)",
+    background: "var(--bg-soft)",
+    color: "var(--text)",
+    borderRadius: 10,
+    fontSize: 13,
+    padding: "10px 12px",
+    outline: "none",
+  };
+  return (
+    <>
+    <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 4 }}>
+          <PayEnso size={40} />
+          <h2>留言反馈</h2>
+        </div>
+        <div style={{ padding: "0 30px 28px" }}>
+          {phase === "done" ? (
+            <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>✓ 留言已提交</div>
+              <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.7, marginBottom: 18 }}>
+                我们已收到你的留言，客服会尽快通过你留的联系方式回复你。
+              </div>
+              <button
+                onClick={onClose}
+                style={{ width: "100%", padding: "10px", borderRadius: 10, border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+              >
+                完成
+              </button>
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={msg}
+                onChange={(e) => setMsg(e.target.value)}
+                onPaste={onPaste}
+                placeholder="描述你遇到的问题（可直接粘贴截图）…"
+                rows={4}
+                style={{ ...inputStyle, resize: "vertical", minHeight: 90, marginBottom: 10, lineHeight: 1.6 }}
+              />
+              {images.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                  {images.map((src, i) => (
+                    <div key={i} style={{ position: "relative", width: 56, height: 56, borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)" }}>
+                      <img
+                        src={src}
+                        alt=""
+                        onClick={() => setPreview(src)}
+                        title="点击查看大图"
+                        style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }}
+                      />
+                      <button
+                        onClick={() => setImages((xs) => xs.filter((_, j) => j !== i))}
+                        style={{ position: "absolute", top: 1, right: 1, width: 16, height: 16, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.55)", color: "#fff", fontSize: 11, lineHeight: "16px", cursor: "pointer", padding: 0 }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>可在上方文本框内粘贴图片，最多 4 张</div>
+              <input
+                value={contact}
+                onChange={(e) => setContact(e.target.value)}
+                placeholder="联系方式（微信 / 手机 / 邮箱，方便客服回复）"
+                style={{ ...inputStyle, marginBottom: 10 }}
+              />
+              {err && <div style={{ fontSize: 12, color: "#C0392B", marginBottom: 10, lineHeight: 1.5 }}>{err}</div>}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={onBack}
+                  style={{ flex: "0 0 auto", padding: "10px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "none", color: "var(--text-dim)", fontSize: 13, cursor: "pointer" }}
+                >
+                  返回
+                </button>
+                <button
+                  onClick={submit}
+                  disabled={phase === "sending"}
+                  style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: phase === "sending" ? "default" : "pointer", opacity: phase === "sending" ? 0.7 : 1 }}
+                >
+                  {phase === "sending" ? "提交中…" : "提交留言"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+    {preview && (
+      <div
+        onClick={() => setPreview(null)}
+        style={{ position: "fixed", inset: 0, zIndex: 1300, background: "rgba(0,0,0,.82)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}
+      >
+        <img src={preview} alt="" style={{ maxWidth: "92%", maxHeight: "92%", objectFit: "contain", borderRadius: 8, boxShadow: "0 10px 40px rgba(0,0,0,.5)" }} />
+      </div>
+    )}
+    </>
+  );
+}
 // 付款页（国内支付宝/微信扫码）：向后端下单拿二维码串 → 渲染真 QR → 轮询订单状态，到账自动跳成功页。
 // 国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
-function PayCheckoutModal({ order, onClose, onPaid, onFail, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onFail: () => void; onNeedLogin: () => void }) {
+function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onContactSupport: () => void; onNeedLogin: () => void }) {
   const [method, setMethod] = useState<"ali" | "wx">("ali");
   const isPlan = order.kind === "plan";
   const sku = order.kind === "pack" ? order.pack.sku : order.plan.sku;
-  const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} 无为币` : `无为 Pro · ${order.plan.id === "year" ? "年付" : "月付"}`;
-  const gift = order.kind === "pack" ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}` : order.plan.note || order.plan.sub;
+  const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} 无为币` : order.plan.name;
+  const gift = order.kind === "pack" ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}` : order.plan.note ? `${order.plan.sub} · ${order.plan.note}` : order.plan.sub;
   const price = order.kind === "pack" ? order.pack.price : order.plan.price;
-  const unit = isPlan ? (order.plan.id === "year" ? "/年" : "/月") : "";
+  const unit = isPlan ? order.plan.unit : "";
   const methodName = method === "ali" ? "支付宝" : "微信";
 
   const [qr, setQr] = useState("");
@@ -606,7 +831,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail, onNeedLogin }: { ord
             <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
           ) : phase === "error" ? (
             errDetail ? <span style={{ color: "#C0392B", wordBreak: "break-all" }}>{errDetail}</span> : "换个支付方式或稍后重试"
-          ) : "正在向服务器下单…"}
+          ) : ""}
         </div>
         {phase !== "loading" && (
           <button
@@ -627,10 +852,10 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail, onNeedLogin }: { ord
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          支付安全由<b>微信 / 支付宝</b>官方保障
+          支付安全由<b>支付宝</b>官方保障
         </div>
         <div className="paych-alt">
-          <button onClick={onFail}>支付遇到问题？</button>
+          <button onClick={onContactSupport}>支付遇到问题？</button>
         </div>
       </div>
     </div>
@@ -639,7 +864,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail, onNeedLogin }: { ord
 
 type PayResult =
   | { kind: "coin"; added: number; bonus: number; balance: number; order: string }
-  | { kind: "pro"; plan: "month" | "year"; expire: string; giftCoins: number; signin: number; perks: string[]; saved?: number; order: string }
+  | { kind: "pro"; planName: string; expire: string; giftCoins: number; signin: number; perks: string[]; saved?: number; order: string }
   | { kind: "fail" };
 // 支付结果页：积分到账 / Pro 月付·年付开通 / 失败。真实由 webhook 驱动，此处按订单即时展示。
 function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClose: () => void; onRetry: () => void }) {
@@ -678,10 +903,10 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
                 <svg viewBox="0 0 24 24" fill="none" stroke="#A97F2E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </div>
               <div className="payres-ttl">
-                开通成功 <span className="payres-pill"><PaySpark size={11} /> Pro {result.plan === "year" ? "年付" : "月付"}</span>
+                开通成功 <span className="payres-pill"><PaySpark size={11} /> {result.planName}</span>
               </div>
               <div className="payres-desc">
-                无为 Pro {result.plan === "year" ? "年付" : ""}已开通，{result.plan === "year" ? "全年畅享更省心" : "尊享全部会员权益"}
+                {result.planName} 已开通，尊享全部会员权益
               </div>
             </div>
             <div className="payres-box gold">
@@ -793,6 +1018,123 @@ function GiftIcon({ size = 22, color = "currentColor" }: { size?: number; color?
 const PHONE_LOGIN_ENABLED = false;
 const WECHAT_LOGIN_ENABLED = false;
 
+// 登录激励卡（居中弹窗）：未登录发消息时先弹这张（免费顶级模型 + 注册得 100 无为币），
+// 点「登录」再切到真正的登录表单。比一上来就甩登录框更干净、转化更好。
+function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onClose: () => void; onLogin: () => void }) {
+  const zh = lang === "zh";
+  return (
+    <>
+      <div className="mq-overlay" onClick={onClose} />
+      <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+        <div
+          style={{
+            width: 300,
+            maxWidth: "90vw",
+            background: "var(--bg-raised)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: 16,
+            padding: "22px 22px 20px",
+            boxShadow: "0 16px 44px rgba(0,0,0,.28)",
+            position: "relative",
+            textAlign: "center",
+          }}
+        >
+          <button
+            onClick={onClose}
+            title="关闭"
+            style={{ position: "absolute", top: 8, right: 10, width: 26, height: 26, background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, lineHeight: 1, cursor: "pointer" }}
+          >
+            ×
+          </button>
+          <div
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: "50%",
+              margin: "4px auto 12px",
+              background: "linear-gradient(135deg,#C87551,#A34E30)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 5px 16px rgba(192,95,60,.35)",
+            }}
+          >
+            <GiftIcon size={22} color="#F4F6F8" />
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 7, lineHeight: 1.3, letterSpacing: 0.2, color: "var(--text)" }}>
+            {zh ? (
+              <>
+                <span style={{ color: "#C05F3C" }}>免费</span>使用最新顶级模型
+              </>
+            ) : (
+              <>
+                Top-tier models, <span style={{ color: "#C05F3C" }}>free</span>
+              </>
+            )}
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.4 }}>
+            {zh ? "无需自备 API Key，登录即用" : "No API key needed — just sign in"}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, auto)",
+              justifyContent: "center",
+              columnGap: 16,
+              rowGap: 7,
+              marginBottom: 13,
+              fontSize: 12,
+              fontWeight: 500,
+              color: "var(--text-dim)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {[
+              { k: "kimi", n: "Kimi" },
+              { k: "claude", n: "Claude" },
+              { k: "gpt", n: "GPT" },
+              { k: "deepseek", n: "DeepSeek" },
+            ].map((m) => (
+              <span key={m.k} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span
+                  style={{ width: 18, height: 18, borderRadius: 5, background: "#fff", boxShadow: "0 0 0 1px rgba(0,0,0,.06)", display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 auto" }}
+                >
+                  <img src={BRAND_LOGOS[m.k]} alt="" width={13} height={13} style={{ display: "block", objectFit: "contain" }} />
+                </span>
+                {m.n}
+              </span>
+            ))}
+          </div>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 11.5,
+              fontWeight: 500,
+              color: "#C05F3C",
+              background: "rgba(192,95,60,.09)",
+              padding: "3px 11px",
+              borderRadius: 20,
+              marginBottom: 16,
+            }}
+          >
+            <CoinIcon size={12} />
+            {zh ? "注册即得 100 无为币" : "Get 100 credits"}
+          </div>
+          <button
+            onClick={onLogin}
+            style={{ width: "100%", padding: "10px", borderRadius: 10, border: "none", background: "#C05F3C", color: "#F4F6F8", fontSize: 14, fontWeight: 600, letterSpacing: 2, cursor: "pointer", boxShadow: "0 3px 12px rgba(192,95,60,.3)" }}
+          >
+            {t("login.signin")}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function WuweiLoginModal({
   incentive,
   lang,
@@ -822,6 +1164,25 @@ function WuweiLoginModal({
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [cooldown]);
+  // 记住登录：账号历史 + 打开时自动填最近一个账号密码
+  const [accounts, setAccounts] = useState<{ email: string; password: string }[]>([]);
+  const [showAcctDrop, setShowAcctDrop] = useState(false); // 账号输入下拉历史
+  useEffect(() => {
+    // 兼容旧 preload：新 IPC 未注入时(主进程未重启)优雅跳过，绝不因此白屏
+    if (typeof window.wuwei?.rememberGet !== "function") return;
+    void window.wuwei
+      .rememberGet()
+      .then((d) => {
+        if (!d) return;
+        setAccounts(d.accounts || []);
+        const last = d.accounts?.find((a) => a.email === d.last) || d.accounts?.[0];
+        if (last) {
+          setEmail(last.email);
+          setPassword(last.password || "");
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // 后端可能回错误码(如 missing_credentials)或人类可读消息；码→友好文案，消息→原样。
   function friendlyErr(raw?: string): string {
@@ -901,9 +1262,11 @@ function WuweiLoginModal({
       res = await window.wuwei.wuweiRegister(email.trim(), code.trim(), password);
     else res = await window.wuwei.wuweiCodeLogin(phone.trim(), code.trim());
     setBusy(false);
-    if (res.me)
+    if (res.me) {
+      // 登录/注册/改密成功且有密码 → 记住账号密码(手机验证码模式无密码不记)
+      if (mode !== "phone" && password) void window.wuwei.rememberSet?.(email.trim(), password);
       onSuccess(res.me, mode === "email-register" ? "register" : mode === "email-reset" ? "reset" : "login");
-    else setErr(friendlyErr(res.error));
+    } else setErr(friendlyErr(res.error));
   }
   async function googleLogin() {
     setBusy(true);
@@ -1021,7 +1384,38 @@ function WuweiLoginModal({
             </>
           ) : (
             <>
-              <input style={inputStyle} placeholder={t("login.email")} value={email} onChange={(e) => setEmail(e.target.value)} />
+              <div style={{ position: "relative", marginBottom: 9 }}>
+                <input
+                  style={{ ...inputStyle, marginBottom: 0 }}
+                  placeholder={t("login.email")}
+                  value={email}
+                  autoComplete="off"
+                  onChange={(e) => { setEmail(e.target.value); setShowAcctDrop(true); }}
+                  onFocus={() => setShowAcctDrop(true)}
+                  onBlur={() => setTimeout(() => setShowAcctDrop(false), 150)}
+                />
+                {showAcctDrop && (() => {
+                  const q = email.trim().toLowerCase();
+                  const list = accounts.filter((a) => !q || a.email.toLowerCase().includes(q));
+                  if (!list.length) return null;
+                  return (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30, marginTop: 3, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 22px rgba(0,0,0,.24)", overflow: "hidden", maxHeight: 176, overflowY: "auto" }}>
+                      {list.map((a) => (
+                        <div
+                          key={a.email}
+                          onMouseDown={(ev) => { ev.preventDefault(); setEmail(a.email); setPassword(a.password || ""); setShowAcctDrop(false); }}
+                          onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--bg-soft)")}
+                          onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                          style={{ padding: "8px 11px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.email}</span>
+                          {a.password ? <span style={{ fontSize: 10.5, color: "var(--text-muted)", flex: "0 0 auto" }}>已记住</span> : null}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
               {(mode === "email-register" || mode === "email-reset") && (
                 <div style={{ display: "flex", gap: 8 }}>
                   <input style={{ ...inputStyle, flex: 1 }} placeholder={t("login.emailCode")} value={code} onChange={(e) => setCode(e.target.value)} />
@@ -1041,7 +1435,12 @@ function WuweiLoginModal({
                       : t("login.password")
                 }
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPassword(v);
+                  // 用户手动清空密码 → 忘记该账号记住的密码(账号仍保留供下拉)
+                  if (v === "" && email.trim()) void window.wuwei.rememberClearPassword?.(email.trim());
+                }}
               />
               {mode === "email-login" && (
                 <div style={{ textAlign: "right", marginTop: -3, marginBottom: 4 }}>
@@ -1064,7 +1463,11 @@ function WuweiLoginModal({
             style={{ width: "100%", padding: "10px", borderRadius: 9, border: "none", background: "var(--spark)", color: "#F4F6F8", fontSize: 14, fontWeight: 600, cursor: busy ? "default" : "pointer", marginBottom: 10 }}
           >
             {busy
-              ? t("login.busy")
+              ? mode === "email-register"
+                ? t("login.busyRegister")
+                : mode === "email-reset"
+                  ? t("login.busyReset")
+                  : t("login.busyLogin")
               : mode === "email-register"
                 ? t("login.register")
                 : mode === "email-reset"
@@ -1385,6 +1788,9 @@ export function App() {
   const [payCheckout, setPayCheckout] = useState<PayOrder | null>(null); // ④ 付款页(扫码)
   const [payResult, setPayResult] = useState<PayResult | null>(null); // ⑤ 支付结果页
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
+  const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
+  const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
+  const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」进入）
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
   const t = makeT(lang);
@@ -1407,7 +1813,6 @@ export function App() {
   const showSubscription = !!wuwei?.flags?.includes("subscription");
   const [wuweiBusy, setWuweiBusy] = useState(false);
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
-  const [guestNudgeShown, setGuestNudgeShown] = useState(false);
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -2131,18 +2536,11 @@ export function App() {
       setInput("");
       return;
     }
-    // 游客先体验：普通模型不因无为账号打断首问；只有托管模型必须登录才能扣币。
+    // 未登录发任何消息 → 先弹居中的登录激励卡(免费顶级模型 + 注册得 100 无为币)，
+    // 用户点「登录」再切到登录表单，比一上来就甩登录框干净、转化更好。
     if (!wuwei) {
-      const needsWuweiAccount = !!curPreset?.hosted || curProviderId.startsWith("wuwei-");
-      if (needsWuweiAccount) {
-        setLoginResume(true);
-        setShowLoginForm(true);
-        return;
-      }
-      if (!guestNudgeShown) {
-        push({ type: "notice", text: "可先游客体验；登录无为账号后可使用托管模型、余额和订阅权益。" });
-        setGuestNudgeShown(true);
-      }
+      setShowLoginIntro(true);
+      return;
     }
     if (curPreset?.hosted && wuwei && wuwei.coin.balance <= 0) {
       void refreshWuweiForShortage("无为币余额不足：请充值后再使用无为托管模型。");
@@ -2852,6 +3250,21 @@ export function App() {
                                 {t("acct.settings")}
                               </button>
                               <button
+                                className="acct-it"
+                                onClick={() => {
+                                  setShowAcctMenu(false);
+                                  setShowSupport(true);
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M4 13v-1a8 8 0 0 1 16 0v1" />
+                                  <rect x="3" y="13" width="4" height="6" rx="1.5" />
+                                  <rect x="17" y="13" width="4" height="6" rx="1.5" />
+                                  <path d="M20 19a4 4 0 0 1-4 4h-2" />
+                                </svg>
+                                联系客服
+                              </button>
+                              <button
                                 className="acct-it danger"
                                 onClick={() => {
                                   setShowAcctMenu(false);
@@ -3117,15 +3530,31 @@ export function App() {
         >
           {items.length === 0 && (
             <div className="welcome">
-              <h1>
-                无为 <span className="dot">●</span>
-              </h1>
-              <p>无为 · AI 编码助手（桌面版）。直接描述你的编码需求，它会读写文件、执行命令帮你完成。</p>
-              <p>Enter 发送，Shift+Enter 换行，↑ 翻历史，忙碌时 Esc 停止。</p>
-              <p>左侧可新建/切换历史对话；「自动」模式工具直接放行。</p>
-              <div className="meta">
-                后端 {meta.backend} · 模型 {meta.model}
+              <div className="wc-hero">
+                <WuweiLogo size={58} />
+                <p className="wc-eyebrow">一念既出，万事自成</p>
+                <h1 className="wc-h1">
+                  你只管发念，<span className="wc-spark">余下交给无为</span>
+                </h1>
+                <p className="wc-lead">把需求说清楚，客户端会拆解任务、调用代理、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。</p>
               </div>
+              <div className="wc-flow">
+                <div className="wc-step">
+                  <em>发念</em>
+                  <b>说出你想完成的事</b>
+                </div>
+                <span className="wc-arrow" aria-hidden="true">→</span>
+                <div className="wc-step">
+                  <em>有为</em>
+                  <b>代理拆解、调用工具、推进执行</b>
+                </div>
+                <span className="wc-arrow" aria-hidden="true">→</span>
+                <div className="wc-step">
+                  <em>成事</em>
+                  <b>交付结果、路径、验证口径</b>
+                </div>
+              </div>
+              <div className="wc-tags">少步骤 · 不中断 · 结果导向 · 可追溯执行</div>
             </div>
           )}
           {(() => {
@@ -4011,10 +4440,43 @@ export function App() {
           onAskToast={changeAskToast}
         />
       )}
+      {/* 联系客服弹窗：支付遇到问题 / 账号菜单「联系客服」都可打开 */}
+      {showSupport && (
+        <ContactSupportModal
+          onClose={() => setShowSupport(false)}
+          onLeaveMessage={() => {
+            setShowSupport(false);
+            setShowLeaveMsg(true);
+          }}
+        />
+      )}
+      {/* 留言表单：客服弹窗点「直接留言」进入；返回则回到客服弹窗 */}
+      {showLeaveMsg && (
+        <LeaveMessageModal
+          onClose={() => setShowLeaveMsg(false)}
+          onBack={() => {
+            setShowLeaveMsg(false);
+            setShowSupport(true);
+          }}
+        />
+      )}
+      {/* 未登录发消息先弹的居中登录激励卡；点登录再切到下面的登录框 */}
+      {showLoginIntro && (
+        <LoginIntroModal
+          lang={lang}
+          t={t}
+          onClose={() => setShowLoginIntro(false)}
+          onLogin={() => {
+            setShowLoginIntro(false);
+            setLoginResume(true);
+            setShowLoginForm(true);
+          }}
+        />
+      )}
       {/* 应用内登录框：邮箱/手机号/Google。未登录点发送(loginResume)或点账号登录时弹出 */}
       {showLoginForm && (
         <WuweiLoginModal
-          incentive={loginResume}
+          incentive={false} /* 激励已由前置的 LoginIntroModal 展示，登录框保持干净，避免重复。loginResume 仍用于登录后续发消息 */
           lang={lang}
           t={t}
           onClose={() => {
@@ -4120,25 +4582,21 @@ export function App() {
               const added = o.pack.coins + o.pack.bonus;
               setPayResult({ kind: "coin", added, bonus: o.pack.bonus, balance: balance ?? (wuwei?.coin.balance ?? 0) + added, order: genOrder() });
             } else {
-              const isYear = o.plan.id === "year";
               setPayResult({
                 kind: "pro",
-                plan: o.plan.id,
-                expire: fmtDate(addMonths(new Date(), isYear ? 12 : 1)),
-                giftCoins: isYear ? 1200 : 1000,
-                signin: isYear ? 30 : 20,
-                perks: isYear ? ["托管额度", "256K", "多任务", "云端备份", "优先新功能"] : ["托管额度", "256K", "多任务", "云端备份"],
-                saved: isYear ? 60 : undefined,
+                planName: o.plan.name,
+                expire: fmtDate(addMonths(new Date(), 1)), // 月付：+1 个月
+                giftCoins: o.plan.coins,
+                signin: o.plan.signin,
+                perks: PRO_FEATS.map(([tt]) => tt), // 各档同样的会员权益
+                saved: o.plan.saved || undefined,
                 order: genOrder(),
               });
             }
             setPayCheckout(null);
             void window.wuwei.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新余额/会员(接后端后即真数据)
           }}
-          onFail={() => {
-            setPayResult({ kind: "fail" });
-            setPayCheckout(null);
-          }}
+          onContactSupport={() => setShowSupport(true)}
           onNeedLogin={() => {
             setPayCheckout(null);   // 关掉支付页
             setWuwei(null);         // 本地登录态失效，账号菜单回落到「登录」

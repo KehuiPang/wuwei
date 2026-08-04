@@ -123,6 +123,7 @@ import {
   type WuweiSession,
 } from "./wuwei-auth.js";
 import { saveWuweiSession, loadWuweiSession, clearWuweiSession } from "./wuwei-session.js";
+import { loadRemember, upsertRemember, clearRememberedPassword } from "./wuwei-remember.js";
 import { getDeviceId } from "../../src/device-id.js";
 import { log, LOG_FILE } from "./logger.js";
 
@@ -2650,6 +2651,43 @@ ipcMain.handle("account:wuwei-logout", () => {
   clearWuweiSession();
   return true;
 });
+// 记住登录：多账号加密存储，供登录框自动填充 + 账号下拉历史。
+ipcMain.handle("login:remember-get", () => loadRemember());
+ipcMain.handle("login:remember-set", (_e, email: string, password: string) => {
+  upsertRemember(email, password);
+  return true;
+});
+ipcMain.handle("login:remember-clear-password", (_e, email: string) => {
+  clearRememberedPassword(email);
+  return true;
+});
+// 客服留言：POST 到 wuwei-site，后端存库供「留言管理」查看（用户/时间/内容/图片）。带 token 则后端能关联用户。
+ipcMain.handle(
+  "support:message",
+  async (_e, payload: { message: string; contact: string; images: string[] }) => {
+    try {
+      const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+      const sess = loadWuweiSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json", "X-Device-Id": getDeviceId() };
+      if (sess) headers.Authorization = `Bearer ${sess.accessToken}`;
+      const res = await fetch(`${site}/api/support/message`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          message: payload?.message || "",
+          contact: payload?.contact || "",
+          images: Array.isArray(payload?.images) ? payload.images.slice(0, 4) : [],
+        }),
+      });
+      const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (!res.ok || !j) return { ok: false, error: j?.error || `http_${res.status}` };
+      return { ok: j.ok !== false, error: j.error };
+    } catch (e) {
+      log("support", "留言提交异常", String(e));
+      return { ok: false, error: "network" };
+    }
+  },
+);
 // 稳定设备指纹（灰度开关 & 免费试用额度共用）
 ipcMain.handle("account:wuwei-device-id", () => getDeviceId());
 
@@ -2781,6 +2819,9 @@ ipcMain.handle("conn:check", async () => {
   if (!hasCredential(cfg)) {
     return { status: "red", reason: "当前平台未配置凭证 / 未授权，无法使用。" };
   }
+  // 托管平台：ping 前必须先注入新鲜的无为 token 并重建 provider，
+  // 否则用的是空/旧 token（token 只在发消息前注入），网关会回 401 invalid_token 而误判「未连通」。
+  if (isHostedProvider(curProviderId())) await ensureHostedProviderReady();
   if (!provider) return { status: "red", reason: "未初始化，请检查设置。" };
   try {
     const ac = new AbortController();

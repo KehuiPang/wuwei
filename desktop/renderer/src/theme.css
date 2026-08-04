@@ -1,4 +1,4 @@
-/* minicc 桌面主题：minicc品牌 VI · 默认深色（玄墨底 + 月白字 + 靛青导航 + 朱赭一念火种） */
+/* 无为桌面主题：无为品牌 VI · 默认深色（玄墨底 + 月白字 + 靛青导航 + 朱赭一念火种） */
 :root {
   --bg: #16191e; /* 玄墨黑·主底 */
   --bg-soft: #191d23; /* 主区略提 */
@@ -24,7 +24,7 @@
     "Helvetica Neue", sans-serif;
 }
 
-/* ============ 可切换主题（均遵循minicc VI）============ */
+/* ============ 可切换主题（均遵循无为 VI）============ */
 /* 白色·VI：月白底 + 玄墨字 + 靛青 */
 :root[data-theme="light"] {
   --bg: #ffffff;
@@ -73,7 +73,7 @@
 * {
   box-sizing: border-box;
 }
-/* minicc VI：朱赭「一念」只给主操作按钮；选中/导航/链接用淡青(--accent) */
+/* 无为 VI：朱赭「一念」只给主操作按钮；选中/导航/链接用淡青(--accent) */
 button.allow,
 .oauth-login-btn,
 .station-add button {
@@ -847,32 +847,101 @@ body {
 }
 
 /* 欢迎框 */
+/* 小美级重设计 · 无为 VI：圆相火种 + 理念 Slogan + 能力分点。大留白、玄墨/月白、朱赭仅一点。 */
+/* 无边框·大气：内容直接浮在画布上，不做卡片。靠留白与层级撑气场。 */
 .welcome {
+  border: none;
+  border-radius: 0;
+  padding: 20px 24px 14px;
+  background: transparent;
+  max-width: 600px;
+  margin: 28px auto;
+  box-shadow: none;
+}
+.welcome .wc-hero {
+  text-align: center;
+  color: var(--text); /* 圆相描边 currentColor 随主题：亮=玄墨 暗=月白 */
+}
+.welcome .wc-hero > svg {
+  margin: 0 auto 10px;
+}
+/* 一念火种：朱点轻呼吸，呼应「一念既出」 */
+.welcome .wc-hero > svg circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wcSpark 2.8s ease-in-out infinite;
+}
+@keyframes wcSpark {
+  0%, 100% { opacity: 0.85; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+/* Hero 文案（借鉴小美稿）：小口号 + 大标题(朱赭强调) + lead 说明。主题自适应，浅色即白底玄墨字。 */
+.welcome .wc-eyebrow {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--accent); /* 靛青/淡青 */
+}
+.welcome .wc-h1 {
+  margin: 12px 0 0;
+  font-size: 32px;
+  font-weight: 680;
+  line-height: 1.2;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+.welcome .wc-h1 .wc-spark {
+  color: var(--spark); /* 朱赭·一念火种，仅标题强调，≤10% */
+}
+.welcome .wc-lead {
+  width: min(600px, 100%);
+  margin: 14px auto 0;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--text-dim);
+}
+/* 三步流：发念 → 有为 → 成事，朱色箭头。 */
+.welcome .wc-flow {
+  margin: 26px auto 0;
+  width: min(660px, 100%);
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr 24px 1fr;
+  align-items: stretch;
+}
+.welcome .wc-step {
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 22px 24px;
-  background: var(--bg);
-  max-width: 620px;
-  margin: 24px auto;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: var(--bg-soft);
+  text-align: left;
 }
-.welcome h1 {
-  margin: 0 0 6px;
-  font-size: 20px;
+.welcome .wc-step em {
+  display: block;
+  margin-bottom: 4px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
 }
-.welcome h1 .dot {
+.welcome .wc-step b {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+.welcome .wc-arrow {
+  align-self: center;
+  text-align: center;
+  font-size: 16px;
   color: var(--spark);
 }
-.welcome p {
-  margin: 4px 0;
-  color: var(--text-dim);
-  font-size: 13px;
-}
-.welcome .meta {
-  margin-top: 12px;
-  font-family: var(--mono);
+.welcome .wc-tags {
+  margin-top: 16px;
+  text-align: center;
   font-size: 12px;
-  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
 }
 
 /* 消息：user 右、assistant 左，头像交叉 */
@@ -3484,6 +3553,13 @@ body {
 .pay-fs { font-size: 11px; color: #8a9099; margin-top: 3px; margin-left: 22px; line-height: 1.4; }
 .pay-fnote { text-align: center; font-size: 11px; color: #8a9099; padding: 4px 0 20px; }
 .pay-fnote .ok { color: #5c8a73; }
+/* 升级 Pro 弹窗（3 档）：只温和收紧，保留大气呼吸感，够一屏即可 */
+.pay-card.plan .pay-top { padding: 26px 30px 16px; }
+.pay-card.plan .pay-enso { margin-bottom: 12px; }
+.pay-card.plan .pay-plans { gap: 11px; }
+.pay-card.plan .pay-pc { padding: 14px 18px; }
+.pay-card.plan .pay-feats { margin: 15px 26px 7px; gap: 13px 16px; }
+.pay-card.plan .pay-cta { margin: 12px 26px 9px; }
 /* 付款页（国内扫码）*/
 .paych-order { margin: 16px 28px 18px; padding: 16px 18px; border-radius: 15px; background: #f4f6f8; border: 1px solid rgba(22, 25, 30, 0.08); }
 .paych-order.gold { background: linear-gradient(135deg, #fdf9ef, #f7efd9); border-color: rgba(169, 127, 46, 0.25); }

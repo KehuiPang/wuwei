@@ -1,6 +1,6 @@
-# minicc
+# 无为 (wuwei)
 
-从零复刻 Claude Code —— 跨平台编码 Agent（CLI + 桌面版）。
+AI Agent（CLI + 桌面版）。
 
 本质：**LLM + 工具执行循环 + 界面**。模型接各家 API 或本地 OpenAI 兼容端点（vLLM / Ollama 等），壳（harness）全自研。
 
@@ -11,12 +11,12 @@ npm install
 
 # 方式一：接 Claude API
 export ANTHROPIC_API_KEY=sk-...
-export MINICC_MODEL=claude-sonnet-5      # 可选
+export WUWEI_MODEL=claude-sonnet-5      # 可选
 npm run dev
 
 # 方式二：接本地/兼容端点（vLLM / Ollama 等）
-export MINICC_BASE_URL=http://localhost:8000/v1
-export MINICC_MODEL=qwen3-coder
+export WUWEI_BASE_URL=http://localhost:8000/v1
+export WUWEI_MODEL=qwen3-coder
 npm run dev
 ```
 
@@ -62,7 +62,7 @@ src/
 - **流式输出** + **上下文自动压缩**(按各模型真实窗口的 80%)。
 
 后端类型：`anthropic`(api-key)、`anthropic`+OAuth(Claude 订阅)、`openai`兼容(DeepSeek/智谱/Kimi/… 及本地 vLLM)、`codex`(ChatGPT 订阅)。
-省额度：`MINICC_COMPACT_THRESHOLD`(默认取模型窗口 80%) 超阈值自动把旧历史总结成摘要；`MINICC_KEEP_RECENT`(默认6) 保留最近条数。
+省额度：`WUWEI_COMPACT_THRESHOLD`(默认取模型窗口 80%) 超阈值自动把旧历史总结成摘要；`WUWEI_KEEP_RECENT`(默认6) 保留最近条数。
 
 ## 更新日志
 

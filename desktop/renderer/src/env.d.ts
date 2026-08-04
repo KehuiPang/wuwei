@@ -1,4 +1,4 @@
-// 渲染进程可见的 window.minicc 类型（来自 preload）
+// 渲染进程可见的 window.wuwei 类型（来自 preload）
 import type { WuweiMe } from "../../main/wuwei-auth.js";
 
 export interface BrainNodeLite {
@@ -22,7 +22,7 @@ export interface BrainEdgeLite {
   weight: number;
   hits: number;
 }
-export interface MiniccApi {
+export interface WuweiApi {
   send(sid: string, text: string, images?: string[]): void;
   inject(sid: string, text: string, images?: string[]): void;
   recallInject(sid: string, text: string): Promise<boolean>;
@@ -126,6 +126,10 @@ export interface MiniccApi {
   wuweiMe(): Promise<WuweiMe | null>;
   wuweiLogout(): Promise<boolean>;
   wuweiDeviceId(): Promise<string>;
+  rememberGet(): Promise<{ last?: string; accounts: { email: string; password: string }[] }>;
+  rememberSet(email: string, password: string): Promise<boolean>;
+  rememberClearPassword(email: string): Promise<boolean>;
+  submitSupportMessage(payload: { message: string; contact: string; images: string[] }): Promise<{ ok?: boolean; error?: string }>;
   payCreate(
     sku: string,
     channel: string,
@@ -164,7 +168,7 @@ export interface MiniccApi {
 }
 declare global {
   interface Window {
-    minicc: MiniccApi;
+    wuwei: WuweiApi;
   }
 }
 export {};
