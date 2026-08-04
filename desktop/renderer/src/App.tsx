@@ -3,7 +3,6 @@ import type { WuweiMe } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
 import { QRCodeSVG } from "qrcode.react";
-import { ALIPAY_LOGO } from "./payLogos.js";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -106,7 +105,7 @@ async function copyImageToClipboard(src: string): Promise<boolean> {
 function saveImage(src: string): void {
   const a = document.createElement("a");
   a.href = src;
-  a.download = `minicc-image-${Date.now()}.png`;
+  a.download = `wuwei-image-${Date.now()}.png`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -204,7 +203,7 @@ function isAuthErrorText(text: string): boolean {
   );
 }
 
-// minicc 主标·橙色 sparkle 星星（沿用初版 app 图标的四角星几何，缩放到 24 视口；
+// 无为 主标·橙色 sparkle 星星（沿用初版 app 图标的四角星几何，缩放到 24 视口；
 // 主星 currentColor 随主题走，右上小星用一点朱 --spark 呼应品牌）
 // 无为官方主标（几何同 WuweiLogo / 官网 WuMark：同 path、不旋转、stroke 12/dot 10）。
 // 顶栏用 currentColor 描边以适配文字色，缺口处一点朱赭火种。
@@ -461,6 +460,15 @@ function QrPlaceholder() {
 }
 
 type PayOrder = { kind: "pack"; pack: CoinPack } | { kind: "plan"; plan: ProPlan };
+// 支付宝图标：官方矢量 logo(蓝底+白色变形"支"，来源 Simple Icons)。.ico 仅 32px 高分屏会糊，用 SVG 保清晰
+function AlipayMark() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" style={{ borderRadius: 9, flex: "0 0 auto", display: "block" }} role="img" aria-label="支付宝">
+      <rect width="24" height="24" rx="4" fill="#fff" />
+      <path fill="#1677FF" d="M19.695 15.07c3.426 1.158 4.203 1.22 4.203 1.22V3.846c0-2.124-1.705-3.845-3.81-3.845H3.914C1.808.001.102 1.722.102 3.846v16.31c0 2.123 1.706 3.845 3.813 3.845h16.173c2.105 0 3.81-1.722 3.81-3.845v-.157s-6.19-2.602-9.315-4.119c-2.096 2.602-4.8 4.181-7.607 4.181-4.75 0-6.361-4.19-4.112-6.949.49-.602 1.324-1.175 2.617-1.497 2.025-.502 5.247.313 8.266 1.317a16.796 16.796 0 0 0 1.341-3.302H5.781v-.952h4.799V6.975H4.77v-.953h5.81V3.591s0-.409.411-.409h2.347v2.84h5.744v.951h-5.744v1.704h4.69a19.453 19.453 0 0 1-1.986 5.06c1.424.52 2.702 1.011 3.654 1.333m-13.81-2.032c-.596.06-1.71.325-2.321.869-1.83 1.608-.735 4.55 2.968 4.55 2.151 0 4.301-1.388 5.99-3.61-2.403-1.182-4.438-2.028-6.637-1.809" />
+    </svg>
+  );
+}
 // 微信支付图标：清晰矢量微信标（用户 .ico 仅 16px 会糊，改用 SVG）
 function WechatMark() {
   return (
@@ -485,9 +493,11 @@ function payErrMsg(code?: string): string {
     default: return "下单失败，请稍后重试";
   }
 }
+// 微信支付开关：微信商户尚未开通，先隐藏，只留支付宝；开通后翻成 true 即恢复。
+const WECHAT_PAY_ENABLED = false;
 // 付款页（国内支付宝/微信扫码）：向后端下单拿二维码串 → 渲染真 QR → 轮询订单状态，到账自动跳成功页。
 // 国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
-function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onFail: () => void }) {
+function PayCheckoutModal({ order, onClose, onPaid, onFail, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onFail: () => void; onNeedLogin: () => void }) {
   const [method, setMethod] = useState<"ali" | "wx">("ali");
   const isPlan = order.kind === "plan";
   const sku = order.kind === "pack" ? order.pack.sku : order.plan.sku;
@@ -510,12 +520,14 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
     let alive = true;
     setPhase("loading"); setQr(""); setOrderId(""); setErrMsg(""); setErrDetail("");
     const channel = method === "ali" ? "alipay" : "wechat";
-    window.minicc
+    window.wuwei
       .payCreate(sku, channel)
       .then((r) => {
         if (!alive) return;
+        // 登录失效：不在二维码框里显示死错误，直接关支付页 → 弹登录框（任何充值/升级入口统一走这）
+        if (r?.error === "not_logged_in") { onNeedLogin(); return; }
         if (!r || r.error || !r.qr || !r.orderId) {
-          setPhase("error"); setErrMsg(payErrMsg(r?.error)); setErrDetail(r?.message || (r?.error ? String(r.error) : "")); return;
+          setPhase("error"); setErrMsg(payErrMsg(r?.error)); setErrDetail(/[一-龥]/.test(r?.message || "") ? r!.message! : ""); return;
         }
         setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
       })
@@ -528,7 +540,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
     if (phase !== "ready" || !orderId) return;
     let alive = true;
     const t = setInterval(async () => {
-      const s = await window.minicc.payStatus(orderId).catch(() => null);
+      const s = await window.wuwei.payStatus(orderId).catch(() => null);
       if (!alive || !s) return;
       if (s.status === "paid") { clearInterval(t); onPaid(s.balance); }
       else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg("订单已失效，请重新下单"); }
@@ -559,15 +571,17 @@ function PayCheckoutModal({ order, onClose, onPaid, onFail }: { order: PayOrder;
         <div className="paych-sect">选择支付方式</div>
         <div className="paych-pays">
           <button className={"paych-pay" + (method === "ali" ? " sel-ali" : "")} onClick={() => setMethod("ali")}>
-            <img src={ALIPAY_LOGO} alt="支付宝" style={{ width: 34, height: 34, borderRadius: 9, objectFit: "cover", flex: "0 0 auto", display: "block" }} />
+            <AlipayMark />
             <span className="paych-pay-nm">支付宝</span>
             <span className="paych-rd" />
           </button>
-          <button className={"paych-pay" + (method === "wx" ? " sel-wx" : "")} onClick={() => setMethod("wx")}>
-            <WechatMark />
-            <span className="paych-pay-nm">微信支付</span>
-            <span className="paych-rd" />
-          </button>
+          {WECHAT_PAY_ENABLED && (
+            <button className={"paych-pay" + (method === "wx" ? " sel-wx" : "")} onClick={() => setMethod("wx")}>
+              <WechatMark />
+              <span className="paych-pay-nm">微信支付</span>
+              <span className="paych-rd" />
+            </button>
+          )}
         </div>
         <div className="paych-qr">
           {phase === "ready" && qr ? (
@@ -854,7 +868,7 @@ function WuweiLoginModal({
     setErr("");
     // 注册要求邮箱未注册、找回密码要求已注册 → 后端按 purpose 查重
     const purpose = mode === "email-reset" ? "reset" : mode === "email-register" ? "register" : undefined;
-    const r = await window.minicc.wuweiSendCode(target, lang, purpose);
+    const r = await window.wuwei.wuweiSendCode(target, lang, purpose);
     setSending(false);
     if (r === true) {
       setCooldown(60);
@@ -881,11 +895,11 @@ function WuweiLoginModal({
     setBusy(true);
     setErr("");
     let res: { me?: WuweiMe; error?: string };
-    if (mode === "email-login") res = await window.minicc.wuweiPasswordLogin(email.trim(), password);
+    if (mode === "email-login") res = await window.wuwei.wuweiPasswordLogin(email.trim(), password);
     // 找回密码复用 register 接口：验证码校验通过后重设密码并直接登录
     else if (mode === "email-register" || mode === "email-reset")
-      res = await window.minicc.wuweiRegister(email.trim(), code.trim(), password);
-    else res = await window.minicc.wuweiCodeLogin(phone.trim(), code.trim());
+      res = await window.wuwei.wuweiRegister(email.trim(), code.trim(), password);
+    else res = await window.wuwei.wuweiCodeLogin(phone.trim(), code.trim());
     setBusy(false);
     if (res.me)
       onSuccess(res.me, mode === "email-register" ? "register" : mode === "email-reset" ? "reset" : "login");
@@ -894,7 +908,7 @@ function WuweiLoginModal({
   async function googleLogin() {
     setBusy(true);
     setErr("");
-    const me = await window.minicc.wuweiLogin();
+    const me = await window.wuwei.wuweiLogin();
     setBusy(false);
     if (me) onSuccess(me);
     else setErr(t("login.googleIncomplete"));
@@ -1258,10 +1272,10 @@ export function App() {
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
   const [sidebarW, setSidebarW] = useState(
-    () => Number(localStorage.getItem("minicc-sidebar-w")) || 232,
+    () => Number(localStorage.getItem("wuwei-sidebar-w")) || 232,
   );
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem("minicc-sidebar-collapsed") === "1",
+    () => localStorage.getItem("wuwei-sidebar-collapsed") === "1",
   );
   const sidebarWRef = useRef(sidebarW);
   sidebarWRef.current = sidebarW;
@@ -1270,7 +1284,7 @@ export function App() {
   // draftLoadedRef 保证「先加载完再回写」，避免初始空草稿把已存内容冲掉。
   const draftLoadedRef = useRef(false);
   useEffect(() => {
-    window.minicc
+    window.wuwei
       .draftGet()
       .then((d) => {
         if (d?.text) setInput(d.text);
@@ -1293,7 +1307,7 @@ export function App() {
     const flush = () => {
       draftTimerRef.current = null;
       draftLastSaveRef.current = Date.now();
-      window.minicc.draftSet(draftValsRef.current); // 读 ref=最新文字/图片
+      window.wuwei.draftSet(draftValsRef.current); // 读 ref=最新文字/图片
     };
     const since = Date.now() - draftLastSaveRef.current;
     const GAP = 400;
@@ -1304,7 +1318,7 @@ export function App() {
   // 关窗/刷新前兜底再落一次(尽量少丢；硬 kill 无法拦，靠上面的节流兜底)
   useEffect(() => {
     const onUnload = () => {
-      if (draftLoadedRef.current) window.minicc.draftSet(draftValsRef.current);
+      if (draftLoadedRef.current) window.wuwei.draftSet(draftValsRef.current);
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
@@ -1326,9 +1340,9 @@ export function App() {
     cur?: string;
   } | null>(null);
   useEffect(() => {
-    window.minicc.brainDocProgress?.().then((s: any) => setIdxProg(s)).catch(() => {});
-    window.minicc.brainConceptProgress?.().then((s: any) => setConProg(s)).catch(() => {});
-    const off = window.minicc.onEvent((ch, p: any) => {
+    window.wuwei.brainDocProgress?.().then((s: any) => setIdxProg(s)).catch(() => {});
+    window.wuwei.brainConceptProgress?.().then((s: any) => setConProg(s)).catch(() => {});
+    const off = window.wuwei.onEvent((ch, p: any) => {
       if (ch === "evt:brain-docs") setIdxProg(p);
       else if (ch === "evt:brain-concepts") setConProg(p);
     });
@@ -1397,7 +1411,7 @@ export function App() {
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
-      const me = await window.minicc.wuweiMe();
+      const me = await window.wuwei.wuweiMe();
       if (me) {
         setWuwei(me);
         setCoinShortage({ message, balance: me.coin.balance });
@@ -1407,7 +1421,7 @@ export function App() {
     }
   }
   async function doWuweiLogout() {
-    await window.minicc.wuweiLogout();
+    await window.wuwei.wuweiLogout();
     setWuwei(null);
   }
   // 应用内登录框成功回调：更新账号 + 关框 + (若从发送门槛来)续发刚才拦下的消息
@@ -1434,7 +1448,7 @@ export function App() {
   async function doCodexLogin() {
     setCodexBusy(true);
     try {
-      const ok = await window.minicc.codexLogin();
+      const ok = await window.wuwei.codexLogin();
       push({
         type: "notice",
         text: ok
@@ -1465,7 +1479,7 @@ export function App() {
   const alwaysAllowRef = useRef<Set<string>>(
     new Set((() => {
       try {
-        return JSON.parse(localStorage.getItem("minicc-allow") || "[]");
+        return JSON.parse(localStorage.getItem("wuwei-allow") || "[]");
       } catch {
         return [];
       }
@@ -1538,7 +1552,7 @@ export function App() {
 
   // 当前平台预设(用于右下角模型快切列出该平台模型)；设置面板关闭后刷新
   useEffect(() => {
-    window.minicc.getSettings().then((r) => {
+    window.wuwei.getSettings().then((r) => {
       setCurProviderId(r?.settings?.providerId || "");
       setStations(r?.settings?.customStations || []);
       setProviderOrder(r?.settings?.providerOrder || []);
@@ -1555,7 +1569,7 @@ export function App() {
       const theme = resolveTheme((r?.settings as any)?.theme);
       document.documentElement.setAttribute("data-theme", theme);
     });
-    document.documentElement.setAttribute("data-platform", window.minicc.platform);
+    document.documentElement.setAttribute("data-platform", window.wuwei.platform);
   }, [showSettings]);
   // 内置平台 + 用户自定义供应商：先应用用户的删除/改名/改端点覆盖，再按托管登录+后台可见性过滤，
   // 最后按用户自定义顺序排、隐藏项不进切换菜单
@@ -1586,9 +1600,9 @@ export function App() {
     : [...new Set([...commonModels, ...(meta.model && !commonModels.includes(meta.model) ? [meta.model] : [])])];
   const hasMoreModels = quickModels.length > commonModels.length;
   async function quickModel(m: string) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const cur = r?.settings;
-    if (cur) window.minicc.setSettings({ ...cur, model: m });
+    if (cur) window.wuwei.setSettings({ ...cur, model: m });
     setShowModelMenu(false);
   }
 
@@ -1596,7 +1610,7 @@ export function App() {
   async function runConnCheck() {
     setConn({ status: "checking", reason: "检测连通状态…" });
     try {
-      const r = await window.minicc.checkConn();
+      const r = await window.wuwei.checkConn();
       setConn(r);
     } catch {
       setConn({ status: "yellow", reason: "检测失败，请重试。" });
@@ -1606,12 +1620,12 @@ export function App() {
   // ——— API Key 平台：一键获取 → 复制自动检测 → 通了自动设置 ———
   // 把验证过的 key 存进当前平台槽并切换生效
   async function saveApiKeyToSettings(key: string) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const s = r?.settings || {};
     const pid = s.providerId || curProviderId;
     const creds = { ...(s.creds || {}) };
     creds[pid] = { ...(creds[pid] || {}), apiKey: key };
-    window.minicc.setSettings({ ...s, apiKey: key, oauthToken: undefined, creds });
+    window.wuwei.setSettings({ ...s, apiKey: key, oauthToken: undefined, creds });
   }
 
   // 试一个候选 key：先测连通，通了才落库+提示成功。silent=剪贴板自动检测时不打扰
@@ -1621,7 +1635,7 @@ export function App() {
     keyTestingRef.current = true;
     setApiKeyBusy(true);
     try {
-      const res = await window.minicc.testKey(key);
+      const res = await window.wuwei.testKey(key);
       if (res.ok) {
         await saveApiKeyToSettings(key);
         push({ type: "notice", text: "✓ API Key 已验证通过并设置完成，可以直接使用了。" });
@@ -1657,7 +1671,7 @@ export function App() {
 
   // 点「去获取 API Key」：打开官网 + 进入等待态(启动剪贴板自动检测)
   function startApiKeyFlow() {
-    if (curPreset?.keyUrl) window.minicc.openExternal(curPreset.keyUrl);
+    if (curPreset?.keyUrl) window.wuwei.openExternal(curPreset.keyUrl);
     lastClipRef.current = "";
     setApiKeyInput("");
     setApiKeyStep("awaiting");
@@ -1665,11 +1679,11 @@ export function App() {
 
   // 把拿到的 token 存进设置并切到 Claude 订阅后端
   async function saveClaudeToken(tok: string) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const s = r?.settings || {};
     const creds = { ...(s.creds || {}) };
     creds["claude-oauth"] = { ...(creds["claude-oauth"] || {}), oauthToken: tok };
-    window.minicc.setSettings({
+    window.wuwei.setSettings({
       ...s,
       kind: "anthropic-oauth",
       providerId: "claude-oauth",
@@ -1690,7 +1704,7 @@ export function App() {
     if (authBusy) return;
     setAuthBusy(true);
     try {
-      const tok = await window.minicc.claudeLogin();
+      const tok = await window.wuwei.claudeLogin();
       if (tok) await saveClaudeToken(tok);
       else push({ type: "notice", text: "授权未完成（已取消/超时），可重试。" });
     } finally {
@@ -1700,7 +1714,7 @@ export function App() {
 
   // 系统浏览器授权 第1步：开浏览器(复用已登录 Google)，进入「等回填授权码」态
   async function authorizeBrowser() {
-    await window.minicc.claudeOauthOpen();
+    await window.wuwei.claudeOauthOpen();
     setCodeInput("");
     setOauthStep("awaiting-code");
     push({
@@ -1715,12 +1729,12 @@ export function App() {
     setAuthBusy(true);
     try {
       let code = codeInput.trim();
-      if (!code) code = (await window.minicc.readClipboard()).trim();
+      if (!code) code = (await window.wuwei.readClipboard()).trim();
       if (!code) {
         push({ type: "notice", text: "没读到授权码：请先在浏览器复制授权码，或粘贴进输入框再点完成。" });
         return;
       }
-      const tok = await window.minicc.claudeOauthExchange(code);
+      const tok = await window.wuwei.claudeOauthExchange(code);
       if (tok) await saveClaudeToken(tok);
       else push({ type: "notice", text: "授权码无效或已过期，请重新点「用浏览器登录」再试一次。" });
     } finally {
@@ -1730,10 +1744,10 @@ export function App() {
 
   // 快捷切换供应商：带出该平台已存的 key/baseUrl，默认用该平台第一个模型
   async function quickProvider(p: (typeof PRESETS)[number]) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const cur = r?.settings || {};
     const slot = (cur.creds || {})[p.id] || {};
-    window.minicc.setSettings({
+    window.wuwei.setSettings({
       ...cur,
       kind: p.kind,
       providerId: p.id,
@@ -1748,7 +1762,7 @@ export function App() {
   }
 
   useEffect(() => {
-    const off = window.minicc.onEvent((ch, payload: any) => {
+    const off = window.wuwei.onEvent((ch, payload: any) => {
       // 结构性事件(工具/完成/切换…)前先把累积的流式文本落定，保证顺序不乱
       if (ch !== "evt:assistant-delta" && pendingDeltaRef.current) flushDelta(true); // 段落边界整段吐
       switch (ch) {
@@ -1817,7 +1831,7 @@ export function App() {
           break;
         case "evt:permission-request":
           if (autoRef.current || alwaysAllowRef.current.has(payload.name))
-            window.minicc.respondPermission(payload.id, "allow");
+            window.wuwei.respondPermission(payload.id, "allow");
           else setPending(payload);
           break;
         case "evt:ask-user": {
@@ -1957,17 +1971,17 @@ export function App() {
       setResetMsg("");
       return;
     }
-    window.minicc.codexResetCredits().then((r) => {
+    window.wuwei.codexResetCredits().then((r) => {
       if (r.ok) setCodexResets({ availableCount: r.availableCount ?? 0, credits: r.credits ?? [] });
     });
   }, [showUsage, curProviderId]);
   const doConsumeReset = async (creditId: string) => {
     setResetConfirm(null);
     setResetMsg("重置中…");
-    const r = await window.minicc.codexConsumeReset(creditId);
+    const r = await window.wuwei.codexConsumeReset(creditId);
     if (r.ok) {
       setResetMsg("✅ 已重置！发一条消息后额度会刷新。");
-      const rr = await window.minicc.codexResetCredits();
+      const rr = await window.wuwei.codexResetCredits();
       if (rr.ok) setCodexResets({ availableCount: rr.availableCount ?? 0, credits: rr.credits ?? [] });
     } else {
       setResetMsg("重置失败：" + (r.error || ""));
@@ -1978,7 +1992,7 @@ export function App() {
   useEffect(() => {
     if (!curProviderId) return;
     const t = setTimeout(() => {
-      window.minicc.fetchModels().then((ids) => {
+      window.wuwei.fetchModels().then((ids) => {
         if (ids && ids.length) setLiveModels((m) => ({ ...m, [curProviderId]: ids }));
       });
     }, 400);
@@ -1986,14 +2000,14 @@ export function App() {
   }, [curProviderId]);
 
   useEffect(() => {
-    window.minicc.getAccount().then(setAccount);
-    window.minicc.wuweiMe().then(setWuwei).catch(() => {});
+    window.wuwei.getAccount().then(setAccount);
+    window.wuwei.wuweiMe().then(setWuwei).catch(() => {});
     // 主动拉取当前后端/模型，避免 evt:ready 推送早于订阅被丢导致显示「…」
-    window.minicc.getSettings().then((r: any) => {
+    window.wuwei.getSettings().then((r: any) => {
       if (r?.backend) setMeta((m) => ({ ...m, backend: r.backend, model: r.model || m.model }));
     });
     // 主动拉取会话列表+当前会话，避免启动推送早于监听导致空白页(需发消息才加载的bug)
-    window.minicc.bootstrap().then((r) => {
+    window.wuwei.bootstrap().then((r) => {
       if (!r) return;
       setSessions(r.sessions || []);
       setGroups(r.groups || []);
@@ -2008,11 +2022,11 @@ export function App() {
 
   // 崩溃恢复：点「继续」让 AI 接着未完成的工作；点「忽略」只清标记。
   function resumeInterrupted(id: string) {
-    window.minicc.resumeSession(id);
+    window.wuwei.resumeSession(id);
     setInterruptedSessions((l) => l.filter((x) => x.id !== id));
   }
   function dismissInterrupted(id: string) {
-    window.minicc.dismissInterrupted(id);
+    window.wuwei.dismissInterrupted(id);
     setInterruptedSessions((l) => l.filter((x) => x.id !== id));
   }
 
@@ -2021,7 +2035,7 @@ export function App() {
     if (apiKeyStep !== "awaiting") return;
     const timer = setInterval(async () => {
       if (keyTestingRef.current) return;
-      const clip = (await window.minicc.readClipboard()).trim();
+      const clip = (await window.wuwei.readClipboard()).trim();
       if (!clip || clip === lastClipRef.current || !isLikelyKey(clip)) return;
       lastClipRef.current = clip;
       setApiKeyInput(clip);
@@ -2053,7 +2067,7 @@ export function App() {
     const up = () => {
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
-      localStorage.setItem("minicc-sidebar-w", String(sidebarWRef.current));
+      localStorage.setItem("wuwei-sidebar-w", String(sidebarWRef.current));
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
@@ -2061,7 +2075,7 @@ export function App() {
 
   function toggleCollapse(v: boolean) {
     setCollapsed(v);
-    localStorage.setItem("minicc-sidebar-collapsed", v ? "1" : "0");
+    localStorage.setItem("wuwei-sidebar-collapsed", v ? "1" : "0");
   }
 
   // 读取图片文件为 dataURL
@@ -2085,14 +2099,14 @@ export function App() {
     setRunningSet((s) => new Set(s).add(currentId)); // 乐观置为运行中(主进程随后 evt:tasks 校准)
     thinkStartRef.current = Date.now();
     charsRef.current = 0;
-    window.minicc.send(currentId, text, imgs.length ? imgs : undefined);
+    window.wuwei.send(currentId, text, imgs.length ? imgs : undefined);
   }
 
   function clearComposer() {
     setInput("");
     setPendingImages([]);
     if (taRef.current) taRef.current.style.height = "auto";
-    window.minicc.draftSet({ text: "", images: [] }); // 发送后立即清空落盘草稿
+    window.wuwei.draftSet({ text: "", images: [] }); // 发送后立即清空落盘草稿
   }
 
   // 真正把消息投递出去(注入 or 新发)——已入库密钥由主进程兜底脱敏
@@ -2103,7 +2117,7 @@ export function App() {
         history.current.push(text);
         histIdx.current = history.current.length;
       }
-      window.minicc.inject(currentId, text, imgs.length ? imgs : undefined);
+      window.wuwei.inject(currentId, text, imgs.length ? imgs : undefined);
     } else {
       doSend(text, imgs);
     }
@@ -2113,7 +2127,7 @@ export function App() {
     const text = input.trim();
     if (!text && pendingImages.length === 0) return;
     if (text === "/reset") {
-      window.minicc.reset();
+      window.wuwei.reset();
       setInput("");
       return;
     }
@@ -2142,7 +2156,7 @@ export function App() {
       dispatchMessage(text, imgs, inject);
       clearComposer();
     };
-    const scan = text ? window.minicc.secretsScan?.(text) : undefined;
+    const scan = text ? window.wuwei.secretsScan?.(text) : undefined;
     if (!scan) {
       go();
       return;
@@ -2180,18 +2194,18 @@ export function App() {
           // 重复项:值已在保险箱,只处理备注/新增
           const choice = sp.dupChoice[i];
           if (choice === "new") {
-            await window.minicc.secretsAdd({ name: c.suggestedName, value: c.value, note: c.note, force: true });
+            await window.wuwei.secretsAdd({ name: c.suggestedName, value: c.value, note: c.note, force: true });
           } else if (choice === "overwrite") {
-            await window.minicc.secretsUpdate(c.existing.id, { note: c.note });
+            await window.wuwei.secretsUpdate(c.existing.id, { note: c.note });
           } // ignore: 不动
         } else {
           if (!sp.checked[i]) continue;
-          await window.minicc.secretsAdd({ name: c.suggestedName, value: c.value, note: c.note });
+          await window.wuwei.secretsAdd({ name: c.suggestedName, value: c.value, note: c.note });
         }
       }
       // 存好后重新扫描:刚入库的这批也会被替换成占位符
       try {
-        outText = (await window.minicc.secretsScan(sp.text))?.redacted ?? sp.redacted;
+        outText = (await window.wuwei.secretsScan(sp.text))?.redacted ?? sp.redacted;
       } catch {
         outText = sp.redacted;
       }
@@ -2201,7 +2215,7 @@ export function App() {
     clearComposer();
   }
 
-  const stop = () => window.minicc.stop(currentId);
+  const stop = () => window.wuwei.stop(currentId);
 
   // ——— 侧栏分组/排序辅助 ———
   const orderKey = (s: SessionMeta) => (s.order != null ? s.order : -s.updatedAt);
@@ -2268,8 +2282,8 @@ export function App() {
     else if (belowItem) newOrder = orderKey(belowItem) - 1e6;
     else newOrder = orderKey(target);
     if (groupMode === "manual" && (dragged.group || "") !== (target.group || ""))
-      window.minicc.setSessionGroup(id, target.group || null);
-    window.minicc.setSessionOrder(id, newOrder);
+      window.wuwei.setSessionGroup(id, target.group || null);
+    window.wuwei.setSessionOrder(id, newOrder);
   }
 
   // 拖拽组头重排(仅手动模式)
@@ -2283,39 +2297,39 @@ export function App() {
     const ti = without.indexOf(targetGroup);
     const next = [...without.slice(0, ti), g, ...without.slice(ti)];
     const rest = groups.filter((x) => !next.includes(x)); // 无会话的组保持在后
-    window.minicc.reorderGroups([...next, ...rest]);
+    window.wuwei.reorderGroups([...next, ...rest]);
   }
 
   function changeGroupMode(m: "manual" | "date" | "project") {
     setGroupMode(m);
-    window.minicc.setGroupMode(m);
+    window.wuwei.setGroupMode(m);
   }
   function changeStream(mode: "typewriter" | "stream" | "instant", speed: number) {
     setStreamMode(mode);
     setStreamSpeed(speed);
-    window.minicc.setStreamOutput(mode, speed);
+    window.wuwei.setStreamOutput(mode, speed);
   }
   function changeKeepRecent(n: number) {
     setKeepRecent(n);
-    window.minicc.setKeepRecent(n);
+    window.wuwei.setKeepRecent(n);
   }
   function changeAskToast(auto: boolean, sec: number) {
     setAskToastAuto(auto);
     setAskToastSec(sec);
-    window.minicc.setAskToast(auto, sec);
+    window.wuwei.setAskToast(auto, sec);
   }
 
   function answerPerm(decision: "allow" | "deny") {
     if (!pending) return;
-    window.minicc.respondPermission(pending.id, decision);
+    window.wuwei.respondPermission(pending.id, decision);
     setPending(null);
   }
 
   function allowAlways() {
     if (!pending) return;
     alwaysAllowRef.current.add(pending.name);
-    localStorage.setItem("minicc-allow", JSON.stringify([...alwaysAllowRef.current]));
-    window.minicc.respondPermission(pending.id, "allow");
+    localStorage.setItem("wuwei-allow", JSON.stringify([...alwaysAllowRef.current]));
+    window.wuwei.respondPermission(pending.id, "allow");
     setPending(null);
   }
 
@@ -2368,7 +2382,7 @@ export function App() {
             «
           </button>
         </div>
-        <button className="new-session" onClick={() => window.minicc.newSession()}>
+        <button className="new-session" onClick={() => window.wuwei.newSession()}>
           {t("session.new")}
         </button>
         <div className="session-list">
@@ -2428,7 +2442,7 @@ export function App() {
                   setDragId(null);
                   setDragOverId(null);
                 }}
-                onClick={() => window.minicc.switchSession(s.id)}
+                onClick={() => window.wuwei.switchSession(s.id)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setGroupInputSid(null);
@@ -2453,7 +2467,7 @@ export function App() {
                   className="s-del"
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.minicc.deleteSession(s.id);
+                    window.wuwei.deleteSession(s.id);
                   }}
                 >
                   ×
@@ -2546,7 +2560,7 @@ export function App() {
               setNewGroupName("");
             };
             const move = (g: string | null) => {
-              window.minicc.setSessionGroup(ctxMenu.sid, g);
+              window.wuwei.setSessionGroup(ctxMenu.sid, g);
               close();
             };
             return (
@@ -2563,7 +2577,7 @@ export function App() {
                   <button
                     className="ctx-item ctx-done"
                     onClick={() => {
-                      window.minicc.setSessionDone(ctxMenu.sid, !s.done);
+                      window.wuwei.setSessionDone(ctxMenu.sid, !s.done);
                       close();
                     }}
                   >
@@ -2615,7 +2629,7 @@ export function App() {
                     <button
                       className={"ctx-prio-b" + (!s.priorityTag ? " on" : "")}
                       onClick={() => {
-                        window.minicc.setSessionPriority(ctxMenu.sid, 0, "");
+                        window.wuwei.setSessionPriority(ctxMenu.sid, 0, "");
                         close();
                       }}
                     >
@@ -2626,7 +2640,7 @@ export function App() {
                         key={p.tag}
                         className={"ctx-prio-b" + (s.priorityTag === p.tag ? " on" : "")}
                         onClick={() => {
-                          window.minicc.setSessionPriority(ctxMenu.sid, p.weight, p.tag);
+                          window.wuwei.setSessionPriority(ctxMenu.sid, p.weight, p.tag);
                           close();
                         }}
                       >
@@ -2641,7 +2655,7 @@ export function App() {
                         key={p.tag}
                         className={"ctx-quad-b p" + p.weight + (s.priorityTag === p.tag ? " on" : "")}
                         onClick={() => {
-                          window.minicc.setSessionPriority(ctxMenu.sid, p.weight, p.tag);
+                          window.wuwei.setSessionPriority(ctxMenu.sid, p.weight, p.tag);
                           close();
                         }}
                       >
@@ -2672,7 +2686,7 @@ export function App() {
                     className="ctx-item ctx-new"
                     onClick={() => {
                       const ids = sessions.filter((s) => groupOf(s) === groupCtx.name).map((s) => s.id);
-                      window.minicc.generateReport(groupCtx.name, ids);
+                      window.wuwei.generateReport(groupCtx.name, ids);
                       close();
                     }}
                   >
@@ -2987,7 +3001,7 @@ export function App() {
         <div
           className={
             "titlebar" +
-            (collapsed && window.minicc.platform === "darwin" ? " tb-collapsed" : "")
+            (collapsed && window.wuwei.platform === "darwin" ? " tb-collapsed" : "")
           }
         >
           <span className="tb-title">
@@ -3035,7 +3049,7 @@ export function App() {
                     <button
                       onClick={() => {
                         setBrowserMode("split");
-                        window.minicc.browserReattach();
+                        window.wuwei.browserReattach();
                         setShowBrowserMenu(false);
                       }}
                     >
@@ -3044,7 +3058,7 @@ export function App() {
                     <button
                       onClick={() => {
                         setBrowserMode("full");
-                        window.minicc.browserReattach();
+                        window.wuwei.browserReattach();
                         setShowBrowserMenu(false);
                       }}
                     >
@@ -3053,7 +3067,7 @@ export function App() {
                     <button
                       className="tb-bm-close"
                       onClick={() => {
-                        window.minicc.browserReattach();
+                        window.wuwei.browserReattach();
                         setShowBrowser(false);
                         setShowBrowserMenu(false);
                       }}
@@ -3065,18 +3079,18 @@ export function App() {
               )}
             </span>
           )}
-          {window.minicc.platform !== "darwin" && (
+          {window.wuwei.platform !== "darwin" && (
             <span className="win-ctrl">
-              <button className="wc-btn" title="最小化" onClick={() => window.minicc.winMinimize()}>
+              <button className="wc-btn" title="最小化" onClick={() => window.wuwei.winMinimize()}>
                 ─
               </button>
-              <button className="wc-btn" title="最大化" onClick={() => window.minicc.winMaximize()}>
+              <button className="wc-btn" title="最大化" onClick={() => window.wuwei.winMaximize()}>
                 ☐
               </button>
               <button
                 className="wc-btn wc-close"
                 title="关闭"
-                onClick={() => window.minicc.winClose()}
+                onClick={() => window.wuwei.winClose()}
               >
                 ✕
               </button>
@@ -3104,9 +3118,9 @@ export function App() {
           {items.length === 0 && (
             <div className="welcome">
               <h1>
-                minicc <span className="dot">●</span>
+                无为 <span className="dot">●</span>
               </h1>
-              <p>自研 Claude Code · 桌面版。直接描述你的编码需求，它会读写文件、执行命令帮你完成。</p>
+              <p>无为 · AI 编码助手（桌面版）。直接描述你的编码需求，它会读写文件、执行命令帮你完成。</p>
               <p>Enter 发送，Shift+Enter 换行，↑ 翻历史，忙碌时 Esc 停止。</p>
               <p>左侧可新建/切换历史对话；「自动」模式工具直接放行。</p>
               <div className="meta">
@@ -3122,13 +3136,13 @@ export function App() {
             const canDel = !busy; // 运行中不允许删(历史正在变)
             const delExchange = (ord: number) => {
               if (ord < 0) return;
-              window.minicc.deleteExchange(currentId, ord);
+              window.wuwei.deleteExchange(currentId, ord);
             };
             // 撤回一条用户消息(像微信撤回)：收回 + 文字放回输入框可改可重发
             const recallUser = async (it: Extract<Item, { type: "user" }>, ord: number) => {
               if (busy) {
                 // 运行中：只有还没被 AI 处理(仍在注入缓冲)的才能干净撤回
-                const ok = await window.minicc.recallInject(currentId, it.text);
+                const ok = await window.wuwei.recallInject(currentId, it.text);
                 if (ok) {
                   setItems((p) => p.filter((x) => x !== it));
                   setInput((cur) => cur || it.text);
@@ -3394,7 +3408,7 @@ export function App() {
             (items[items.length - 1] as { type: "notice"; text: string }).text.startsWith("出错") && (
               <div className="err-fix">
                 <span>上一条消息出错了（可能卡住后续发送）</span>
-                <button onClick={() => window.minicc.undoLast()}>删除这条并继续</button>
+                <button onClick={() => window.wuwei.undoLast()}>删除这条并继续</button>
               </div>
             )}
           {pendingImages.length > 0 && (
@@ -3788,7 +3802,7 @@ export function App() {
                       className="tp-title"
                       title="切换到该会话"
                       onClick={() => {
-                        if (sid !== currentId) window.minicc.switchSession(sid);
+                        if (sid !== currentId) window.wuwei.switchSession(sid);
                         setShowTasks(false);
                       }}
                     >
@@ -3797,7 +3811,7 @@ export function App() {
                     <button
                       className="tp-stop"
                       title="停止该任务"
-                      onClick={() => window.minicc.stop(sid)}
+                      onClick={() => window.wuwei.stop(sid)}
                     >
                       停止
                     </button>
@@ -3805,7 +3819,7 @@ export function App() {
                 );
               })}
               <div className="tp-foot">
-                <button className="tp-stopall" onClick={() => [...runningSet].forEach((s) => window.minicc.stop(s))}>
+                <button className="tp-stopall" onClick={() => [...runningSet].forEach((s) => window.wuwei.stop(s))}>
                   全部停止
                 </button>
               </div>
@@ -3836,7 +3850,7 @@ export function App() {
                   onClick={async () => {
                     if (webLoginBusy) return;
                     setWebLoginBusy(true);
-                    await window.minicc.webLogin(account.providerId!);
+                    await window.wuwei.webLogin(account.providerId!);
                     setWebLoginBusy(false);
                   }}
                 >
@@ -3969,10 +3983,10 @@ export function App() {
           width={browserWidth}
           onResize={setBrowserWidth}
           onMode={setBrowserMode}
-          onDetach={() => window.minicc.browserDetach()}
-          onReattach={() => window.minicc.browserReattach()}
+          onDetach={() => window.wuwei.browserDetach()}
+          onReattach={() => window.wuwei.browserReattach()}
           onClose={() => {
-            if (browserDetached) window.minicc.browserReattach();
+            if (browserDetached) window.wuwei.browserReattach();
             setShowBrowser(false);
           }}
         />
@@ -4119,11 +4133,17 @@ export function App() {
               });
             }
             setPayCheckout(null);
-            void window.minicc.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新余额/会员(接后端后即真数据)
+            void window.wuwei.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新余额/会员(接后端后即真数据)
           }}
           onFail={() => {
             setPayResult({ kind: "fail" });
             setPayCheckout(null);
+          }}
+          onNeedLogin={() => {
+            setPayCheckout(null);   // 关掉支付页
+            setWuwei(null);         // 本地登录态失效，账号菜单回落到「登录」
+            setLoginResume(false);
+            setShowLoginForm(true); // 直接弹登录框
           }}
         />
       )}
@@ -4278,11 +4298,11 @@ export function App() {
           data={asks[currentId]}
           anchor={composerRef}
           onSubmit={(list, images) => {
-            window.minicc.answerAsk(asks[currentId].id, { list, images });
+            window.wuwei.answerAsk(asks[currentId].id, { list, images });
             clearAsk(currentId);
           }}
           onCancel={() => {
-            window.minicc.answerAsk(asks[currentId].id, { cancelled: true });
+            window.wuwei.answerAsk(asks[currentId].id, { cancelled: true });
             clearAsk(currentId);
           }}
         />
@@ -4298,7 +4318,7 @@ export function App() {
                 key={t.askId}
                 className="ask-toast"
                 onClick={() => {
-                  window.minicc.switchSession(t.sid);
+                  window.wuwei.switchSession(t.sid);
                   dropToast(t.askId);
                 }}
               >
@@ -4508,7 +4528,7 @@ function BrowserPanel({
       const el = regionRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      window.minicc.browserShow({ x: r.x, y: r.y, width: r.width, height: r.height });
+      window.wuwei.browserShow({ x: r.x, y: r.y, width: r.width, height: r.height });
     };
     push();
     const t = setTimeout(push, 60);
@@ -4519,7 +4539,7 @@ function BrowserPanel({
       clearTimeout(t);
       ro.disconnect();
       window.removeEventListener("resize", push);
-      window.minicc.browserHide();
+      window.wuwei.browserHide();
     };
   }, [detached]);
 
@@ -4529,18 +4549,18 @@ function BrowserPanel({
     <div className={"browser-panel " + mode} style={mode === "split" ? { flexBasis: width } : undefined}>
       {mode === "split" && <div className="bp-resizer" onMouseDown={startResize} title="拖动调整宽度" />}
       <div className="bp-bar">
-        <button className="bp-nav" disabled={!info.canGoBack} onClick={() => window.minicc.browserNav("back")} title="后退">
+        <button className="bp-nav" disabled={!info.canGoBack} onClick={() => window.wuwei.browserNav("back")} title="后退">
           ‹
         </button>
         <button
           className="bp-nav"
           disabled={!info.canGoForward}
-          onClick={() => window.minicc.browserNav("forward")}
+          onClick={() => window.wuwei.browserNav("forward")}
           title="前进"
         >
           ›
         </button>
-        <button className="bp-nav" onClick={() => window.minicc.browserNav("reload")} title="刷新">
+        <button className="bp-nav" onClick={() => window.wuwei.browserNav("reload")} title="刷新">
           ⟳
         </button>
         <input
@@ -4548,7 +4568,7 @@ function BrowserPanel({
           value={urlEdit}
           onChange={(e) => setUrlEdit(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") window.minicc.browserNav("open", urlEdit);
+            if (e.key === "Enter") window.wuwei.browserNav("open", urlEdit);
           }}
           placeholder="输入网址回车打开"
         />
@@ -5071,7 +5091,7 @@ const MarkdownView = React.memo(function MarkdownView({
               href={href}
               onClick={(e) => {
                 e.preventDefault();
-                if (href) window.minicc.openExternal(href);
+                if (href) window.wuwei.openExternal(href);
               }}
             >
               {children}
@@ -5879,7 +5899,7 @@ const MCP_CATALOG: CatalogItem[] = [
   },
 ];
 
-// 迁移：把已装服务器里的旧 <占位> 自动补成目录里的默认值(如 sqlite 的 <db路径>→~/minicc.db)，让老配置也开箱可用
+// 迁移：把已装服务器里的旧 <占位> 自动补成目录里的默认值(如 sqlite 的 <db路径>→~/wuwei.db)，让老配置也开箱可用
 function migrateMcpDefaults(text: string): { text: string; changed: boolean } {
   const servers = parseMcpServers(text);
   let changed = false;
@@ -6370,13 +6390,13 @@ function SettingsModal({
   // 界面主题（并入设置页「外观」）
   const [uiTheme, setUiTheme] = useState("light");
   useEffect(() => {
-    window.minicc.getSettings().then((r: any) => setUiTheme(resolveTheme(r?.settings?.theme)));
+    window.wuwei.getSettings().then((r: any) => setUiTheme(resolveTheme(r?.settings?.theme)));
   }, []);
   async function pickTheme(t: string) {
     setUiTheme(t);
     document.documentElement.setAttribute("data-theme", t);
-    const r: any = await window.minicc.getSettings();
-    window.minicc.setSettings({ ...(r?.settings || {}), theme: t });
+    const r: any = await window.wuwei.getSettings();
+    window.wuwei.setSettings({ ...(r?.settings || {}), theme: t });
   }
   // 会话提醒(自动消失/倒计时)：本页先暂存草稿,点「保存」才提交——走独立 IPC(setAskToast),
   // 与模型/凭证的大配置(settings:set)分开落盘、互不覆盖。弹窗每次开都重新挂载,草稿从 props 初始化=最新已存值。
@@ -6428,7 +6448,7 @@ function SettingsModal({
   const setAppToggle = (patch: Record<string, boolean>) => {
     const cur = loadedRef.current || {};
     loadedRef.current = { ...cur, app: { ...(cur.app || {}), ...patch } }; // 同步本地，避免后续「保存」把开关刷回
-    window.minicc.setAppSettings(patch);
+    window.wuwei.setAppSettings(patch);
   };
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [newStName, setNewStName] = useState(""); // 新增中转站：名称
@@ -6476,7 +6496,7 @@ function SettingsModal({
   const [conExtract, setConExtract] = useState<{ running: boolean; phase: string; total: number; done: number; created: number; cur?: string } | null>(null); // 概念抽取进度
   const [brainNewEdge, setBrainNewEdge] = useState({ relation: "", to: "" }); // 给选中节点加关系
   const reloadBrain = () =>
-    Promise.all([window.minicc.brainGraph(), window.minicc.brainStats()]).then(([g, st]) => {
+    Promise.all([window.wuwei.brainGraph(), window.wuwei.brainStats()]).then(([g, st]) => {
       setBrainNodes(g.nodes);
       setBrainEdges(g.edges);
       setBrainStat(st);
@@ -6522,7 +6542,7 @@ function SettingsModal({
   // 切到「工具」页时拉一次当前工具集
   useEffect(() => {
     if (tab !== "tools") return;
-    window.minicc.getTools().then((r) => {
+    window.wuwei.getTools().then((r) => {
       setToolGroups(r.groups);
       setToolTotal(r.total);
     });
@@ -6532,12 +6552,12 @@ function SettingsModal({
   useEffect(() => {
     if (tab !== "brain") return;
     reloadBrain();
-    window.minicc.brainDocStats().then((s) => {
+    window.wuwei.brainDocStats().then((s) => {
       setDocStat(s);
       if (s.dir) setDocDir(s.dir);
     });
     // 回填：索引是否正在构建 + 向量模型是否已就绪 + 概念抽取是否在跑
-    window.minicc.brainDocProgress().then((d) => {
+    window.wuwei.brainDocProgress().then((d) => {
       if (d?.building) {
         setDocBuilding(true);
         setDocProg(
@@ -6545,11 +6565,11 @@ function SettingsModal({
         );
       }
     });
-    window.minicc.brainEmbedReady().then((r) => {
+    window.wuwei.brainEmbedReady().then((r) => {
       if (r) setBrainWarmMsg("✓ 向量模型就绪，语义检索已启用。");
     });
-    window.minicc.brainConceptProgress().then((c) => setConExtract(c));
-    const off = window.minicc.onEvent((ch, p) => {
+    window.wuwei.brainConceptProgress().then((c) => setConExtract(c));
+    const off = window.wuwei.onEvent((ch, p) => {
       if (ch === "evt:brain-docs") {
         const d = p as { building?: boolean; phase: string; files?: number; total?: number; done?: number };
         if (d.phase === "scan") setDocProg(`扫描到 ${d.files} 个文档，开始向量化…`);
@@ -6557,7 +6577,7 @@ function SettingsModal({
         else if (d.phase === "done") {
           setDocProg(`✓ 完成，共 ${d.total} 块`);
           setDocBuilding(false);
-          window.minicc.brainDocStats().then(setDocStat);
+          window.wuwei.brainDocStats().then(setDocStat);
         } else if (d.phase === "error") {
           setDocProg("✗ 构建失败");
           setDocBuilding(false);
@@ -6588,7 +6608,7 @@ function SettingsModal({
   const [unlockErr, setUnlockErr] = useState("");
   async function doUnlock() {
     setUnlockErr("");
-    const r = await window.minicc.secretsReveal(unlockPw);
+    const r = await window.wuwei.secretsReveal(unlockPw);
     if (!r.ok) {
       setUnlockErr(r.error || "验证失败");
       return;
@@ -6600,7 +6620,7 @@ function SettingsModal({
     setUnlockPw("");
   }
   const reloadSecrets = () =>
-    window.minicc.secretsList().then((r) => {
+    window.wuwei.secretsList().then((r) => {
       setSecrets(r.entries);
       setSecretsAvail(r.available);
     });
@@ -6613,7 +6633,7 @@ function SettingsModal({
       setSecErr("请填入密钥值");
       return;
     }
-    const r = await window.minicc.secretsAdd({
+    const r = await window.wuwei.secretsAdd({
       name: secNew.name.trim() || undefined,
       envVar: secNew.envVar.trim() || undefined,
       value: secNew.value,
@@ -6627,7 +6647,7 @@ function SettingsModal({
     reloadSecrets();
   }
   async function doImportEnv() {
-    const r = await window.minicc.secretsImportEnv(secImportText);
+    const r = await window.wuwei.secretsImportEnv(secImportText);
     if (r.ok) {
       setSecImportText("");
       setSecImportOpen(false);
@@ -6709,24 +6729,24 @@ function SettingsModal({
   }
 
   useEffect(() => {
-    window.minicc.getMemory().then((m) => setMemory(m || ""));
-    window.minicc.getMcp().then((r) => {
+    window.wuwei.getMemory().then((m) => setMemory(m || ""));
+    window.wuwei.getMcp().then((r) => {
       const mig = migrateMcpDefaults(r?.config || "");
       setMcpConfig(mig.text);
       setMcpStatus(r?.status || []);
       if (mig.changed) {
-        window.minicc.setMcp(mig.text); // 自动把旧占位补默认值→重连(sqlite等直接可用)
-        setTimeout(() => window.minicc.getMcp().then((x) => setMcpStatus(x?.status || [])), 2800);
+        window.wuwei.setMcp(mig.text); // 自动把旧占位补默认值→重连(sqlite等直接可用)
+        setTimeout(() => window.wuwei.getMcp().then((x) => setMcpStatus(x?.status || [])), 2800);
       }
     });
   }, []);
-  const reloadMcpStatus = () => window.minicc.getMcp().then((r) => setMcpStatus(r?.status || []));
+  const reloadMcpStatus = () => window.wuwei.getMcp().then((r) => setMcpStatus(r?.status || []));
   // 写回 MCP 配置(标准 {mcpServers}) + 重连 + 稍后刷新状态
   function writeMcp(servers: Record<string, McpServer>) {
     const text = JSON.stringify({ mcpServers: servers }, null, 2);
     setMcpConfig(text);
     mcpTouchedRef.current = false;
-    window.minicc.setMcp(text);
+    window.wuwei.setMcp(text);
     setMcpStatus((s) => s.map((x) => ({ ...x, status: "connecting" }))); // 乐观置连接中
     setTimeout(reloadMcpStatus, 2800);
   }
@@ -6800,7 +6820,7 @@ function SettingsModal({
     }
     setMcpSearching(true);
     const t = setTimeout(() => {
-      window.minicc.searchMcp(q).then((r) => {
+      window.wuwei.searchMcp(q).then((r) => {
         if (mcpSearchRef.current !== q) return; // 词已变，丢弃过期结果
         setMcpOnline(r?.results || []);
         setMcpCursor(r?.nextCursor || "");
@@ -6814,7 +6834,7 @@ function SettingsModal({
     const q = mcpSearchRef.current;
     if (!mcpCursor || mcpLoadingMore || q.length < 2) return;
     setMcpLoadingMore(true);
-    window.minicc.searchMcp(q, mcpCursor).then((r) => {
+    window.wuwei.searchMcp(q, mcpCursor).then((r) => {
       if (mcpSearchRef.current !== q) {
         setMcpLoadingMore(false);
         return;
@@ -6826,7 +6846,7 @@ function SettingsModal({
   }
 
   useEffect(() => {
-    window.minicc.getSettings().then((r) => {
+    window.wuwei.getSettings().then((r) => {
       const s = r?.settings;
       if (!s) return;
       loadedRef.current = s; // 存完整 settings，保存时 spread 保留本页不管的字段
@@ -6963,7 +6983,7 @@ function SettingsModal({
     sKeyTestingRef.current = true;
     if (!silent) setSKeyMsg("检测中…");
     try {
-      const res = await window.minicc.testKey(key, keyOverride());
+      const res = await window.wuwei.testKey(key, keyOverride());
       if (res.ok) {
         setApiKey(key);
         persist({ apiKeyOverride: key, close: false }); // 保存但不关，留在弹窗看结果
@@ -6988,7 +7008,7 @@ function SettingsModal({
 
   // 点「去获取」：开官网 + 进入等待态(启动剪贴板自动检测)
   function startGetKey() {
-    if (preset.keyUrl) window.minicc.openExternal(preset.keyUrl);
+    if (preset.keyUrl) window.wuwei.openExternal(preset.keyUrl);
     sLastClipRef.current = "";
     setSKeyMsg("已打开获取页面：复制 API Key 后会自动填入并验证…");
     setSKeyWaiting(true);
@@ -6999,7 +7019,7 @@ function SettingsModal({
     if (!sKeyWaiting) return;
     const timer = setInterval(async () => {
       if (sKeyTestingRef.current) return;
-      const clip = (await window.minicc.readClipboard()).trim();
+      const clip = (await window.wuwei.readClipboard()).trim();
       if (!clip || clip === sLastClipRef.current || !isLikelyKey(clip)) return;
       sLastClipRef.current = clip;
       setApiKey(clip);
@@ -7013,7 +7033,7 @@ function SettingsModal({
     if (claudeBusy) return;
     setClaudeBusy(true);
     try {
-      const tok = await window.minicc.claudeLogin();
+      const tok = await window.wuwei.claudeLogin();
       if (tok) {
         setOauthToken(tok);
         save(tok);
@@ -7025,7 +7045,7 @@ function SettingsModal({
 
   // 系统浏览器授权 第1步：开浏览器(复用已登录 Google)，进入等回填授权码
   async function claudeOpenBrowser() {
-    await window.minicc.claudeOauthOpen();
+    await window.wuwei.claudeOauthOpen();
     setSCode("");
     setSAwaitCode(true);
   }
@@ -7036,12 +7056,12 @@ function SettingsModal({
     setClaudeBusy(true);
     try {
       let code = sCode.trim();
-      if (!code) code = (await window.minicc.readClipboard()).trim();
+      if (!code) code = (await window.wuwei.readClipboard()).trim();
       if (!code) {
         alert("没读到授权码：请先在浏览器复制授权码，或粘贴进输入框。");
         return;
       }
-      const tok = await window.minicc.claudeOauthExchange(code);
+      const tok = await window.wuwei.claudeOauthExchange(code);
       if (tok) {
         setSAwaitCode(false);
         setOauthToken(tok);
@@ -7084,7 +7104,7 @@ function SettingsModal({
     const newCreds = { ...credsRef.current, [pid]: slot }; // 存进当前平台的槽(用最新creds,别丢其它槽)
     // 只发本页负责的字段(模型/凭证/平台/系统提示/中转站)。主进程 settings:set 会合并到磁盘,
     // 其余字段(会话提醒/保留条数/输出方式/主题/app 开关等各走独立 IPC)一律不碰、不覆盖。
-    window.minicc.setSettings({
+    window.wuwei.setSettings({
       kind: preset.kind,
       providerId: pid,
       model: model || undefined,
@@ -7096,8 +7116,8 @@ function SettingsModal({
       systemPrompt: sysPromptTouched ? sysPrompt : undefined,
       customStations: stationsRef.current, // 一并保存中转站列表，别丢
     });
-    if (memoryTouchedRef.current) window.minicc.setMemory(memory); // 手动改过记忆才写盘
-    if (mcpTouchedRef.current) window.minicc.setMcp(mcpConfig); // 改过 MCP 配置才写盘+重连
+    if (memoryTouchedRef.current) window.wuwei.setMemory(memory); // 手动改过记忆才写盘
+    if (mcpTouchedRef.current) window.wuwei.setMcp(mcpConfig); // 改过 MCP 配置才写盘+重连
     if (opts?.close !== false) onClose();
   }
 
@@ -7138,9 +7158,9 @@ function SettingsModal({
 
   // 只更新 customStations(不动当前平台选择/凭证)——增删站用
   async function persistStationsOnly(next: Station[]) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const s = r?.settings || {};
-    window.minicc.setSettings({ ...s, customStations: next });
+    window.wuwei.setSettings({ ...s, customStations: next });
   }
 
   // 打开「编辑供应商」弹窗：自定义站带出名称/URL/类型；内置平台只改名(带出当前显示名)
@@ -7230,16 +7250,16 @@ function SettingsModal({
   }
   // 拉最新 settings 再合并 removedProviders/providerOverrides(别覆盖本页不管的字段)
   async function persistProviderMeta(patch: { removedProviders?: string[]; providerOverrides?: Record<string, { label?: string; baseUrl?: string }> }) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const s = r?.settings || {};
-    window.minicc.setSettings({ ...s, ...patch });
+    window.wuwei.setSettings({ ...s, ...patch });
   }
 
   // 只更新平台顺序/隐藏(拉最新 settings 再合并，避免覆盖本页不管的字段)
   async function persistArrangement(ord: string[], hid: string[]) {
-    const r = await window.minicc.getSettings();
+    const r = await window.wuwei.getSettings();
     const s = r?.settings || {};
-    window.minicc.setSettings({ ...s, providerOrder: ord, hiddenProviders: hid });
+    window.wuwei.setSettings({ ...s, providerOrder: ord, hiddenProviders: hid });
   }
   function applyOrder(ids: string[]) {
     orderRef.current = ids;
@@ -7331,12 +7351,12 @@ function SettingsModal({
               <button
                 type="button"
                 className="set-win-btn"
-                title={maxed ? "还原窗口大小" : "最大化（同时把整个 minicc 窗口最大化铺满屏幕）"}
+                title={maxed ? "还原窗口大小" : "最大化（同时把整个窗口最大化铺满屏幕）"}
                 onClick={async () => {
                   const next = !maxed;
                   setMaxed(next);
                   // 进入最大化时,把整个应用窗口也最大化——否则 96vw 弹窗只铺满小窗口、铺不满屏幕
-                  if (next && !(await window.minicc.winIsMaximized?.())) window.minicc.winMaximize();
+                  if (next && !(await window.wuwei.winIsMaximized?.())) window.wuwei.winMaximize();
                 }}
               >
                 {maxed ? (
@@ -7773,7 +7793,7 @@ function SettingsModal({
                     onClick={async () => {
                       setSCodexBusy(true);
                       try {
-                        const ok = await window.minicc.codexLogin();
+                        const ok = await window.wuwei.codexLogin();
                         if (ok) onClose();
                         else alert(lang === "zh" ? "Codex 授权未完成（取消/超时/端口 1455 被占）。" : "Codex authorization failed (canceled/timeout/port 1455 busy).");
                       } finally {
@@ -8112,7 +8132,7 @@ function SettingsModal({
                             setBrainPrompt(e.target.value);
                             setBrainPromptTouched(true);
                           }}
-                          onBlur={() => window.minicc.setBrainPrompt(brainPromptTouched ? brainPrompt : null)}
+                          onBlur={() => window.wuwei.setBrainPrompt(brainPromptTouched ? brainPrompt : null)}
                           placeholder="（留空 = 用默认脑网络说明）"
                         />
                       </label>
@@ -8125,7 +8145,7 @@ function SettingsModal({
                             onClick={() => {
                               setBrainPrompt(brainPromptDefault);
                               setBrainPromptTouched(false);
-                              window.minicc.setBrainPrompt(null);
+                              window.wuwei.setBrainPrompt(null);
                             }}
                           >
                             恢复默认
@@ -8150,7 +8170,7 @@ function SettingsModal({
                       onClick={async () => {
                         setBrainWarming(true);
                         setBrainWarmMsg(t("set.brain.warmLoading"));
-                        const ok = await window.minicc.brainWarmup();
+                        const ok = await window.wuwei.brainWarmup();
                         setBrainWarming(false);
                         setBrainWarmMsg(ok ? t("set.brain.warmOk") : t("set.brain.warmFail"));
                         reloadBrain();
@@ -8173,13 +8193,13 @@ function SettingsModal({
                       onChange={(e) => setBrainRecallQ(e.target.value)}
                       onKeyDown={async (e) => {
                         if (e.key === "Enter")
-                          setBrainRecallOut((await window.minicc.brainRecall(brainRecallQ)) || t("set.brain.noHit"));
+                          setBrainRecallOut((await window.wuwei.brainRecall(brainRecallQ)) || t("set.brain.noHit"));
                       }}
                     />
                     <button
                       type="button"
                       onClick={async () =>
-                        setBrainRecallOut((await window.minicc.brainRecall(brainRecallQ)) || t("set.brain.noHit"))
+                        setBrainRecallOut((await window.wuwei.brainRecall(brainRecallQ)) || t("set.brain.noHit"))
                       }
                     >
                       {t("set.brain.recall")}
@@ -8411,7 +8431,7 @@ function SettingsModal({
                                     <button
                                       type="button"
                                       onClick={async () => {
-                                        await window.minicc.brainDeleteEdge(ed.id);
+                                        await window.wuwei.brainDeleteEdge(ed.id);
                                         reloadBrain();
                                       }}
                                     >
@@ -8436,7 +8456,7 @@ function SettingsModal({
                                   type="button"
                                   onClick={async () => {
                                     if (brainNewEdge.relation.trim() && brainNewEdge.to.trim()) {
-                                      await window.minicc.brainAddEdge(
+                                      await window.wuwei.brainAddEdge(
                                         brainDraft.name,
                                         brainNewEdge.relation.trim(),
                                         brainNewEdge.to.trim(),
@@ -8456,7 +8476,7 @@ function SettingsModal({
                               type="button"
                               onClick={async () => {
                                 if (!brainDraft.name.trim()) return;
-                                await window.minicc.brainSaveNode({
+                                await window.wuwei.brainSaveNode({
                                   id: brainDraft.id || undefined,
                                   name: brainDraft.name.trim(),
                                   type: brainDraft.type,
@@ -8474,7 +8494,7 @@ function SettingsModal({
                               <button
                                 type="button"
                                 onClick={async () => {
-                                  await window.minicc.brainDeleteNode(brainDraft.id);
+                                  await window.wuwei.brainDeleteNode(brainDraft.id);
                                   setBrainDraft(null);
                                   setBrainSel(null);
                                   reloadBrain();
@@ -8513,7 +8533,7 @@ function SettingsModal({
                         type="button"
                         disabled={docBuilding || conExtract?.running}
                         onClick={async () => {
-                          const picked = await window.minicc.selectFolder();
+                          const picked = await window.wuwei.selectFolder();
                           if (picked) setDocDir(picked);
                         }}
                       >
@@ -8526,7 +8546,7 @@ function SettingsModal({
                           setDocBuilding(true);
                           setDocProg(t("set.brain.docPreparing"));
                           try {
-                            const s = await window.minicc.brainBuildDocs(docDir.trim());
+                            const s = await window.wuwei.brainBuildDocs(docDir.trim());
                             setDocStat(s);
                           } catch (e: any) {
                             setDocProg("✗ " + (e?.message || t("set.brain.docBuildFail")));
@@ -8550,7 +8570,7 @@ function SettingsModal({
                         disabled={docStat.files === 0 || conExtract?.running}
                         title={t("set.brain.extractNewTitle")}
                         onClick={async () => {
-                          const r = await window.minicc.brainExtractConcepts({ all: false });
+                          const r = await window.wuwei.brainExtractConcepts({ all: false });
                           if (!r.started) setBrainWarmMsg("✗ " + (r.reason || t("set.brain.extractFail")));
                         }}
                       >
@@ -8561,14 +8581,14 @@ function SettingsModal({
                         disabled={docStat.files === 0 || conExtract?.running}
                         title={t("set.brain.extractAllTitle")}
                         onClick={async () => {
-                          const r = await window.minicc.brainExtractConcepts({ all: true });
+                          const r = await window.wuwei.brainExtractConcepts({ all: true });
                           if (!r.started) setBrainWarmMsg("✗ " + (r.reason || t("set.brain.extractFail")));
                         }}
                       >
                         {t("set.brain.extractAll")}
                       </button>
                       {conExtract?.running && (
-                        <button type="button" className="allow" onClick={() => window.minicc.brainStopConcepts()}>
+                        <button type="button" className="allow" onClick={() => window.wuwei.brainStopConcepts()}>
                           {t("set.brain.stop")}
                         </button>
                       )}
@@ -8807,7 +8827,7 @@ function SettingsModal({
                                       <b>{t("set.mcp.dRepo")}</b>
                                       <a
                                         className="link-inline"
-                                        onClick={() => window.minicc.openExternal(r.repo)}
+                                        onClick={() => window.wuwei.openExternal(r.repo)}
                                         style={{ marginLeft: 0 }}
                                       >
                                         {r.repo}
@@ -8850,7 +8870,7 @@ function SettingsModal({
                         type="button"
                         className="link-inline"
                         onClick={() => {
-                          window.minicc.setMcp(mcpConfig);
+                          window.wuwei.setMcp(mcpConfig);
                           mcpTouchedRef.current = false;
                           setTimeout(reloadMcpStatus, 2800);
                         }}
@@ -9129,7 +9149,7 @@ function SettingsModal({
                               className="allow"
                               disabled={!secEditDraft.name.trim()}
                               onClick={async () => {
-                                await window.minicc.secretsUpdate(s.id, {
+                                await window.wuwei.secretsUpdate(s.id, {
                                   name: secEditDraft.name.trim(),
                                   envVar: secEditDraft.envVar.trim() || undefined,
                                   note: secEditDraft.note.trim(),
@@ -9177,7 +9197,7 @@ function SettingsModal({
                             className="sec-del"
                             title={t("set.sec.delete")}
                             onClick={async () => {
-                              await window.minicc.secretsDelete(s.id);
+                              await window.wuwei.secretsDelete(s.id);
                               reloadSecrets();
                             }}
                           >
@@ -9204,7 +9224,7 @@ function SettingsModal({
                       setSecretsPrompt(e.target.value);
                       setSecretsPromptTouched(true);
                     }}
-                    onBlur={() => window.minicc.setSecretsPrompt(secretsPromptTouched ? secretsPrompt : null)}
+                    onBlur={() => window.wuwei.setSecretsPrompt(secretsPromptTouched ? secretsPrompt : null)}
                     placeholder="（留空 = 用默认密钥说明）"
                   />
                 </label>
@@ -9217,7 +9237,7 @@ function SettingsModal({
                       onClick={() => {
                         setSecretsPrompt(secretsPromptDefault);
                         setSecretsPromptTouched(false);
-                        window.minicc.setSecretsPrompt(null);
+                        window.wuwei.setSecretsPrompt(null);
                       }}
                     >
                       恢复默认
@@ -9359,14 +9379,14 @@ function AppSettingsModal({
 }) {
   const [theme, setTheme] = useState("light");
   useEffect(() => {
-    window.minicc.getSettings().then((r: any) => setTheme(resolveTheme(r?.settings?.theme)));
+    window.wuwei.getSettings().then((r: any) => setTheme(resolveTheme(r?.settings?.theme)));
   }, []);
   // 选主题：实时预览 + 立即持久化(spread 现有 settings 只改 theme)
   async function pickTheme(t: string) {
     setTheme(t);
     document.documentElement.setAttribute("data-theme", t);
-    const r: any = await window.minicc.getSettings();
-    window.minicc.setSettings({ ...(r?.settings || {}), theme: t });
+    const r: any = await window.wuwei.getSettings();
+    window.wuwei.setSettings({ ...(r?.settings || {}), theme: t });
   }
   return (
     <div className="perm-overlay" onClick={onClose}>
