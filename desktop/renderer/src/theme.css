@@ -936,8 +936,51 @@ body {
   font-size: 16px;
   color: var(--spark);
 }
+/* 欢迎页脑网络案例入口：一行紧凑可点，靛青点缀，点开介绍弹窗 */
+.welcome .wc-brain {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 20px auto 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: 0.15s;
+}
+.welcome .wc-brain:hover {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+.welcome .wc-brain > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+.welcome .wc-brain-tx {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.welcome .wc-brain-tx b {
+  color: var(--accent);
+  font-weight: 700;
+  margin-right: 6px;
+}
+.welcome .wc-brain-arr {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
 .welcome .wc-tags {
-  margin-top: 16px;
+  margin-top: 14px;
   text-align: center;
   font-size: 12px;
   letter-spacing: 0.5px;
@@ -2437,6 +2480,17 @@ body {
   color: var(--accent);
   border-bottom-color: var(--accent);
   font-weight: 600;
+}
+/* 会员专享（脑网络）：非会员置灰 + 小锁，点击弹功能介绍 */
+.set-tab.locked {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+.set-tab.locked:hover {
+  color: var(--text-dim);
+  opacity: 0.8;
 }
 /* 内容区在固定高度框内独立滚动；min-height:0 让 flex 子项能收缩出滚动条 */
 .set-body {

@@ -307,10 +307,11 @@ function PackIcon({ size = 20 }: { size?: number }) {
 
 // sku：下单时传给后端，服务端据此查金额/币量（价格以后端为准，绝不信任客户端）。须与 wuwei-site catalog.ts 一致。
 type CoinPack = { sku: string; coins: number; bonus: number; price: number; desc: string; badge?: string; badgeType?: "rec" | "val" };
+// 积分包（按需充值）：单价刻意高于包月，形成「充值不如包月」的转化漏斗。无 bonus，单价随量微降。
 const COIN_PACKS: CoinPack[] = [
-  { sku: "pack_1000", coins: 1000, bonus: 50, price: 10, desc: "轻量补充，适合临时使用" },
-  { sku: "pack_3000", coins: 3000, bonus: 200, price: 30, desc: "无为本尊常用档", badge: "推荐", badgeType: "rec" },
-  { sku: "pack_10000", coins: 10000, bonus: 1000, price: 100, desc: "适合高频使用", badge: "最超值", badgeType: "val" },
+  { sku: "pack_1000", coins: 1000, bonus: 0, price: 39, desc: "按需充值，随用随充" },
+  { sku: "pack_5000", coins: 5000, bonus: 0, price: 179, desc: "常用档 · 更划算", badge: "推荐", badgeType: "rec" },
+  { sku: "pack_20000", coins: 20000, bonus: 0, price: 599, desc: "高频 / 团队", badge: "最超值", badgeType: "val" },
 ];
 // ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
@@ -354,7 +355,8 @@ function CoinPackModal({ packs, onClose, onCheckout }: { packs: CoinPack[]; onCl
                   <span className="u"> 无为币</span>
                 </span>
                 <span className="pay-desc" style={{ display: "block" }}>
-                  {pack.desc} <em>+{pack.bonus} 赠送</em>
+                  {pack.desc}
+                  {pack.bonus > 0 && <em> +{pack.bonus} 赠送</em>}
                 </span>
               </span>
               <span className="pay-price">¥{pack.price}</span>
@@ -720,6 +722,74 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
     </>
   );
 }
+// 脑网络功能介绍弹窗（会员专享）：欢迎页案例卡 / 非会员点灰置脑网络菜单时弹出。
+function BrainIntroModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
+  const feats: [React.ReactNode, string, string][] = [
+    [
+      <><path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" /><path d="M12 7v12" /></>,
+      "持续学习 · 长期记忆",
+      "模拟人脑，把聊天里有价值的概念与经验自动沉淀进脑网络",
+    ],
+    [
+      <><path d="M9 12h6" /><path d="M8 8a4 4 0 0 0 0 8h1" /><path d="M16 8a4 4 0 0 1 0 8h-1" /></>,
+      "跨对话自动调用",
+      "下次自动调用你的经验与记忆，不必重复交代",
+    ],
+    [
+      <><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></>,
+      "越用越懂你",
+      "用得越久，脑网络越丰富，无为越理解你",
+    ],
+    [
+      <><path d="M6.5 8a3.5 3.5 0 1 0 0 7c2.5 0 3-2 5.5-3.5S17 8 19.5 8a3.5 3.5 0 1 1 0 7c-2.5 0-3-2-5.5-3.5S9 8 6.5 8Z" /></>,
+      "突破上下文限制",
+      "记忆不受单次对话长度限制，越用你的脑网络越有价值",
+    ],
+  ];
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()} style={{ width: 440 }}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 6 }}>
+          <div style={{ margin: "0 auto 12px", width: 52, height: 52, borderRadius: 15, background: "linear-gradient(150deg,#274A63,#1E232B)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 8px 22px -8px rgba(39,74,99,.7)" }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#6F9FAD" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" />
+              <circle cx="9" cy="9" r="1" fill="#C05F3C" stroke="none" />
+              <circle cx="15" cy="12" r="1" fill="#C05F3C" stroke="none" />
+              <circle cx="11" cy="15" r="1" fill="#C05F3C" stroke="none" />
+            </svg>
+          </div>
+          <h2>脑网络 · 无为的长期记忆</h2>
+          <p>像人脑一样持续学习你的对话，把有价值的经验沉淀下来，跨对话自动调用——用得越久，无为越懂你。</p>
+        </div>
+        <div style={{ padding: "4px 30px 20px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 18 }}>
+            {feats.map(([icon, tt, ss], i) => (
+              <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto", marginTop: 1 }} aria-hidden="true">
+                  {icon}
+                </svg>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", lineHeight: 1.35 }}>{tt}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5, marginTop: 2 }}>{ss}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, color: "#A97F2E", background: "rgba(201,162,75,.12)", padding: "4px 12px", borderRadius: 20, marginBottom: 14 }}>
+            <PaySpark size={12} /> 会员专享功能
+          </div>
+          <button
+            onClick={onUpgrade}
+            style={{ width: "100%", padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#c9a24b,#a97f2e)", color: "#fff", fontSize: 14.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 10px 22px -8px rgba(169,127,46,.6)" }}
+          >
+            开通 Pro 解锁脑网络
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 // 付款页（国内支付宝/微信扫码）：向后端下单拿二维码串 → 渲染真 QR → 轮询订单状态，到账自动跳成功页。
 // 国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
 function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onContactSupport: () => void; onNeedLogin: () => void }) {
@@ -727,7 +797,14 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
   const isPlan = order.kind === "plan";
   const sku = order.kind === "pack" ? order.pack.sku : order.plan.sku;
   const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} 无为币` : order.plan.name;
-  const gift = order.kind === "pack" ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}` : order.plan.note ? `${order.plan.sub} · ${order.plan.note}` : order.plan.sub;
+  const gift =
+    order.kind === "pack"
+      ? order.pack.bonus > 0
+        ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}`
+        : order.pack.desc
+      : order.plan.note
+        ? `${order.plan.sub} · ${order.plan.note}`
+        : order.plan.sub;
   const price = order.kind === "pack" ? order.pack.price : order.plan.price;
   const unit = isPlan ? order.plan.unit : "";
   const methodName = method === "ali" ? "支付宝" : "微信";
@@ -888,7 +965,7 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
                 <span className="u">无为币</span>
               </div>
               <div className="payres-b3">
-                <span>含赠送 {result.bonus}</span>
+                <span>{result.bonus > 0 ? `含赠送 ${result.bonus}` : "即充即用"}</span>
                 <span>当前余额 <b>{result.balance.toLocaleString()}</b></span>
               </div>
             </div>
@@ -1791,6 +1868,7 @@ export function App() {
   const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」进入）
+  const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
   const t = makeT(lang);
@@ -1811,6 +1889,7 @@ export function App() {
   } | null>(null);
   // 灰度开关（C2）：订阅版是否显示，完全由后端 flags 决定，默认隐藏。客户端只渲染不判定。
   const showSubscription = !!wuwei?.flags?.includes("subscription");
+  const isPro = (wuwei?.membership?.tier ?? "free") !== "free"; // 会员态：脑网络等专享功能门控
   const [wuweiBusy, setWuweiBusy] = useState(false);
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
   async function refreshWuweiForShortage(message: string) {
@@ -3554,6 +3633,17 @@ export function App() {
                   <b>交付结果、路径、验证口径</b>
                 </div>
               </div>
+              <button className="wc-brain" onClick={() => setShowBrainIntro(true)} title="了解脑网络">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" />
+                </svg>
+                <span className="wc-brain-tx">
+                  <b>脑网络</b>持续学习 · 长期记忆，用得越久无为越懂你
+                </span>
+                <svg className="wc-brain-arr" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M6 3l5 5-5 5" />
+                </svg>
+              </button>
               <div className="wc-tags">少步骤 · 不中断 · 结果导向 · 可追溯执行</div>
             </div>
           )}
@@ -4438,6 +4528,21 @@ export function App() {
           askToastAuto={askToastAuto}
           askToastSec={askToastSec}
           onAskToast={changeAskToast}
+          isPro={isPro}
+          onBrainLocked={() => {
+            setShowSettings(false);
+            setShowBrainIntro(true);
+          }}
+        />
+      )}
+      {/* 脑网络功能介绍：欢迎页案例 / 非会员点灰置菜单弹出；点开通跳升级 Pro */}
+      {showBrainIntro && (
+        <BrainIntroModal
+          onClose={() => setShowBrainIntro(false)}
+          onUpgrade={() => {
+            setShowBrainIntro(false);
+            setPlanOpen(true);
+          }}
         />
       )}
       {/* 联系客服弹窗：支付遇到问题 / 账号菜单「联系客服」都可打开 */}
@@ -6810,6 +6915,14 @@ function ConceptGraph({
   );
 }
 
+function LockGlyph() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginLeft: 4, flex: "0 0 auto", opacity: 0.75 }} aria-hidden="true">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
 function SettingsModal({
   onClose,
   liveModels,
@@ -6827,6 +6940,8 @@ function SettingsModal({
   askToastAuto,
   askToastSec,
   onAskToast,
+  isPro,
+  onBrainLocked,
 }: {
   onClose: () => void;
   liveModels: Record<string, string[]>;
@@ -6844,6 +6959,8 @@ function SettingsModal({
   askToastAuto: boolean;
   askToastSec: number;
   onAskToast: (auto: boolean, sec: number) => void;
+  isPro: boolean;
+  onBrainLocked: () => void;
 }) {
   // 界面主题（并入设置页「外观」）
   const [uiTheme, setUiTheme] = useState("light");
@@ -7784,11 +7901,23 @@ function SettingsModal({
           <button type="button" className={"set-tab" + (tab === "prompt" ? " on" : "")} onClick={() => setTab("prompt")}>
             {t("set.tab.prompt")}
           </button>
-          <button type="button" className={"set-tab" + (tab === "memory" ? " on" : "")} onClick={() => setTab("memory")}>
+          <button
+            type="button"
+            className={"set-tab" + (tab === "memory" ? " on" : "") + (isPro ? "" : " locked")}
+            onClick={() => (isPro ? setTab("memory") : onBrainLocked())}
+            title={isPro ? undefined : "脑网络为会员专享功能"}
+          >
             {t("set.tab.memory")}
+            {!isPro && <LockGlyph />}
           </button>
-          <button type="button" className={"set-tab" + (tab === "brain" ? " on" : "")} onClick={() => setTab("brain")}>
+          <button
+            type="button"
+            className={"set-tab" + (tab === "brain" ? " on" : "") + (isPro ? "" : " locked")}
+            onClick={() => (isPro ? setTab("brain") : onBrainLocked())}
+            title={isPro ? undefined : "脑网络为会员专享功能"}
+          >
             {t("set.tab.brain")}
+            {!isPro && <LockGlyph />}
           </button>
           <button type="button" className={"set-tab" + (tab === "mcp" ? " on" : "")} onClick={() => setTab("mcp")}>
             {t("set.tab.mcp")}
