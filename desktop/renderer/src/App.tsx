@@ -1803,7 +1803,7 @@ export function App() {
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
   }, []);
-  // 知识网络后台进度：主进程为真相源，无论设置弹窗开没开都持续订阅，供底部状态栏实时显示。
+  // 脑网络后台进度：主进程为真相源，无论设置弹窗开没开都持续订阅，供底部状态栏实时显示。
   const [idxProg, setIdxProg] = useState<{
     building: boolean;
     phase: string;
@@ -4081,11 +4081,11 @@ export function App() {
               </button>
             </div>
 
-            {/* 知识网络后台进度：索引构建 / 概念抽取，实时可见，点击进设置查看 */}
+            {/* 脑网络后台进度：索引构建 / 概念抽取，实时可见，点击进设置查看 */}
             {(idxProg?.building || conProg?.running) && (
               <button
                 className="brain-prog"
-                title="点击打开知识网络"
+                title="点击打开脑网络"
                 onClick={() => {
                   setSettingsTab("brain");
                   setShowSettings(true);
@@ -6536,7 +6536,7 @@ function migrateMcpDefaults(text: string): { text: string; changed: boolean } {
   return { text: changed ? JSON.stringify({ mcpServers: servers }, null, 2) : text, changed };
 }
 
-// Brain 属性 <-> 文本（每行「键: 值」）互转，供知识网络面板编辑属性
+// Brain 属性 <-> 文本（每行「键: 值」）互转，供脑网络面板编辑属性
 function attrsToText(attrs: Record<string, string>): string {
   return Object.entries(attrs)
     .map(([k, v]) => `${k}: ${v}`)
@@ -7035,8 +7035,8 @@ function SettingsModal({
   const [sysPrompt, setSysPrompt] = useState(""); // 系统提示词(可编辑)
   const [sysPromptDefault, setSysPromptDefault] = useState(""); // 默认模板(恢复默认用)
   const [sysPromptTouched, setSysPromptTouched] = useState(false); // 是否自定义过(否则存 undefined=用默认)
-  // 脑网络说明提示词(知识网络页「提示词」视图查看/编辑) + 密钥说明提示词(密钥页查看/编辑)
-  const [brainView, setBrainView] = useState<"graph" | "prompt">("graph"); // 知识网络页：可视化 / 提示词
+  // 脑网络说明提示词(脑网络页「提示词」视图查看/编辑) + 密钥说明提示词(密钥页查看/编辑)
+  const [brainView, setBrainView] = useState<"graph" | "prompt">("graph"); // 脑网络页：可视化 / 提示词
   const [brainPrompt, setBrainPrompt] = useState("");
   const [brainPromptDefault, setBrainPromptDefault] = useState("");
   const [brainPromptTouched, setBrainPromptTouched] = useState(false);
@@ -7062,7 +7062,7 @@ function SettingsModal({
   const loadedRef = useRef<any>({}); // 保存加载时的完整 settings，保存时 spread 保留 theme/app 等本页不管的字段
   // 三个应用级开关(app.*)：undefined 一律视为「开」，保持历史默认；改动即时落盘+热更(走独立 settings:set-app，不重启 provider)
   const [secretsDetect, setSecretsDetect] = useState(true); // 发送前扫描/拦截疑似新密钥
-  const [brainOn, setBrainOn] = useState(true); // 启用本地知识网络 Brain
+  const [brainOn, setBrainOn] = useState(true); // 启用本地脑网络 Brain
   const [brainDocsOn, setBrainDocsOn] = useState(true); // recall 连带扫描『相关文档』
   const [resumeDetect, setResumeDetect] = useState(true); // 启动时检测被中断/干到一半的任务并提示恢复
   const setAppToggle = (patch: Record<string, boolean>) => {
@@ -7097,10 +7097,10 @@ function SettingsModal({
   const [tab, setTab] = useState<
     "general" | "display" | "model" | "platforms" | "prompt" | "memory" | "brain" | "mcp" | "tools" | "secrets"
   >((initialTab as any) || "model"); // 设置分块标签页(左侧菜单)
-  const [maxed, setMaxed] = useState(false); // 设置弹窗最大化(知识网络等大结构需放大看)
+  const [maxed, setMaxed] = useState(false); // 设置弹窗最大化(脑网络等大结构需放大看)
   const [memory, setMemory] = useState(""); // 全局长期记忆
   const memoryTouchedRef = useRef(false); // 是否改过记忆(保存时才写)
-  // ── 本地知识网络 Brain ──
+  // ── 本地脑网络 Brain ──
   const [brainNodes, setBrainNodes] = useState<import("./env").BrainNodeLite[]>([]);
   const [brainEdges, setBrainEdges] = useState<import("./env").BrainEdgeLite[]>([]);
   const [brainStat, setBrainStat] = useState<{ nodes: number; edges: number; embedded: number }>({ nodes: 0, edges: 0, embedded: 0 });
@@ -7167,7 +7167,7 @@ function SettingsModal({
       setToolTotal(r.total);
     });
   }, [tab]);
-  // 切到「知识网络」页时拉一次图谱 + 文档库统计，并监听建索引/概念抽取进度。
+  // 切到「脑网络」页时拉一次图谱 + 文档库统计，并监听建索引/概念抽取进度。
   // 关键：主进程是进度真相源——重开设置时先查一次当前状态回填，避免"关了再开状态就没了"。
   useEffect(() => {
     if (tab !== "brain") return;
@@ -7946,14 +7946,8 @@ function SettingsModal({
           <button type="button" className={"set-tab" + (tab === "prompt" ? " on" : "")} onClick={() => setTab("prompt")}>
             {t("set.tab.prompt")}
           </button>
-          <button
-            type="button"
-            className={"set-tab" + (tab === "memory" ? " on" : "") + (isPro ? "" : " locked")}
-            onClick={() => (isPro ? setTab("memory") : onBrainLocked())}
-            title={isPro ? undefined : "脑网络为会员专享功能"}
-          >
+          <button type="button" className={"set-tab" + (tab === "memory" ? " on" : "")} onClick={() => setTab("memory")}>
             {t("set.tab.memory")}
-            {!isPro && <LockGlyph />}
           </button>
           <button
             type="button"
@@ -8670,7 +8664,7 @@ function SettingsModal({
             </div>
           )}
 
-          {/* ── 板块 · 知识网络 Brain（概念图谱：查看/检索/编辑）── */}
+          {/* ── 板块 · 脑网络 Brain（概念图谱：查看/检索/编辑）── */}
           {tab === "brain" &&
             (() => {
               const q = brainFilter.trim().toLowerCase();
@@ -8716,12 +8710,12 @@ function SettingsModal({
                       </button>
                     ))}
                   </div>
-                  {/* 总开关：关掉后不注入知识网络说明、不再提供 brain_* 工具 */}
+                  {/* 总开关：关掉后不注入脑网络说明、不再提供 brain_* 工具 */}
                   <div className="app-set-row" style={{ order: -2, cursor: "default" }}>
                     <div className="app-set-text">
-                      <div className="app-set-label">启用知识网络</div>
+                      <div className="app-set-label">启用脑网络</div>
                       <div className="app-set-hint">
-                        开：给模型注入知识网络说明并提供 brain_recall / brain_learn 等工具。关：完全停用（下面的概念/文档仍在，随时可重新开启）。
+                        开：给模型注入脑网络说明并提供 brain_recall / brain_learn 等工具。关：完全停用（下面的概念/文档仍在，随时可重新开启）。
                       </div>
                     </div>
                     <input
@@ -8769,7 +8763,7 @@ function SettingsModal({
                         />
                       </label>
                       <p className="s-note pp-fixed">
-                        这段会拼进系统提示词，告诉模型如何使用本地知识网络（brain_recall/brain_learn/brain_link）。改完失焦即保存并热更当前所有会话；「已沉淀的概念」目录会自动追加在其后。
+                        这段会拼进系统提示词，告诉模型如何使用本地脑网络（brain_recall/brain_learn/brain_link）。改完失焦即保存并热更当前所有会话；「已沉淀的概念」目录会自动追加在其后。
                         {brainPromptTouched && (
                           <button
                             type="button"

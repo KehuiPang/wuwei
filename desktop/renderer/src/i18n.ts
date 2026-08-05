@@ -118,7 +118,7 @@ const DICT: Record<string, { zh: string; en: string }> = {
   "set.tab.platforms": { zh: "平台管理", en: "Platforms" },
   "set.tab.prompt": { zh: "系统提示词", en: "System Prompt" },
   "set.tab.memory": { zh: "记忆", en: "Memory" },
-  "set.tab.brain": { zh: "知识网络", en: "Knowledge" },
+  "set.tab.brain": { zh: "脑网络", en: "Brain" },
   "set.tab.mcp": { zh: "MCP", en: "MCP" },
   "set.tab.tools": { zh: "工具", en: "Tools" },
   "set.tab.secrets": { zh: "密钥", en: "Secrets" },
@@ -250,7 +250,7 @@ const DICT: Record<string, { zh: string; en: string }> = {
   "set.mcp.collapseJson": { zh: "收起 JSON", en: "Hide JSON" },
   "set.mcp.advJson": { zh: "高级：编辑 JSON", en: "Advanced: edit JSON" },
   "set.mcp.saveReconnect": { zh: "保存并重连", en: "Save & reconnect" },
-  // 知识网络 tab (brain)
+  // 脑网络 tab (brain)
   "set.brain.statNodes": { zh: "概念", en: "Concepts" },
   "set.brain.statEdges": { zh: "关系", en: "Relations" },
   "set.brain.statEmbedded": { zh: "已向量化", en: "Embedded" },
@@ -293,7 +293,7 @@ const DICT: Record<string, { zh: string; en: string }> = {
   "set.brain.docBuilding": { zh: "索引中…", en: "Indexing…" },
   "set.brain.docRebuild": { zh: "重建索引", en: "Rebuild index" },
   "set.brain.docBuild": { zh: "建立索引", en: "Build index" },
-  "set.brain.extractNewTitle": { zh: "用当前模型从已索引文档抽取概念与关系，填进知识网络（默认只抽未抽过的文档）", en: "Use the current model to extract concepts & relations from indexed docs (new docs only by default)" },
+  "set.brain.extractNewTitle": { zh: "用当前模型从已索引文档抽取概念与关系，填进脑网络（默认只抽未抽过的文档）", en: "Use the current model to extract concepts & relations from indexed docs (new docs only by default)" },
   "set.brain.extracting": { zh: "抽取中…", en: "Extracting…" },
   "set.brain.extractNew": { zh: "抽取概念(新增)", en: "Extract concepts (new)" },
   "set.brain.extractFail": { zh: "无法开始抽取", en: "Couldn't start extraction" },
