@@ -319,9 +319,9 @@ const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price:
 // 顶配封顶 80×(¥799)：受支付通道 XorPay 当前单笔上限 ¥832 限制；账户提额后可恢复 100×/¥999/10万币。
 type ProPlan = { id: "pro" | "pro10x" | "pro80x"; sku: string; name: string; price: number; unit: string; coins: number; signin: number; saved: number; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
-  { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 29, unit: "/月", coins: 1000, signin: 20, saved: 0, sub: "每月 1000 无为币 · 每日签到 20", note: "", tag: "入门", tagType: "pop" },
-  { id: "pro10x", sku: "plan_pro_10x", name: "无为 Pro 10×", price: 199, unit: "/月", coins: 10000, signin: 50, saved: 91, sub: "每月 10000 无为币 · 每日签到 50", note: "省 31%", tag: "最受欢迎", tagType: "rec" },
-  { id: "pro80x", sku: "plan_pro_80x", name: "无为 Pro 80×", price: 799, unit: "/月", coins: 80000, signin: 80, saved: 1521, sub: "每月 80000 无为币 · 每日签到 80", note: "省 66%", tag: "顶配", tagType: "pop" },
+  { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 29, unit: "/月", coins: 1000, signin: 30, saved: 0, sub: "每月 1000 无为币 · 每日签到 30", note: "", tag: "入门", tagType: "pop" },
+  { id: "pro10x", sku: "plan_pro_10x", name: "无为 Pro 10×", price: 199, unit: "/月", coins: 10000, signin: 60, saved: 91, sub: "每月 10000 无为币 · 每日签到 60", note: "省 31%", tag: "最受欢迎", tagType: "rec" },
+  { id: "pro80x", sku: "plan_pro_80x", name: "无为 Pro 80×", price: 799, unit: "/月", coins: 80000, signin: 100, saved: 1521, sub: "每月 80000 无为币 · 每日签到 100", note: "省 66%", tag: "顶配", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
