@@ -2517,7 +2517,12 @@ ipcMain.on("browser:detach", () => {
     browserAttached = false;
   }
   if (!browserPopWin || browserPopWin.isDestroyed()) {
-    browserPopWin = new BrowserWindow({ width: 1040, height: 780, title: "无为 浏览器" });
+    browserPopWin = new BrowserWindow({
+      width: 1040,
+      height: 780,
+      title: "无为 浏览器",
+      ...(existsSync(join(__dirname, "../../build/icon.png")) ? { icon: join(__dirname, "../../build/icon.png") } : {}),
+    });
     const fit = () => {
       if (!browserPopWin || browserPopWin.isDestroyed()) return;
       const [w, h] = browserPopWin.getContentSize();

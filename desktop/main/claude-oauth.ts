@@ -6,7 +6,7 @@
 // → 后台用 code + code_verifier 换 access_token。全程主进程 fetch，无 CORS 限制。
 import { BrowserWindow, shell } from "electron";
 import { createHash, randomBytes } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
 import { log } from "./logger.js";
@@ -30,7 +30,7 @@ export interface ClaudeOAuthResult {
 
 // —— app 自己的 OAuth 令牌 sidecar：存 refresh_token/过期时间，供静默续期。
 // 独立于 settings.json（渲染层 setSettings 会整包覆盖，放这里不被冲掉），也绝不动 ~/.claude.json。
-const AUTH_FILE = join(homedir(), ".wuwei", "claude-oauth.json");
+const AUTH_FILE = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "claude-oauth.json");
 export interface ClaudeAuthStore {
   accessToken: string;
   refreshToken?: string;
@@ -199,13 +199,16 @@ export async function claudeOAuthLogin(): Promise<ClaudeOAuthResult | null> {
   const { authUrl, verifier, state } = buildAuth(REDIRECT_URI);
 
   log("claudeOAuth", "打开授权窗", AUTHORIZE_URL);
+  const iconPath = join(__dirname, "../../build/icon.png"); // 无为 logo（与主窗口同源）
   const w = new BrowserWindow({
     width: 520,
     height: 720,
-    title: "登录授权 Claude 订阅",
+    title: "无为 · 登录授权",
+    ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     autoHideMenuBar: true,
     webPreferences: { partition: "persist:claude-oauth" }, // 持久分区：登录态可复用
   });
+  w.on("page-title-updated", (e) => e.preventDefault()); // 锁标题，不让 claude.ai 页面把它改成 "Claude"
 
   return await new Promise<ClaudeOAuthResult | null>((resolve) => {
     let done = false;
