@@ -473,6 +473,7 @@ async function webLogin(pid: string): Promise<{ name?: string; avatar?: string; 
     width: 480,
     height: 700,
     title: "登录获取账号信息",
+    ...(existsSync(join(__dirname, "../../build/icon.png")) ? { icon: join(__dirname, "../../build/icon.png") } : {}),
     webPreferences: { partition: "persist:login-" + pid },
   });
   w.webContents.on("did-navigate", (_e, url) => log("webLogin", "导航到", url));
