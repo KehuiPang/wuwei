@@ -331,7 +331,7 @@ const PRO_FEATS: [string, string][] = [
 ];
 
 // ② 购买积分包（朱系）：站内选档，付款按钮暂跳 pricing（Paddle 接入待后端产品 ID）
-function CoinPackModal({ packs, onClose, onCheckout }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void }) {
+function CoinPackModal({ packs, onClose, onCheckout, onUpgrade }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void; onUpgrade: () => void }) {
   const [sel, setSel] = useState(() => { const i = packs.findIndex((x) => x.badgeType === "rec"); return i >= 0 ? i : 0; }); // 默认选中"推荐"档
   const p = packs[sel];
   return (
@@ -368,7 +368,9 @@ function CoinPackModal({ packs, onClose, onCheckout }: { packs: CoinPack[]; onCl
           确认购买 ¥{p.price}
         </button>
         <div className="pay-cancel">
-          <button onClick={onClose}>取消　·　付费积分永久有效 · 生态产品通用</button>
+          <button onClick={onUpgrade} style={{ color: "#A97F2E", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <PaySpark size={12} /> 升级会员 · 更多优惠 →
+          </button>
         </div>
       </div>
     </div>
@@ -3312,7 +3314,8 @@ export function App() {
                                   续费
                                 </button>
                               </div>
-                            ) : (
+                            ) : bal <= 0 ? (
+                              // 只在无为币用完(余额=0)后才推会员——自然的升级时机，不打扰仍有币的用户
                               <div className="acct-memb up" onClick={openPlan}>
                                 <div>
                                   <div className="acct-memb-ttl">
@@ -3325,7 +3328,7 @@ export function App() {
                                 </div>
                                 <span className="acct-go">立即开通</span>
                               </div>
-                            )}
+                            ) : null}
 
                             <div className="acct-sep" />
                             <div className="acct-items">
@@ -4710,6 +4713,10 @@ export function App() {
           onCheckout={(pack) => {
             setCoinPackOpen(false);
             setPayCheckout({ kind: "pack", pack });
+          }}
+          onUpgrade={() => {
+            setCoinPackOpen(false);
+            setPlanOpen(true);
           }}
         />
       )}
