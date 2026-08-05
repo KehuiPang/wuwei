@@ -4476,6 +4476,35 @@ export function App() {
                 )}
                 <div className="u-note">数据来自订阅额度（发一条消息后刷新）。</div>
               </>
+            ) : curPreset?.hosted || curProviderId.startsWith("wuwei-") ? (
+              // 无为托管：显示无为币余额（未登录则引导登录）
+              wuwei ? (
+                <>
+                  <div className="u-row">
+                    <span>无为币余额</span>
+                    <span>{wuwei.coin.balance.toLocaleString()} 无为币</span>
+                  </div>
+                  <div className="u-row">
+                    <span>本会话 tokens</span>
+                    <span>
+                      ↑{usage.totalInput.toLocaleString()} ↓{usage.totalOutput.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="u-note">无为托管按 token×单价扣无为币（余额随对话刷新）。</div>
+                </>
+              ) : (
+                <div
+                  className="u-row"
+                  style={{ color: "#C05F3C", cursor: "pointer", alignItems: "center" }}
+                  onClick={() => {
+                    setLoginResume(false);
+                    setShowLoginForm(true);
+                  }}
+                >
+                  <span>无为币余额</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>登录后查看 · 点此登录</span>
+                </div>
+              )
             ) : account.balance ? (
               // 计费类后端(DeepSeek 等)：显示账户余额 + 本会话已消耗
               <>
@@ -4485,10 +4514,12 @@ export function App() {
                     <span>{account.balance.total} 元</span>
                   </div>
                 )}
-                <div className="u-row">
-                  <span>本会话已消耗</span>
-                  <span>≈ {account.balance.consumed} 元</span>
-                </div>
+                {account.balance.consumed && (
+                  <div className="u-row">
+                    <span>本会话已消耗</span>
+                    <span>≈ {account.balance.consumed} 元</span>
+                  </div>
+                )}
                 <div className="u-row">
                   <span>本会话 tokens</span>
                   <span>

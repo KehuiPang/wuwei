@@ -695,6 +695,20 @@ function curProviderId(): string {
   const st = loadSettings();
   return st?.providerId || (loadConfig().provider === "codex" ? "codex" : "");
 }
+// 直连 Kimi（Moonshot）余额：用 API Key 调官方余额接口 {baseUrl}/users/me/balance（同一个 key）。
+async function moonshotBalance(apiKey: string, baseUrl: string): Promise<{ total: number } | null> {
+  try {
+    const url = `${baseUrl.replace(/\/$/, "")}/users/me/balance`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { data?: { available_balance?: number } };
+    const bal = j?.data?.available_balance;
+    return typeof bal === "number" ? { total: bal } : null;
+  } catch (e) {
+    log("moonshotBalance", "拉余额异常", String(e));
+    return null;
+  }
+}
 async function emitAccount() {
   const st = loadSettings();
   const pid = st?.providerId || (loadConfig().provider === "codex" ? "codex" : "");
@@ -851,6 +865,26 @@ async function emitAccount() {
       nickname,
       avatar,
       balance: { total: bal.total, currency: bal.currency, consumed: consumed.toFixed(2) },
+    });
+    return;
+  }
+  if (pid === "kimi") {
+    // 直连 Kimi（Moonshot）：用 API Key 拉官方余额（¥）显示；无 key 则只显示 token
+    const loggedIn = !!st?.apiKey;
+    if (!loggedIn) {
+      send("evt:account", { providerId: pid, label: "Kimi", loggedIn, email: null, nickname, avatar });
+      return;
+    }
+    const baseUrl = st?.creds?.["kimi"]?.baseUrl || loadConfig().baseUrl || "https://api.moonshot.cn/v1";
+    const bal = await moonshotBalance(st.apiKey!, baseUrl);
+    send("evt:account", {
+      providerId: pid,
+      label: "Kimi",
+      loggedIn,
+      email: null,
+      nickname,
+      avatar,
+      balance: bal ? { total: bal.total.toFixed(2), currency: "CNY" } : undefined,
     });
     return;
   }
