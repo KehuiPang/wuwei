@@ -879,8 +879,8 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
     `\n\n## 长期记忆\n用户说“记住…/以后…/我喜欢…”或出现值得长期保留的信息(偏好、称呼、事实、项目背景)时，调用 remember 工具写入；它会在之后每次对话自动加载。`;
   if (mem) base += `\n\n已记住（需主动遵守/参考）：\n${mem}`;
   // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall；提示词可在设置里覆盖。
-  // 设置里关掉「知识网络」后：不注入说明、不追加概念目录(brain_* 工具也在别处一并停掉)。
-  if (brainEnabled(st)) {
+  // 关掉「脑网络」或非会员：不注入说明、不追加概念目录(brain_* 工具也在别处一并停掉)。
+  if (brainAvailable(st)) {
     base += typeof st?.brainPrompt === "string" ? st.brainPrompt : DEFAULT_BRAIN_NOTE;
     try {
       const idx = brain.conceptIndex(40);
@@ -1180,8 +1180,14 @@ function wrapSecret(t: Tool): Tool {
 
 // 桌面版工具集 = 共享工具 + 浏览器工具 + 动态 MCP 工具(连上后加入)，全部过密钥安全包装。
 // 设置里关掉「知识网络」→ 一并摘掉 brain_* 工具，别再让模型调用(与系统提示注入的开关同源)。
+// 脑网络（brain）为会员专享：非会员即使设置开着也一律停用（不注入说明、不给 brain_* 工具）。
+// isProCached 由 fetchMe 的 membership 更新；普通「记忆」(remember/长期记忆) 不受此门控，全员可用。
+let isProCached = false;
+function brainAvailable(st: ReturnType<typeof loadSettings>): boolean {
+  return brainEnabled(st) && isProCached;
+}
 function desktopTools(): Tool[] {
-  const brainOn = brainEnabled(loadSettings());
+  const brainOn = brainAvailable(loadSettings());
   const base = brainOn ? ALL_TOOLS : ALL_TOOLS.filter((t) => !t.name.startsWith("brain_"));
   return [...base, askUserTool, ...BROWSER_TOOLS, ...mcpTools()].map(wrapSecret);
 }
@@ -1602,11 +1608,22 @@ async function ensureHostedProviderReady(): Promise<void> {
   for (const a of agents.values()) a.setProvider(provider);
 }
 // 托管平台每轮结束后：拉最新余额推给渲染层(账号菜单余额随扣币刷新)。
+// 会员态变更 → 脑网络可用性变 → 热更所有会话的工具集 + 系统提示（brain_* 与说明随之加/摘）。
+function applyProFromMe(me: WuweiMe | null): void {
+  const pro = !!me?.membership && me.membership.tier !== "free";
+  if (pro === isProCached) return;
+  isProCached = pro;
+  refreshAgentTools();
+  for (const a of agents.values()) a.setSystem(buildSysPrompt(cwd, modelLabel, loadSettings()?.providerId));
+}
 async function refreshWuweiMe(): Promise<void> {
   const sess = await getFreshWuweiSession();
   if (!sess) return;
   const me = await wuweiFetchMe(sess.accessToken);
-  if (me && me !== "unauthorized") send("evt:wuwei-me", me);
+  if (me && me !== "unauthorized") {
+    applyProFromMe(me);
+    send("evt:wuwei-me", me);
+  }
 }
 
 async function startTurn(useId: string, text: string, images?: string[], sysOverride?: string) {
@@ -2601,6 +2618,7 @@ ipcMain.handle("account:wuwei-login", async () => {
   saveWuweiSession(sess);
   const me = await wuweiFetchMe(sess.accessToken);
   if (me === "unauthorized" || !me) return null;
+  applyProFromMe(me);
   return me;
 });
 // —— 应用内登录（邮箱密码/邮箱注册/手机验证码）：成功存会话+返回 {me}，失败返回 {error:文案} ——
@@ -2616,6 +2634,7 @@ async function finishWuweiSignin(
       error: action === "register" ? "注册成功，但拉取账号失败，请重开登录" : "登录成功，但拉取账号失败，请重试",
     };
   }
+  applyProFromMe(me);
   return { me };
 }
 ipcMain.handle("account:wuwei-password-login", (_e, identifier: string, password: string) =>
@@ -2645,10 +2664,13 @@ ipcMain.handle("account:wuwei-me", async () => {
     saveWuweiSession(fresh);
     me = await wuweiFetchMe(fresh.accessToken);
   }
-  return me === "unauthorized" || !me ? null : me;
+  const meVal = me === "unauthorized" || !me ? null : me;
+  applyProFromMe(meVal); // 同步会员态 → 脑网络可用性
+  return meVal;
 });
 ipcMain.handle("account:wuwei-logout", () => {
   clearWuweiSession();
+  applyProFromMe(null); // 退出 → 会员态清空 → 脑网络停用
   return true;
 });
 // 记住登录：多账号加密存储，供登录框自动填充 + 账号下拉历史。
