@@ -8412,10 +8412,9 @@ function SettingsModal({
                           className="eye-btn"
                           onClick={() => setOauthToken("")}
                           title="清空授权 Token（过期后清掉，改用下方 API Key；点保存后生效）"
-                          style={{ color: "#C0392B" }}
                         >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                            <path d="M6 6l12 12M18 6L6 18" />
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M5 7h14M10 7V5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V7M7 7l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L18 7" />
                           </svg>
                         </button>
                       </div>
