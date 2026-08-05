@@ -3294,7 +3294,7 @@ export function App() {
                                 </button>
                               </div>
                               <div className={"acct-hint " + (bal > 0 ? "pos" : "zero")}>
-                                {bal > 0 ? "会员每月赠币 · 每日签到再领 10" : "充值解锁更多对话额度"}
+                                {bal > 0 ? (isPro ? "会员每月赠币 · 每日签到再领更多" : "每日签到领 10 无为币") : "充值解锁更多对话额度"}
                               </div>
                             </div>
 
