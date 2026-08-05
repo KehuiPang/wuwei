@@ -7704,9 +7704,11 @@ function SettingsModal({
         ? cleanKey(opts?.apiKeyOverride ?? apiKey) || prevSlot.apiKey || undefined
         : undefined,
       baseUrl: preset.kind === "openai" ? baseUrl.trim() || preset.baseUrl : undefined,
+      // OAuth Token 只读、由授权流程填入，不存在「误留空」；故清空即真清空(不回退旧值)，
+      // 便于过期后手动清掉、改用下方 API Key。授权流程用 oauthOverride 传入新 token。
       oauthToken:
         preset.kind === "anthropic-oauth"
-          ? cleanKey(opts?.oauthOverride ?? oauthToken) || prevSlot.oauthToken || undefined
+          ? cleanKey(opts?.oauthOverride ?? oauthToken) || undefined
           : undefined,
       nickname: nickname.trim() || prevSlot.nickname || undefined,
       systemPrompt: platPromptOn ? platPrompt : undefined, // 本平台专属提示词(关掉=undefined 跟随全局)
@@ -8405,6 +8407,20 @@ function SettingsModal({
                         >
                           <EyeIcon off={showKey} />
                         </button>
+                        <button
+                          type="button"
+                          className="eye-btn"
+                          onClick={() => setOauthToken("")}
+                          title="清空授权 Token（过期后清掉，改用下方 API Key；点保存后生效）"
+                          style={{ color: "#C0392B" }}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M6 6l12 12M18 6L6 18" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+                        授权 Token 过期后点右侧 ✕ 清空并「保存」，即可改用下方 API Key。
                       </div>
                     </label>
                   ) : null}
