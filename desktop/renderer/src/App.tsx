@@ -309,19 +309,19 @@ function PackIcon({ size = 20 }: { size?: number }) {
 type CoinPack = { sku: string; coins: number; bonus: number; price: number; desc: string; badge?: string; badgeType?: "rec" | "val" };
 // 积分包（按需充值）：单价刻意高于包月，形成「充值不如包月」的转化漏斗。无 bonus，单价随量微降。
 const COIN_PACKS: CoinPack[] = [
-  { sku: "pack_1000", coins: 1000, bonus: 0, price: 39, desc: "按需充值，随用随充" },
-  { sku: "pack_5000", coins: 5000, bonus: 0, price: 179, desc: "常用档 · 更划算", badge: "推荐", badgeType: "rec" },
-  { sku: "pack_20000", coins: 20000, bonus: 0, price: 599, desc: "高频 / 团队", badge: "最超值", badgeType: "val" },
+  { sku: "pack_1000", coins: 1000, bonus: 0, price: 29, desc: "按需充值，随用随充" },
+  { sku: "pack_3000", coins: 3000, bonus: 0, price: 79, desc: "常用档", badge: "推荐", badgeType: "rec" },
+  { sku: "pack_8000", coins: 8000, bonus: 0, price: 199, desc: "高频 / 团队", badge: "最超值", badgeType: "val" },
 ];
 // ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
-// 月付阶梯（去年付，3 档简洁）：1x / 10x / 80x，越高档每千币单价越低（29 → 19.9 → 9.99 元/千币）。saved=按基础价买同量能省多少。
-// 顶配封顶 80×(¥799)：受支付通道 XorPay 当前单笔上限 ¥832 限制；账户提额后可恢复 100×/¥999/10万币。
-type ProPlan = { id: "pro" | "pro10x" | "pro80x"; sku: string; name: string; price: number; unit: string; coins: number; signin: number; saved: number; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
+// 月付阶梯（去年付，3 档）：1x / 5x / 50x。成本基准 1 无为币=¥0.01；1×/5× ~2 倍毛利，50× 顶配走量 ~1.6 倍。
+// 顶配 50×(¥799)：受 XorPay 单笔上限 ¥832 限制（5万币按2倍要¥1000超限，故定¥799=1.6倍）；提额后可拉回2倍。saved=按基础价买同量能省多少。
+type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; price: number; unit: string; coins: number; signin: number; saved: number; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
-  { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 29, unit: "/月", coins: 1000, signin: 30, saved: 0, sub: "每月 1000 无为币 · 每日签到 30", note: "", tag: "入门", tagType: "pop" },
-  { id: "pro10x", sku: "plan_pro_10x", name: "无为 Pro 10×", price: 199, unit: "/月", coins: 10000, signin: 60, saved: 91, sub: "每月 10000 无为币 · 每日签到 60", note: "省 31%", tag: "最受欢迎", tagType: "rec" },
-  { id: "pro80x", sku: "plan_pro_80x", name: "无为 Pro 80×", price: 799, unit: "/月", coins: 80000, signin: 100, saved: 1521, sub: "每月 80000 无为币 · 每日签到 100", note: "省 66%", tag: "顶配", tagType: "pop" },
+  { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 25, unit: "/月", coins: 1000, signin: 30, saved: 0, sub: "每月 1000 无为币 · 每日签到 30", note: "", tag: "入门", tagType: "pop" },
+  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", price: 109, unit: "/月", coins: 5000, signin: 50, saved: 16, sub: "每月 5000 无为币 · 每日签到 50", note: "省 13%", tag: "最受欢迎", tagType: "rec" },
+  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", price: 799, unit: "/月", coins: 50000, signin: 150, saved: 451, sub: "每月 50000 无为币 · 每日签到 150", note: "省 36%", tag: "顶配", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
@@ -379,7 +379,7 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade }: { packs: CoinP
 
 // ③ 升级无为 Pro（金系）：月付/年付选择 + 2×2 权益；付款按钮暂跳 pricing
 function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (plan: ProPlan) => void }) {
-  const [sel, setSel] = useState<ProPlan["id"]>("pro10x");
+  const [sel, setSel] = useState<ProPlan["id"]>("pro5x");
   const selPlan = PRO_PLANS.find((x) => x.id === sel)!;
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
