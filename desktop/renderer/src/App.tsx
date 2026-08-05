@@ -1722,7 +1722,7 @@ export function App() {
   const [showBrowser, setShowBrowser] = useState(false); // 内置浏览器面板(可视化AI操作)
   const [browserMode, setBrowserMode] = useState<"split" | "full">("split"); // 半屏/全屏
   const [browserDetached, setBrowserDetached] = useState(false); // 是否弹成独立窗口
-  const [browserWidth, setBrowserWidth] = useState(640); // 浏览器面板宽度(可拖动分隔条调)
+  const [browserWidth, setBrowserWidth] = useState(500); // 浏览器面板宽度(可拖动分隔条调；主区有 400 最小宽兜底不被压没)
   const [showBrowserMenu, setShowBrowserMenu] = useState(false); // 独立时顶栏浏览器图标的下拉
   const [footCompact, setFootCompact] = useState(false); // 底栏空间不够→收起次要信息
   const composerRef = useRef<HTMLDivElement>(null);
@@ -5117,7 +5117,7 @@ function BrowserPanel({
   function startResize(e: React.MouseEvent) {
     e.preventDefault();
     const move = (ev: MouseEvent) => {
-      const w = Math.min(window.innerWidth - 300, Math.max(360, window.innerWidth - ev.clientX));
+      const w = Math.min(window.innerWidth - 420, Math.max(360, window.innerWidth - ev.clientX));
       onResize(w);
     };
     const up = () => {

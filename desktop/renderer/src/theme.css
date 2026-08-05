@@ -109,7 +109,7 @@ body {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  min-width: 400px; /* 主区最小宽度：浏览器面板再大也不把聊天区压没 */
   background: var(--bg-soft);
   position: relative;
 }
@@ -2503,7 +2503,7 @@ body {
 }
 /* 内置浏览器面板：作为布局里的一列(与聊天同层同级，不遮挡)，页面区是原生 WebContentsView */
 .browser-panel {
-  flex: 0 0 auto; /* 宽度由 style.flexBasis 控制(可拖) */
+  flex: 0 1 auto; /* 宽度由 style.flexBasis 控制(可拖)；允许收缩，窗口变窄时让位给主区，不把聊天压没 */
   min-width: 360px;
   display: flex;
   flex-direction: column;
