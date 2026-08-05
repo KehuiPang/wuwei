@@ -3290,9 +3290,11 @@ export function App() {
                                     {bal.toLocaleString()}
                                   </div>
                                 </div>
-                                <button className="acct-topup" onClick={openPack}>
-                                  捐赠
-                                </button>
+                                {bal <= 0 && (
+                                  <button className="acct-topup" onClick={openPack}>
+                                    捐赠
+                                  </button>
+                                )}
                               </div>
                               <div className={"acct-hint " + (bal > 0 ? "pos" : "zero")}>
                                 {bal > 0 ? (isPro ? "会员每月赠币 · 每日签到再领更多" : "每日签到领 10 无为币") : "充值解锁更多对话额度"}
@@ -3337,7 +3339,7 @@ export function App() {
                                   <rect x="3" y="5" width="18" height="14" rx="2.5" />
                                   <path d="M3 10h18M7 15h4" />
                                 </svg>
-                                捐赠中心
+                                捐赠
                               </button>
                               <button
                                 className="acct-it"
