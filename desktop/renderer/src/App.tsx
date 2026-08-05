@@ -8397,7 +8397,7 @@ function SettingsModal({
                   {oauthToken ? (
                     <label className="field">
                       <span>{t("set.m.oauthToken")}</span>
-                      <div className="key-wrap">
+                      <div className="key-wrap oauth">
                         <input type={showKey ? "text" : "password"} value={oauthToken} readOnly />
                         <button
                           type="button"
@@ -8409,7 +8409,7 @@ function SettingsModal({
                         </button>
                         <button
                           type="button"
-                          className="eye-btn"
+                          className="eye-btn clr"
                           onClick={() => setOauthToken("")}
                           title="清空授权 Token（过期后清掉，改用下方 API Key；点保存后生效）"
                         >

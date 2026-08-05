@@ -3204,6 +3204,16 @@ body {
   opacity: 1;
   color: var(--text);
 }
+/* OAuth 字段有两个按钮（显隐 + 清空）：清空挪到显隐左侧，输入框多留右边距，避免重叠 */
+.settings .key-wrap.oauth input {
+  padding-right: 66px;
+}
+.settings .key-wrap.oauth .eye-btn.clr {
+  right: 34px;
+}
+.settings .key-wrap.oauth .eye-btn.clr:hover {
+  color: #c0392b;
+}
 .settings .btns {
   display: flex;
   gap: 10px;
