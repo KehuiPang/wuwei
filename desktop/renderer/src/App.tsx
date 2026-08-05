@@ -3286,11 +3286,10 @@ export function App() {
                                   </div>
                                   <div className="acct-bal">
                                     {bal.toLocaleString()}
-                                    <small>无为币</small>
                                   </div>
                                 </div>
                                 <button className="acct-topup" onClick={openPack}>
-                                  充值
+                                  捐赠
                                 </button>
                               </div>
                               <div className={"acct-hint " + (bal > 0 ? "pos" : "zero")}>
@@ -3335,7 +3334,7 @@ export function App() {
                                   <rect x="3" y="5" width="18" height="14" rx="2.5" />
                                   <path d="M3 10h18M7 15h4" />
                                 </svg>
-                                充值中心
+                                捐赠中心
                               </button>
                               <button
                                 className="acct-it"
