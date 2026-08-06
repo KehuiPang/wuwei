@@ -315,13 +315,13 @@ const COIN_PACKS: CoinPack[] = [
 ];
 // ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
-// 月付阶梯（去年付，3 档）：1x / 5x / 50x。成本基准 1 无为币=¥0.01；1×/5× ~2 倍毛利，50× 顶配走量 ~1.6 倍。
-// 顶配 50×(¥799)：受 XorPay 单笔上限 ¥832 限制（5万币按2倍要¥1000超限，故定¥799=1.6倍）；提额后可拉回2倍。saved=按基础价买同量能省多少。
+// 月付阶梯（去年付，3 档）：1x / 5x / 50x。成本基准 1 无为币=¥0.01，各档 ~2 倍毛利。saved=按基础价买同量能省多少。
+// (XorPay fee_error 实为手续费余额不足，非硬限额；充够手续费后大额单正常，故顶配回 ¥999=2倍。)
 type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; price: number; unit: string; coins: number; signin: number; saved: number; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
   { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 25, unit: "/月", coins: 1000, signin: 30, saved: 0, sub: "每月 1000 无为币 · 每日签到 30", note: "", tag: "入门", tagType: "pop" },
   { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", price: 109, unit: "/月", coins: 5000, signin: 50, saved: 16, sub: "每月 5000 无为币 · 每日签到 50", note: "省 13%", tag: "最受欢迎", tagType: "rec" },
-  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", price: 799, unit: "/月", coins: 50000, signin: 150, saved: 451, sub: "每月 50000 无为币 · 每日签到 150", note: "省 36%", tag: "顶配", tagType: "pop" },
+  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", price: 999, unit: "/月", coins: 50000, signin: 150, saved: 251, sub: "每月 50000 无为币 · 每日签到 150", note: "省 20%", tag: "顶配", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
