@@ -7539,7 +7539,7 @@ function SettingsModal({
   async function addSecret() {
     setSecErr("");
     if (!secNew.value.trim()) {
-      setSecErr("请填入密钥值");
+      setSecErr(t("set.sec.needValue", "请填入密钥值"));
       return;
     }
     const r = await window.wuwei.secretsAdd({
@@ -8272,7 +8272,7 @@ function SettingsModal({
               <button
                 type="button"
                 className="set-win-btn"
-                title={maxed ? "还原窗口大小" : "最大化（同时把整个窗口最大化铺满屏幕）"}
+                title={maxed ? t("set.win.restore", "还原窗口大小") : t("set.win.maximize", "最大化（同时把整个窗口最大化铺满屏幕）")}
                 onClick={async () => {
                   const next = !maxed;
                   setMaxed(next);
@@ -8291,7 +8291,7 @@ function SettingsModal({
                   </svg>
                 )}
               </button>
-              <button type="button" className="set-win-btn" title="关闭" onClick={onClose}>
+              <button type="button" className="set-win-btn" title={t("win.close", "关闭")} onClick={onClose}>
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
@@ -9058,7 +9058,7 @@ function SettingsModal({
                   {brainView === "prompt" ? (
                     <>
                       <label className="field pp-grow">
-                        <span>脑网络说明提示词 {brainPromptTouched ? "（已自定义）" : "（默认）"}</span>
+                        <span>{t("set.brain.promptLabel", "脑网络说明提示词")} {brainPromptTouched ? t("set.pr.customized", "（已自定义）") : t("set.pr.default", "（默认）")}</span>
                         <textarea
                           className="sysprompt-area pp-fill"
                           value={brainPrompt}
@@ -9785,7 +9785,7 @@ function SettingsModal({
 
                   <div className="mcp-foot">
                     <button type="button" className="link-inline" onClick={() => setMcpRawEdit((v) => !v)}>
-                      {mcpRawEdit ? "收起 JSON" : "高级：编辑 JSON"}
+                      {mcpRawEdit ? t("set.mcp.collapseJson", "收起 JSON") : t("set.mcp.advJson", "高级：编辑 JSON")}
                     </button>
                     <span className="mcp-path">~/.wuwei/mcp.json</span>
                   </div>
@@ -9809,7 +9809,7 @@ function SettingsModal({
                           setTimeout(reloadMcpStatus, 2800);
                         }}
                       >
-                        保存并重连
+                        {t("set.mcp.saveReconnect", "保存并重连")}
                       </button>
                     </>
                   )}
@@ -9926,10 +9926,9 @@ function SettingsModal({
 
               <div className="app-set-row" style={{ cursor: "default" }}>
                 <div className="app-set-text">
-                  <div className="app-set-label">发送前检测疑似新密钥</div>
+                  <div className="app-set-label">{t("set.sec.detectTitle", "发送前检测疑似新密钥")}</div>
                   <div className="app-set-hint">
-                    开：发送前扫描文本、发现疑似新密钥就弹窗让你确认是否入库。关：不再扫描拦截——传很长的临时
-                    token 时不会被切成一堆弹窗。（已入库密钥仍会自动脱敏，不受此开关影响。）
+                    {t("set.sec.detectHint", "开：发送前扫描文本、发现疑似新密钥就弹窗让你确认是否入库。关：不再扫描拦截——传很长的临时 token 时不会被切成一堆弹窗。（已入库密钥仍会自动脱敏，不受此开关影响。）")}
                   </div>
                 </div>
                 <input
@@ -10147,7 +10146,7 @@ function SettingsModal({
               {/* 密钥说明提示词：拼进系统提示词的那段，查看/修改 */}
               <details className="sec-prompt" style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
                 <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--text)" }}>
-                  密钥说明提示词 {secretsPromptTouched ? "（已自定义）" : "（默认）"} — 查看/修改
+                  {t("set.sec.promptLabel", "密钥说明提示词")} {secretsPromptTouched ? t("set.pr.customized", "（已自定义）") : t("set.pr.default", "（默认）")}{t("set.sec.promptViewEdit", " — 查看/修改")}
                 </summary>
                 <label className="field" style={{ marginTop: 8, display: "block" }}>
                   <textarea

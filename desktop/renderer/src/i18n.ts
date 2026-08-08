@@ -780,6 +780,8 @@ const DICT_EN: Record<string, string> = {
   "set.mcp.saveReconnect": "Save & reconnect",
   "set.pr.customized": "(customized)",
   "set.pr.default": "(default)",
+  "set.win.restore": "Restore window size",
+  "set.win.maximize": "Maximize (also maximizes the whole window to fill the screen)",
   "set.mcp.rawPlaceholder": '{ "mcpServers": { "name": { "command": "npx", "args": ["-y", "..."] } } }',
   "set.sec.detectTitle": "Detect likely new secrets before sending",
   "set.sec.detectHint": "On: scans text before sending and pops up to confirm whether to store a likely new secret. Off: no scanning/blocking — pasting a long temporary token won't be chopped into a pile of prompts. (Already-stored secrets are still auto-masked, unaffected by this toggle.)",
