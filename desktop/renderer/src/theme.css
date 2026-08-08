@@ -458,6 +458,21 @@ body {
 .acct-hint { font-size: 10.5px; margin-top: 8px; display: flex; align-items: center; gap: 5px; }
 .acct-hint.zero { color: var(--spark); }
 .acct-hint.pos { color: #5c8a73; }
+/* 每日签到入口：可点态=竹绿描边胶囊+微悬停；已签到态=灰、不可点、✓ */
+.acct-checkin {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px; font-size: 10.5px; font-weight: 600; line-height: 1;
+  color: #5c8a73; background: rgba(92, 138, 115, .10);
+  border: 1px solid rgba(92, 138, 115, .32); border-radius: 999px;
+  cursor: pointer; transition: background .15s, border-color .15s, transform .06s;
+}
+.acct-checkin:hover:not(:disabled) { background: rgba(92, 138, 115, .18); border-color: rgba(92, 138, 115, .5); }
+.acct-checkin:active:not(:disabled) { transform: scale(.97); }
+.acct-checkin svg { width: 13px; height: 13px; }
+.acct-checkin.done {
+  color: var(--text-muted); background: transparent;
+  border-color: var(--border, rgba(128,128,128,.25)); cursor: default;
+}
 /* 会员条：窄侧栏内纵向堆叠(标题+副文案在上, 动作按钮占满一行在下), 不换行不被裁 */
 .acct-memb { margin: 0 12px 11px; border-radius: 12px; overflow: hidden; position: relative; }
 .acct-memb > div:first-child { min-width: 0; }

@@ -235,6 +235,23 @@ function WuweiMark({ size = 18 }: { size?: number }) {
 function resolveTheme(t?: string): string {
   return t === "light" || t === "gold" ? t : "light";
 }
+// 签到（未签）：日历 + 加号；已签：日历 + 对勾。线性 currentColor，无为简约风。
+function CheckinIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3M12 12.2v4M10 14.2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function CheckinDoneIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3.5 9.5h17M8 3.5v3M16 3.5v3M9 14l2.2 2.2L15.5 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function CoinIcon({ size = 14 }: { size?: number }) {
   // 币：填充淡底 + 描边 + ¥ 记号，比双环更像“货币”
   return (
@@ -1873,6 +1890,8 @@ export function App() {
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」进入）
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
+  const [checkinDone, setCheckinDone] = useState(false); // 今日是否已签到（手动签或已签后置 true）
+  const [checkinBusy, setCheckinBusy] = useState(false); // 签到请求中，防重复点击
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
   const t = makeT(lang);
@@ -1911,6 +1930,25 @@ export function App() {
   async function doWuweiLogout() {
     await window.wuwei.wuweiLogout();
     setWuwei(null);
+    setCheckinDone(false);
+  }
+  // 手动签到：账号面板点「签到」触发。后端幂等，给币则弹 toast + 刷新余额；无论刚签/已签都标记当天完成。
+  async function doCheckin() {
+    if (checkinBusy || checkinDone) return;
+    setCheckinBusy(true);
+    try {
+      const r = await window.wuwei.checkin();
+      if (r?.success && (r.amount ?? 0) > 0) {
+        setCheckinToast(t("checkin.toast", "每日签到 +{n} 无为币").replace("{n}", String(r.amount)) + (r.streak && r.streak > 1 ? t("checkin.streak", " · 连续 {d} 天").replace("{d}", String(r.streak)) : ""));
+        setTimeout(() => setCheckinToast(""), 4200);
+        window.wuwei.wuweiMe().then((m) => { if (m) setWuwei(m); }).catch(() => {});
+      }
+      if (r) setCheckinDone(true);
+    } catch {
+      /* 忽略，稍后可重试 */
+    } finally {
+      setCheckinBusy(false);
+    }
   }
   // 应用内登录框成功回调：更新账号 + 关框 + (若从发送门槛来)续发刚才拦下的消息
   function onWuweiLoggedIn(me: WuweiMe, action?: "login" | "register" | "reset") {
@@ -2493,19 +2531,8 @@ export function App() {
       .wuweiMe()
       .then((me) => {
         setWuwei(me);
-        // 登录后自动每日签到（后端幂等，当天只发一次）；到账弹轻量 toast + 刷新余额
-        if (me) {
-          void window.wuwei
-            .checkin()
-            .then((r) => {
-              if (r?.success && (r.amount ?? 0) > 0) {
-                setCheckinToast(`每日签到 +${r.amount} 无为币${r.streak && r.streak > 1 ? ` · 连续 ${r.streak} 天` : ""}`);
-                setTimeout(() => setCheckinToast(""), 4200);
-                window.wuwei.wuweiMe().then((m) => { if (m) setWuwei(m); }).catch(() => {});
-              }
-            })
-            .catch(() => {});
-        }
+        // 签到改为手动：点账号面板「签到」按钮才触发（见 doCheckin），登录不再自动签，
+        // 这样点击时才真正到账并弹「+N credits」toast。
       })
       .catch(() => {});
     // 主动拉取当前后端/模型，避免 evt:ready 推送早于订阅被丢导致显示「…」
@@ -3284,7 +3311,7 @@ export function App() {
                               <div className="acct-wallet-row">
                                 <div>
                                   <div className="acct-wallet-lbl">
-                                    <CoinIcon size={14} /> 无为币余额
+                                    <CoinIcon size={14} /> {t("usage.coinBal", "无为币余额")}
                                   </div>
                                   <div className="acct-bal">
                                     {bal.toLocaleString()}
@@ -3292,13 +3319,30 @@ export function App() {
                                 </div>
                                 {bal <= 0 && (
                                   <button className="acct-topup" onClick={openPack}>
-                                    捐赠
+                                    {lang === "en" ? "Top up" : "捐赠"}
                                   </button>
                                 )}
                               </div>
-                              <div className={"acct-hint " + (bal > 0 ? "pos" : "zero")}>
-                                {bal > 0 ? (isPro ? "会员每月赠币 · 每日签到再领更多" : "每日签到领 10 无为币") : "充值解锁更多对话额度"}
-                              </div>
+                              {bal > 0 ? (
+                                <button
+                                  type="button"
+                                  className={"acct-checkin" + (checkinDone ? " done" : "")}
+                                  disabled={checkinDone || checkinBusy}
+                                  onClick={doCheckin}
+                                  title={checkinDone ? t("menu.checkedInTitle", "今日已签到") : t("menu.checkinTitle", "点击签到，领取每日无为币")}
+                                >
+                                  {checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
+                                  <span>
+                                    {checkinDone
+                                      ? t("menu.checkedIn", "今日已签到")
+                                      : isPro
+                                        ? t("menu.hintProGift", "会员每月赠币 · 每日签到再领更多")
+                                        : t("menu.hintDailyCheckin", "每日签到领 10 无为币")}
+                                  </span>
+                                </button>
+                              ) : (
+                                <div className="acct-hint zero">{t("menu.hintTopup", "充值解锁更多对话额度")}</div>
+                              )}
                             </div>
 
                             {/* 会员条：免费=靛青升级引导 / Pro=金色状态条 */}
