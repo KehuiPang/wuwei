@@ -810,6 +810,7 @@ const DICT_EN: Record<string, string> = {
   "checkin.popAlready": "Already checked in today",
   "checkin.popStreak": "{d}-day streak",
   "menu.checkinShort": "Check in",
+  "menu.checkinBusy": "Checking in…",
   "menu.checkedInShort": "Checked in",
   "menu.checkedIn": "Checked in today",
   "menu.checkedInTitle": "Already checked in today",

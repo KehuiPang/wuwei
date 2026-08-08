@@ -472,6 +472,8 @@ body {
 .acct-checkin:hover:not(:disabled) { background: rgba(92, 138, 115, .18); border-color: rgba(92, 138, 115, .5); }
 .acct-checkin:active:not(:disabled) { transform: scale(.97); }
 .acct-checkin svg { width: 13px; height: 13px; }
+.acct-checkin-spin { width: 12px; height: 12px; flex: 0 0 auto; border: 1.6px solid currentColor; border-top-color: transparent; border-radius: 50%; opacity: .8; animation: acct-spin .7s linear infinite; }
+@keyframes acct-spin { to { transform: rotate(360deg); } }
 .acct-checkin.done {
   color: var(--text-muted); background: transparent;
   border-color: var(--border, rgba(128,128,128,.25)); cursor: default;

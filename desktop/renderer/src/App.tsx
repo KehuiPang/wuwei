@@ -3375,8 +3375,8 @@ export function App() {
                                         : t("menu.hintDailyCheckin", "每日签到领 10 无为币")
                                   }
                                 >
-                                  {checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
-                                  <span>{checkinDone ? t("menu.checkedInShort", "已签到") : t("menu.checkinShort", "签到")}</span>
+                                  {checkinBusy ? <span className="acct-checkin-spin" aria-hidden="true" /> : checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
+                                  <span>{checkinBusy ? t("menu.checkinBusy", "签到中…") : checkinDone ? t("menu.checkedInShort", "已签到") : t("menu.checkinShort", "签到")}</span>
                                 </button>
                               ) : (
                                 <div className="acct-hint zero">{t("menu.hintTopup", "充值解锁更多对话额度")}</div>
