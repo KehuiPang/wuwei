@@ -1158,7 +1158,7 @@ function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onCl
         >
           <button
             onClick={onClose}
-            title="关闭"
+            title={makeT(getLang())("msg.close", "关闭")}
             style={{ position: "absolute", top: 8, right: 10, width: 26, height: 26, background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, lineHeight: 1, cursor: "pointer" }}
           >
             ×
@@ -1452,7 +1452,7 @@ function WuweiLoginModal({
         >
           <button
             onClick={onClose}
-            title="关闭"
+            title={makeT(getLang())("msg.close", "关闭")}
             style={{ position: "absolute", top: 8, right: 10, width: 26, height: 26, background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, lineHeight: 1, cursor: "pointer" }}
           >
             ×
@@ -2938,7 +2938,7 @@ export function App() {
       {!collapsed && (
       <div className="sidebar" style={{ width: sidebarW }}>
         <div className="sidebar-top">
-          <button className="icon-btn" title="收起侧栏" onClick={() => toggleCollapse(true)}>
+          <button className="icon-btn" title={t("side.collapse", "收起侧栏")} onClick={() => toggleCollapse(true)}>
             «
           </button>
         </div>
@@ -3009,7 +3009,7 @@ export function App() {
                   setCtxMenu({ sid: s.id, x: e.clientX, y: e.clientY });
                 }}
               >
-                {runningSet.has(s.id) && <span className="s-run" title="运行中" />}
+                {runningSet.has(s.id) && <span className="s-run" title={t("thinking.running", "运行中")} />}
                 {s.priorityTag && (
                   <span
                     className={"s-prio p" + (s.priority || 0)}
@@ -3018,7 +3018,7 @@ export function App() {
                     {s.priorityTag}
                   </span>
                 )}
-                {s.done && <span className="s-done" title="已完成">✓</span>}
+                {s.done && <span className="s-done" title={t("side.done", "已完成")}>✓</span>}
                 <span className="s-title">{s.title}</span>
                 <span className="s-time" title={new Date(s.updatedAt).toLocaleString()}>
                   {relTime(s.updatedAt)}
@@ -3614,7 +3614,7 @@ export function App() {
             <span className="tb-browser-wrap">
               <button
                 className="tb-browser"
-                title="浏览器（独立窗口）"
+                title={t("hdr.browserDetached", "浏览器（独立窗口）")}
                 onClick={() => setShowBrowserMenu((v) => !v)}
               >
                 <svg
@@ -3698,7 +3698,7 @@ export function App() {
 
         {collapsed && (
           <div className="toolbar-min">
-            <button className="icon-btn" title="展开侧栏" onClick={() => toggleCollapse(false)}>
+            <button className="icon-btn" title={t("side.expand", "展开侧栏")} onClick={() => toggleCollapse(false)}>
               »
             </button>
           </div>
@@ -3739,7 +3739,7 @@ export function App() {
                   <b>交付结果、路径、验证口径</b>
                 </div>
               </div>
-              <button className="wc-brain" onClick={() => setShowBrainIntro(true)} title="了解脑网络">
+              <button className="wc-brain" onClick={() => setShowBrainIntro(true)} title={t("wc.brainTitle", "了解脑网络")}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" />
                 </svg>
@@ -3864,7 +3864,7 @@ export function App() {
                           .join("\n\n")}
                       />
                       {canDel && ord >= 0 && (
-                        <button className="tf-icon del" title="删除这轮问答(含提问与回复)" onClick={() => delExchange(ord)}>
+                        <button className="tf-icon del" title={makeT(getLang())("msg.delete", "删除这轮问答(含提问与回复)")} onClick={() => delExchange(ord)}>
                           <TrashIcon />
                         </button>
                       )}
@@ -3931,7 +3931,7 @@ export function App() {
           {/* 鉴权提示条：检测到缺授权后常驻，直到授权成功或用户手动 × 关闭 */}
           {needAuth && !authDismissed && (
             <div className="err-fix err-auth">
-              <button className="err-close" title="关闭" onClick={() => setAuthDismissed(true)}>
+              <button className="err-close" title={makeT(getLang())("msg.close", "关闭")} onClick={() => setAuthDismissed(true)}>
                 ×
               </button>
               {curPreset?.kind === "anthropic-oauth" ? (
@@ -4056,7 +4056,7 @@ export function App() {
           {suggestion && input === "" && (
             <div
               className="suggest-bar"
-              title="点击或按 Tab 采纳"
+              title={t("suggest.title", "点击或按 Tab 采纳")}
               onClick={() => {
                 setInput(suggestion);
                 setSuggestion("");
@@ -4096,14 +4096,14 @@ export function App() {
               }}
             />
             {busy ? (
-              <button className="send-btn stop" onClick={stop} title="停止">
+              <button className="send-btn stop" onClick={stop} title={t("composer.stop", "停止")}>
                 <span className="stop-sq" />
               </button>
             ) : (
               <button
                 className={"send-btn" + (input.trim() || pendingImages.length ? " active" : "")}
                 onClick={submit}
-                title="发送 (Enter)"
+                title={t("composer.send", "发送 (Enter)")}
                 disabled={!input.trim() && pendingImages.length === 0}
               >
                 ↵
@@ -4115,7 +4115,7 @@ export function App() {
             <div className="conn-light-wrap">
               <button
                 className={`conn-light conn-${conn.status}`}
-                title="连通状态（点击查看）"
+                title={t("conn.lightTitle", "连通状态（点击查看）")}
                 onClick={() => setShowConn((v) => !v)}
               />
               {showConn && (
@@ -4172,7 +4172,7 @@ export function App() {
             {(idxProg?.building || conProg?.running) && (
               <button
                 className="brain-prog"
-                title="点击打开脑网络"
+                title={t("brainprog.title", "点击打开脑网络")}
                 onClick={() => {
                   setSettingsTab("brain");
                   setShowSettings(true);
@@ -4324,7 +4324,7 @@ export function App() {
 
             <button
               className={"foot-browser" + (showBrowser ? " on" : "")}
-              title="内置浏览器（看/控 AI 打开的网页）"
+              title={t("foot.browserTitle", "内置浏览器（看/控 AI 打开的网页）")}
               onClick={() => setShowBrowser((v) => !v)}
               style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
             >
@@ -4356,7 +4356,7 @@ export function App() {
 
             <span
               className="foot-status"
-              title="运行状态 · 本轮上下文 token · 订阅额度(5小时/周)或余额。点击看详情"
+              title={t("foot.statusTitle", "运行状态 · 本轮上下文 token · 订阅额度(5小时/周)或余额。点击看详情")}
               onClick={() => setShowUsage((v) => !v)}
             >
               <span
@@ -4425,7 +4425,7 @@ export function App() {
                     <span className="tp-dot" />
                     <span
                       className="tp-title"
-                      title="切换到该会话"
+                      title={t("tasks.switchTo", "切换到该会话")}
                       onClick={() => {
                         if (sid !== currentId) window.wuwei.switchSession(sid);
                         setShowTasks(false);
@@ -4435,7 +4435,7 @@ export function App() {
                     </span>
                     <button
                       className="tp-stop"
-                      title="停止该任务"
+                      title={t("tasks.stopThis", "停止该任务")}
                       onClick={() => window.wuwei.stop(sid)}
                     >
                       停止
@@ -4974,7 +4974,7 @@ export function App() {
           />
           <button
             className="lightbox-close"
-            title="关闭 (Esc)"
+            title={t("lightbox.close", "关闭 (Esc)")}
             onClick={(e) => {
               e.stopPropagation();
               setLightbox(null);
@@ -5032,6 +5032,7 @@ export function App() {
       {asks[currentId] && (
         <AskModal
           key={asks[currentId].id}
+          t={t}
           data={asks[currentId]}
           anchor={composerRef}
           onSubmit={(list, images) => {
@@ -5060,15 +5061,15 @@ export function App() {
                 }}
               >
                 <div className="ask-toast-body">
-                  <div className="ask-toast-title">🔔 有会话在等你选择</div>
+                  <div className="ask-toast-title">{makeT(getLang())("asktoast.title", "🔔 有会话在等你选择")}</div>
                   <div className="ask-toast-sub">
-                    「{t.title}」需要确认，点此切换过去
+                    {makeT(getLang())("asktoast.sub", "「{title}」需要确认，点此切换过去").replace("{title}", t.title)}
                   </div>
                 </div>
                 <button
                   type="button"
                   className="ask-toast-x"
-                  title="忽略通知（该会话仍在等待，切过去即可回答）"
+                  title={makeT(getLang())("asktoast.ignore", "忽略通知（该会话仍在等待，切过去即可回答）")}
                   onClick={(e) => {
                     e.stopPropagation();
                     dropToast(t.askId);
@@ -5375,7 +5376,7 @@ function ItemView({
             {onResend && (
               <button
                 className="tf-icon"
-                title="重新发送（把这条的文字和图片原样再发一次，切换模型后重试很方便）"
+                title={makeT(getLang())("msg.resend", "重新发送（把这条的文字和图片原样再发一次，切换模型后重试很方便）")}
                 onClick={onResend}
               >
                 <ResendIcon />
@@ -5384,14 +5385,14 @@ function ItemView({
             {onEdit && (
               <button
                 className="tf-icon"
-                title="撤回并编辑（收回这条，文字回到输入框可改可重发）"
+                title={makeT(getLang())("msg.edit", "撤回并编辑（收回这条，文字回到输入框可改可重发）")}
                 onClick={onEdit}
               >
                 ↩
               </button>
             )}
             {onDelete && (
-              <button className="tf-icon del" title="删除这轮问答(含提问与回复)" onClick={onDelete}>
+              <button className="tf-icon del" title={makeT(getLang())("msg.delete", "删除这轮问答(含提问与回复)")} onClick={onDelete}>
                 <TrashIcon />
               </button>
             )}
@@ -5562,11 +5563,13 @@ function AskModal({
   anchor,
   onSubmit,
   onCancel,
+  t,
 }: {
   data: { id: number; questions: AskQuestion[] };
   anchor: React.RefObject<HTMLDivElement | null>; // 输入框(composer)，用于对齐定位
   onSubmit: (list: { selected: string[]; text?: string }[], images: string[]) => void;
   onCancel: () => void;
+  t: T;
 }) {
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
@@ -5664,7 +5667,7 @@ function AskModal({
                 <img src={src} alt="" />
                 <button
                   type="button"
-                  title="移除"
+                  title={t("msg.remove", "移除")}
                   onClick={() => setImgs((m) => ({ ...m, [step]: (m[step] || []).filter((_, j) => j !== i) }))}
                 >
                   ×
@@ -5676,7 +5679,7 @@ function AskModal({
         <div className="ask-other-row">
           <input
             className="ask-other"
-            placeholder="其它（手动输入或粘贴/添加截图，可选）"
+            placeholder={t("ask.otherPlaceholder", "其它（手动输入或粘贴/添加截图，可选）")}
             value={other[step] || ""}
             onChange={(e) => setOther((o) => ({ ...o, [step]: e.target.value }))}
             onPaste={(e) => {
@@ -5700,7 +5703,7 @@ function AskModal({
           <button
             type="button"
             className="ask-attach"
-            title="添加截图"
+            title={t("ask.addShot", "添加截图")}
             onClick={() => fileRef.current?.click()}
           >
             📎
@@ -5803,7 +5806,7 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
   };
   return (
     <div className="code-wrap">
-      <button className={"code-copy" + (done ? " ok" : "")} onClick={copy} title="复制代码">
+      <button className={"code-copy" + (done ? " ok" : "")} onClick={copy} title={makeT(getLang())("code.copy", "复制代码")}>
         {done ? "✓ 已复制" : "复制"}
       </button>
       <pre ref={ref}>{children}</pre>
@@ -8587,7 +8590,7 @@ function SettingsModal({
                 <div className="model-caps-head">
                   {t("set.m.capsFor", "能力开关 · 针对模型")} <b>{model || t("set.m.noneSel", "（未选）")}</b>
                 </div>
-                <label className="cap-row" title="关掉后请求不带 tools 参数——自建 vLLM/llama-server 未开工具支持时(一带 tools 就报错)请关掉；关掉后该模型只能纯对话、不能调工具/跑 agent">
+                <label className="cap-row" title={t("set.m.toolcallTitle", "关掉后请求不带 tools 参数——自建 vLLM/llama-server 未开工具支持时(一带 tools 就报错)请关掉；关掉后该模型只能纯对话、不能调工具/跑 agent")}>
                   <input
                     type="checkbox"
                     checked={!curCaps.noTools}
@@ -8599,7 +8602,7 @@ function SettingsModal({
                     <em>{t("set.m.toolcallHint", "关掉=请求不带 tools 参数（自建端点不支持工具调用时关掉，否则报错；关掉后只能纯对话）")}</em>
                   </span>
                 </label>
-                <label className="cap-row" title="模型名含 vl/vision/omni 等会自动按多模态处理；名字不含但确实能看图的模型，在这里手动开启">
+                <label className="cap-row" title={t("set.m.visionTitle", "模型名含 vl/vision/omni 等会自动按多模态处理；名字不含但确实能看图的模型，在这里手动开启")}>
                   <input
                     type="checkbox"
                     checked={!!curCaps.vision}
@@ -8703,7 +8706,7 @@ function SettingsModal({
                           type="button"
                           className="eye-btn clr"
                           onClick={() => setOauthToken("")}
-                          title="清空授权 Token（过期后清掉，改用下方 API Key；点保存后生效）"
+                          title={t("set.m.clearToken", "清空授权 Token（过期后清掉，改用下方 API Key；点保存后生效）")}
                         >
                           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M5 7h14M10 7V5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V7M7 7l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L18 7" />
@@ -9067,7 +9070,7 @@ function SettingsModal({
                             setBrainPromptTouched(true);
                           }}
                           onBlur={() => window.wuwei.setBrainPrompt(brainPromptTouched ? brainPrompt : null)}
-                          placeholder="（留空 = 用默认脑网络说明）"
+                          placeholder={t("set.brain.promptPlaceholder", "（留空 = 用默认脑网络说明）")}
                         />
                       </label>
                       <p className="s-note pp-fixed">
@@ -9163,7 +9166,7 @@ function SettingsModal({
                     <div style={{ width: 220, flex: "0 0 220px", display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>概念列表</span>
-                        <button type="button" className="brain-col-btn" title="收起概念列表" onClick={() => setBrainLeftOpen(false)}>
+                        <button type="button" className="brain-col-btn" title={t("set.brain.collapseList", "收起概念列表")} onClick={() => setBrainLeftOpen(false)}>
                           ◀
                         </button>
                       </div>
@@ -9222,7 +9225,7 @@ function SettingsModal({
                       <button
                         type="button"
                         className="brain-col-rail"
-                        title="展开概念列表"
+                        title={t("set.brain.expandList", "展开概念列表")}
                         onClick={() => setBrainLeftOpen(true)}
                       >
                         <span className="brain-rail-arrow">▶</span>
@@ -9262,7 +9265,7 @@ function SettingsModal({
                         <button
                           type="button"
                           className="brain-col-btn"
-                          title="关闭详情（取消选中）"
+                          title={t("set.brain.closeDetail", "关闭详情（取消选中）")}
                           onClick={() => {
                             setBrainDraft(null);
                             setBrainSel(null);
@@ -9274,7 +9277,7 @@ function SettingsModal({
                         <button
                           type="button"
                           className="brain-col-rail"
-                          title="展开详情"
+                          title={t("set.brain.expandDetail", "展开详情")}
                           onClick={() => setBrainRightOpen(true)}
                           style={{ flex: "1 1 auto", width: "auto" }}
                         >
@@ -9288,13 +9291,13 @@ function SettingsModal({
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>概念详情</span>
-                            <button type="button" className="brain-col-btn" title="收起详情" onClick={() => setBrainRightOpen(false)}>
+                            <button type="button" className="brain-col-btn" title={t("set.brain.collapseDetail", "收起详情")} onClick={() => setBrainRightOpen(false)}>
                               ▶
                             </button>
                             <button
                               type="button"
                               className="brain-col-btn"
-                              title="关闭详情（取消选中）"
+                              title={t("set.brain.closeDetail", "关闭详情（取消选中）")}
                               onClick={() => {
                                 setBrainDraft(null);
                                 setBrainSel(null);
@@ -9722,7 +9725,7 @@ function SettingsModal({
                                 <div
                                   className="mcp-cat-info clk"
                                   onClick={() => setMcpOnlineOpen(open ? null : key)}
-                                  title="点击看详情"
+                                  title={t("set.mcp.clickDetail", "点击看详情")}
                                 >
                                   <span className="mcp-cat-label">
                                     <code>{r.name}</code>
@@ -10060,19 +10063,19 @@ function SettingsModal({
                         <div className="sec-edit-fields">
                           <input
                             className="sec-in"
-                            placeholder="名称"
+                            placeholder={t("set.sec.editName", "名称")}
                             value={secEditDraft.name}
                             onChange={(e) => setSecEditDraft((d) => ({ ...d, name: e.target.value }))}
                           />
                           <input
                             className="sec-in"
-                            placeholder="环境变量名 (如 DB_PASSWORD)"
+                            placeholder={t("set.sec.editEnvPlaceholder", "环境变量名 (如 DB_PASSWORD)")}
                             value={secEditDraft.envVar}
                             onChange={(e) => setSecEditDraft((d) => ({ ...d, envVar: e.target.value }))}
                           />
                           <input
                             className="sec-in"
-                            placeholder="备注 (可选)"
+                            placeholder={t("set.sec.editNote", "备注 (可选)")}
                             value={secEditDraft.note}
                             onChange={(e) => setSecEditDraft((d) => ({ ...d, note: e.target.value }))}
                           />
@@ -10117,7 +10120,7 @@ function SettingsModal({
                           <button
                             type="button"
                             className="sec-edit-btn"
-                            title="改名称/备注"
+                            title={t("set.sec.editTitle", "改名称/备注")}
                             onClick={() => {
                               setSecEditDraft({ name: s.name, envVar: s.envVar || "", note: s.note || "" });
                               setSecEdit(s.id);
@@ -10158,7 +10161,7 @@ function SettingsModal({
                       setSecretsPromptTouched(true);
                     }}
                     onBlur={() => window.wuwei.setSecretsPrompt(secretsPromptTouched ? secretsPrompt : null)}
-                    placeholder="（留空 = 用默认密钥说明）"
+                    placeholder={t("set.sec.promptPlaceholder", "（留空 = 用默认密钥说明）")}
                   />
                 </label>
                 <p className="s-note">

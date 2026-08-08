@@ -821,6 +821,15 @@ const DICT_EN: Record<string, string> = {
   "msg.resend": "Resend (send this message's text and images again — handy for retrying after switching models)",
   "msg.edit": "Undo & edit (retract this message; the text returns to the input box to edit and resend)",
   "msg.delete": "Delete this exchange (both the question and the reply)",
+  "msg.remove": "Remove",
+  "msg.close": "Close",
+  "code.copy": "Copy code",
+  "ask.otherPlaceholder": "Other (type or paste; add a screenshot; optional)",
+  "ask.addShot": "Add screenshot",
+  "set.m.toolcallTitle": "When off, requests omit the tools parameter — turn off for self-hosted vLLM/llama-server without tool support (sending tools errors); the model is then chat-only, no tools/agent.",
+  "set.m.visionTitle": "Models with vl/vision/omni in the name are auto-treated as multimodal; enable here for image-capable models whose name doesn't say so.",
+  "set.m.clearToken": "Clear the auth token (clear it after expiry and use an API key below; takes effect after Save)",
+  "set.sec.editNote": "Note (optional)",
 };
 
 export function makeT(lang: Lang) {
