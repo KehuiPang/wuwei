@@ -8292,7 +8292,7 @@ function SettingsModal({
             type="button"
             className={"set-tab" + (tab === "brain" ? " on" : "") + (isPro ? "" : " locked")}
             onClick={() => (isPro ? setTab("brain") : onBrainLocked())}
-            title={isPro ? undefined : "脑网络为会员专享功能"}
+            title={isPro ? undefined : t("set.brain.proOnly", "脑网络为会员专享功能")}
           >
             {t("set.tab.brain")}
             {!isPro && <LockGlyph />}
@@ -8360,7 +8360,7 @@ function SettingsModal({
                   </button>
                 ))}
               </div>
-              <div className="app-set-group">会话分组</div>
+              <div className="app-set-group">{t("set.g.grouping", "会话分组")}</div>
               <div className="theme-pick" style={{ marginBottom: "6px" }}>
                 {[
                   { id: "manual", label: t("set.g.manual") },
@@ -8549,7 +8549,7 @@ function SettingsModal({
                 </button>
                 {preset.custom && (
                   <button type="button" className="station-edit" onClick={openEditStation}>
-                    编辑
+                    {lang === "en" ? "Edit" : "编辑"}
                   </button>
                 )}
                 {preset.custom && (
@@ -8755,7 +8755,7 @@ function SettingsModal({
                         </button>
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                        授权 Token 过期后点右侧 ✕ 清空并「保存」，即可改用下方 API Key。
+                        {lang === "en" ? "When the auth token expires, click ✕ on the right to clear and \"Save\", then switch to the API Key below." : "授权 Token 过期后点右侧 ✕ 清空并「保存」，即可改用下方 API Key。"}
                       </div>
                     </label>
                   ) : null}
@@ -8803,7 +8803,7 @@ function SettingsModal({
                       type="button"
                       className="eye-btn"
                       onClick={() => setShowKey((v) => !v)}
-                      title={showKey ? "隐藏" : "显示"}
+                      title={showKey ? (lang === "en" ? "Hide" : "隐藏") : (lang === "en" ? "Show" : "显示")}
                     >
                       <EyeIcon off={showKey} />
                     </button>
@@ -8913,9 +8913,9 @@ function SettingsModal({
               </div>
               {removed.length > 0 && (
                 <div className="prov-restore">
-                  已删除 {removed.length} 个默认平台
+                  {lang === "en" ? `${removed.length} default provider(s) removed` : `已删除 ${removed.length} 个默认平台`}
                   <button type="button" className="link-inline" onClick={restoreRemovedProviders}>
-                    恢复默认平台
+                    {lang === "en" ? "Restore defaults" : "恢复默认平台"}
                   </button>
                 </div>
               )}
@@ -10134,10 +10134,10 @@ function SettingsModal({
                                 reloadSecrets();
                               }}
                             >
-                              保存
+                              {lang === "en" ? "Save" : "保存"}
                             </button>
                             <button type="button" onClick={() => setSecEdit(null)}>
-                              取消
+                              {lang === "en" ? "Cancel" : "取消"}
                             </button>
                           </div>
                         </div>
@@ -10166,7 +10166,7 @@ function SettingsModal({
                               setSecEdit(s.id);
                             }}
                           >
-                            编辑
+                            {lang === "en" ? "Edit" : "编辑"}
                           </button>
                           <button
                             type="button"
