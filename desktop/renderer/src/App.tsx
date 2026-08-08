@@ -3327,16 +3327,6 @@ export function App() {
                         const tierLabel = tierMain + (tierQual ? " " + tierQual : "");
                         const exp = wuwei.membership?.expireAt;
                         const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
-                        // 本周额度（订阅感：隐藏具体币数，只显剩余百分比 + 重置时间）
-                        const wq = wuwei.membership?.weeklyQuota;
-                        const wqActive = !!wq?.active;
-                        const wqUsedPct = Math.max(0, Math.min(100, 100 - (wq?.remainingPct ?? 100))); // 已用百分比(用多少涨多少)
-                        const wqReset = wq?.resetsAt ? new Date(wq.resetsAt) : null;
-                        const wqResetStr = wqReset
-                          ? (lang === "en"
-                              ? wqReset.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                              : `${wqReset.getMonth() + 1}月${wqReset.getDate()}日`)
-                          : "";
                         const bal = wuwei.coin.balance;
                         const openPack = () => { setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
                         const openPlan = () => { setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
@@ -3407,34 +3397,20 @@ export function App() {
 
                             {/* 会员条：免费=靛青升级引导 / Pro=金色状态条 */}
                             {isPro ? (
-                              <div className="acct-memb on" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                                  <div style={{ minWidth: 0 }}>
-                                    <div className="acct-memb-ttl">
-                                      <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
-                                    </div>
-                                    <div className="acct-memb-sub">
-                                      {expStr
-                                        ? (lang === "en" ? `Expires ${expStr}` : `${expStr} 到期`)
-                                        : (lang === "en" ? "Active" : "生效中")}
-                                    </div>
+                              <div className="acct-memb on">
+                                <div>
+                                  <div className="acct-memb-ttl">
+                                    <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
                                   </div>
-                                  <button className="acct-renew" onClick={openPlan} style={{ flex: "0 0 auto" }}>
-                                    {lang === "en" ? "Renew" : "续费"}
-                                  </button>
+                                  <div className="acct-memb-sub">
+                                    {expStr
+                                      ? (lang === "en" ? `Expires ${expStr}` : `${expStr} 到期`)
+                                      : (lang === "en" ? "Active" : "生效中")}
+                                  </div>
                                 </div>
-                                {wqActive && (
-                                  // 本周额度进度条：显「已用百分比」(用多少涨多少) + 重置日，不暴露具体币数（订阅感）
-                                  <div>
-                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--acct-memb-sub, #9a7b3c)", marginBottom: 4 }}>
-                                      <span>{lang === "en" ? `${wqUsedPct}% used this week` : `本周已用 ${wqUsedPct}%`}</span>
-                                      {wqResetStr && <span>{lang === "en" ? `Resets ${wqResetStr}` : `${wqResetStr} 重置`}</span>}
-                                    </div>
-                                    <div style={{ height: 6, borderRadius: 999, background: "rgba(169,127,46,0.18)", overflow: "hidden" }}>
-                                      <div style={{ width: `${wqUsedPct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#C9A24B,#A97F2E)", transition: "width .3s ease" }} />
-                                    </div>
-                                  </div>
-                                )}
+                                <button className="acct-renew" onClick={openPlan}>
+                                  {lang === "en" ? "Renew" : "续费"}
+                                </button>
                               </div>
                             ) : bal <= 0 ? (
                               // 只在无为币用完(余额=0)后才推会员——自然的升级时机，不打扰仍有币的用户
