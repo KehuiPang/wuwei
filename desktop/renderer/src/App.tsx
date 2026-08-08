@@ -2946,7 +2946,7 @@ export function App() {
           {t("session.new")}
         </button>
         <div className="session-list">
-          {sessions.length === 0 && <div className="empty">暂无历史对话</div>}
+          {sessions.length === 0 && <div className="empty">{lang === "en" ? "No conversations yet" : "暂无历史对话"}</div>}
           {(() => {
             const byGroup = new Map<string, SessionMeta[]>();
             for (const s of sessions) {
@@ -3719,26 +3719,31 @@ export function App() {
             <div className="welcome">
               <div className="wc-hero">
                 <WuweiLogo size={58} />
-                <p className="wc-eyebrow">一念既出，万事自成</p>
+                <p className="wc-eyebrow">{lang === "en" ? "One intention, everything follows" : "一念既出，万事自成"}</p>
                 <h1 className="wc-h1">
-                  你只管发念，<span className="wc-spark">余下交给无为</span>
+                  {lang === "en" ? "Just set the intention — " : "你只管发念，"}
+                  <span className="wc-spark">{lang === "en" ? "Wuwei does the rest" : "余下交给无为"}</span>
                 </h1>
-                <p className="wc-lead">把需求说清楚，客户端会拆解任务、调用代理、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。</p>
+                <p className="wc-lead">
+                  {lang === "en"
+                    ? "Describe what you need and the app breaks it into tasks, calls agents, runs the steps, and brings back results. Great for coding, editing docs, research, organizing files, and running workflows."
+                    : "把需求说清楚，客户端会拆解任务、调用代理、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。"}
+                </p>
               </div>
               <div className="wc-flow">
                 <div className="wc-step">
-                  <em>发念</em>
-                  <b>说出你想完成的事</b>
+                  <em>{lang === "en" ? "Intend" : "发念"}</em>
+                  <b>{lang === "en" ? "Say what you want done" : "说出你想完成的事"}</b>
                 </div>
                 <span className="wc-arrow" aria-hidden="true">→</span>
                 <div className="wc-step">
-                  <em>有为</em>
-                  <b>代理拆解、调用工具、推进执行</b>
+                  <em>{lang === "en" ? "Act" : "有为"}</em>
+                  <b>{lang === "en" ? "Agents plan, call tools, push it forward" : "代理拆解、调用工具、推进执行"}</b>
                 </div>
                 <span className="wc-arrow" aria-hidden="true">→</span>
                 <div className="wc-step">
-                  <em>成事</em>
-                  <b>交付结果、路径、验证口径</b>
+                  <em>{lang === "en" ? "Done" : "成事"}</em>
+                  <b>{lang === "en" ? "Delivers results, paths, and how to verify" : "交付结果、路径、验证口径"}</b>
                 </div>
               </div>
               <button className="wc-brain" onClick={() => setShowBrainIntro(true)} title={t("wc.brainTitle", "了解脑网络")}>
@@ -3746,13 +3751,14 @@ export function App() {
                   <path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" />
                 </svg>
                 <span className="wc-brain-tx">
-                  <b>脑网络</b>持续学习 · 长期记忆，用得越久无为越懂你
+                  <b>{lang === "en" ? "Brain" : "脑网络"}</b>
+                  {lang === "en" ? " keeps learning · long-term memory that knows you better the more you use it" : "持续学习 · 长期记忆，用得越久无为越懂你"}
                 </span>
                 <svg className="wc-brain-arr" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M6 3l5 5-5 5" />
                 </svg>
               </button>
-              <div className="wc-tags">少步骤 · 不中断 · 结果导向 · 可追溯执行</div>
+              <div className="wc-tags">{lang === "en" ? "Fewer steps · no interruptions · results-first · traceable execution" : "少步骤 · 不中断 · 结果导向 · 可追溯执行"}</div>
             </div>
           )}
           {(() => {
@@ -5099,17 +5105,17 @@ export function App() {
         <div className="perm-overlay">
           <div className="perm">
             <h3>
-              允许执行 <span className="tname">{pending.name}</span>？
+              {lang === "en" ? "Allow " : "允许执行 "}<span className="tname">{pending.name}</span>{lang === "en" ? "?" : "？"}
             </h3>
             <div className="args">{JSON.stringify(pending.input, null, 2)}</div>
             <div className="btns">
-              <button onClick={() => answerPerm("deny")}>拒绝 (N)</button>
-              <button onClick={allowAlways}>总是允许 (A)</button>
+              <button onClick={() => answerPerm("deny")}>{lang === "en" ? "Deny (N)" : "拒绝 (N)"}</button>
+              <button onClick={allowAlways}>{lang === "en" ? "Always allow (A)" : "总是允许 (A)"}</button>
               <button className="allow" onClick={() => answerPerm("allow")}>
-                允许 (Y)
+                {lang === "en" ? "Allow (Y)" : "允许 (Y)"}
               </button>
             </div>
-            <div className="hint">Y 允许一次 · A 总是允许该工具 · N/Esc 拒绝</div>
+            <div className="hint">{lang === "en" ? "Y allow once · A always allow this tool · N/Esc deny" : "Y 允许一次 · A 总是允许该工具 · N/Esc 拒绝"}</div>
           </div>
         </div>
       )}
@@ -7177,7 +7183,7 @@ function ConceptGraph({
         </g>
         {nodes.length === 0 && (
           <text x={W / 2} y={H / 2} fontSize={16} fill="var(--text-2, #999)" textAnchor="middle">
-            暂无概念——点上方「抽取概念」或对话中让模型 brain_learn
+            {makeT(getLang())("set.brain.graphEmpty", "暂无概念——点上方「抽取概念」或对话中让模型 brain_learn")}
           </text>
         )}
       </svg>
@@ -9301,7 +9307,7 @@ function SettingsModal({
                           style={{ flex: "1 1 auto", width: "auto" }}
                         >
                           <span className="brain-rail-arrow">◀</span>
-                          <span className="brain-rail-label">概念详情</span>
+                          <span className="brain-rail-label">{t("set.brain.detail", "概念详情")}</span>
                         </button>
                       </div>
                     )}
@@ -9309,7 +9315,7 @@ function SettingsModal({
                       <div style={{ width: 300, flex: "0 0 300px", minHeight: 0, overflow: "auto" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>概念详情</span>
+                            <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>{t("set.brain.detail", "概念详情")}</span>
                             <button type="button" className="brain-col-btn" title={t("set.brain.collapseDetail", "收起详情")} onClick={() => setBrainRightOpen(false)}>
                               ▶
                             </button>
@@ -9560,8 +9566,7 @@ function SettingsModal({
                     </div>
                   </div>
                   <p className="s-note pp-fixed">
-                    {t("set.brain.footStored")} <code>~/.wuwei/brain/graph.json</code>, {t("set.brain.footModels")}{" "}
-                    <code>~/.wuwei/brain/models</code>. {t("set.brain.footDesc")}
+                    {t("set.brain.footDesc")}
                   </p>
                   </>
                   )}
