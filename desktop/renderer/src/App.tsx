@@ -3329,16 +3329,16 @@ export function App() {
                                   className={"acct-checkin" + (checkinDone ? " done" : "")}
                                   disabled={checkinDone || checkinBusy}
                                   onClick={doCheckin}
-                                  title={checkinDone ? t("menu.checkedInTitle", "今日已签到") : t("menu.checkinTitle", "点击签到，领取每日无为币")}
-                                >
-                                  {checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
-                                  <span>
-                                    {checkinDone
-                                      ? t("menu.checkedIn", "今日已签到")
+                                  title={
+                                    checkinDone
+                                      ? t("menu.checkedInTitle", "今日已签到")
                                       : isPro
                                         ? t("menu.hintProGift", "会员每月赠币 · 每日签到再领更多")
-                                        : t("menu.hintDailyCheckin", "每日签到领 10 无为币")}
-                                  </span>
+                                        : t("menu.hintDailyCheckin", "每日签到领 10 无为币")
+                                  }
+                                >
+                                  {checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
+                                  <span>{checkinDone ? t("menu.checkedInShort", "已签到") : t("menu.checkinShort", "签到")}</span>
                                 </button>
                               ) : (
                                 <div className="acct-hint zero">{t("menu.hintTopup", "充值解锁更多对话额度")}</div>
@@ -3969,7 +3969,7 @@ export function App() {
                 // API Key 平台（通义千问 / DeepSeek / OpenAI / 智谱 …）：引导去各自官网拿 key
                 <>
                   <span>
-                    🔑 当前平台「{curPreset?.label ?? meta.backend}」需要配置 API Key 才能使用。
+                    {t("authbar.platformNeedKey", "🔑 当前平台「{name}」需要配置 API Key 才能使用。").replace("{name}", String(curPreset ? pLabel(curPreset, lang) : meta.backend))}
                   </span>
                   <div className="err-auth-actions">
                     {curPreset?.keyUrl ? (
@@ -4173,10 +4173,10 @@ export function App() {
             <div className="model-quick">
               <button
                 className="mq-btn mq-prov"
-                title={curPreset?.label ?? meta.backend}
+                title={curPreset ? pLabel(curPreset, lang) : meta.backend}
                 onClick={() => setShowProviderMenu((v) => !v)}
               >
-                <span className="mq-txt">{(curPreset?.label ?? meta.backend).replace(/（.*$/, "")}</span>
+                <span className="mq-txt">{(curPreset ? pLabel(curPreset, lang) : meta.backend).replace(/（.*$/, "").replace(/\s*\(.*$/, "")}</span>
                 <span className="mq-caret">▾</span>
               </button>
               <span className="mq-mid">·</span>
@@ -4199,7 +4199,7 @@ export function App() {
                         className={"mq-item" + (p.id === curProviderId ? " on" : "")}
                         onClick={() => quickProvider(p)}
                       >
-                        <span>{p.label}</span>
+                        <span>{pLabel(p, lang)}</span>
                         {p.id === curProviderId && <span className="mq-check">✓</span>}
                       </button>
                     ))}
@@ -4226,7 +4226,7 @@ export function App() {
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
                     >
                       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        切换模型 · {curPreset?.label ?? meta.backend}
+                        {t("mq.switchModel", "切换模型")} · {curPreset ? pLabel(curPreset, lang) : meta.backend}
                       </span>
                       {hasMoreModels && (
                         <span style={{ display: "inline-flex", gap: 2, flex: "0 0 auto" }}>
@@ -6490,6 +6490,32 @@ const PRESETS: Preset[] = [
   },
 ];
 
+// 供应商目录英文覆盖（仅 EN 显示时用；缺省回退中文）。key = preset.id。不改 PRESETS 本体。
+const PRESET_EN: Record<string, { label?: string; note?: string; keyHint?: string }> = {
+  "wuwei-deepseek": { label: "Wuwei Hosted · DeepSeek", note: "Hosted credits: no key needed — charged per actual token usage (balance in the account menu). Same models as DeepSeek direct (V4 Pro/Flash)." },
+  "wuwei-zhipu": { label: "Wuwei Hosted · Zhipu", note: "Hosted: no key needed, credits charged per token. Zhipu GLM-5.2 flagship." },
+  "wuwei-kimi": { label: "Wuwei Hosted · Kimi", note: "Hosted: no key needed, credits charged per token. Kimi K3 flagship." },
+  "wuwei-claude": { label: "Wuwei Hosted · Claude", note: "Hosted: no key needed, credits charged per token. Claude Opus 4.8." },
+  "wuwei-gpt": { label: "Wuwei Hosted · GPT", note: "Hosted: no key needed, credits charged per token. GPT-5.5 / 5.6." },
+  codex: { label: "Codex subscription (ChatGPT login)", note: "Uses your local ~/.codex login — no credentials needed. Only gpt-5.5 is device-verified; whether other models route through the subscription depends — watch the status light / actual requests after switching (a failure shows amber)." },
+  "claude-oauth": { label: "Claude subscription (Claude Code)", keyHint: "sk-ant-oat… (auto-filled after one-click authorize above)" },
+  anthropic: { label: "Claude API Key (Anthropic)" },
+  openai: { label: "OpenAI (GPT)", note: "gpt-5.6-terra balanced / sol strongest / luna cheapest" },
+  openrouter: { label: "OpenRouter (all providers)", note: "One key for Claude / GPT / Gemini and more. Use “vendor/model” slugs (full list at openrouter.ai/models), or pick “Custom” to enter any slug." },
+  deepseek: { label: "DeepSeek", note: "V4 Pro/Flash (deepseek-chat/deepseek-reasoner retired 2026-07-24, removed)" },
+  qwen: { label: "Tongyi Qwen (Alibaba Bailian)" },
+  doubao: { label: "Doubao (Volcano Ark)", keyHint: "Volcano Ark API Key", note: "Doubao usually needs an endpoint ID (ep-...) created under Ark “Online Inference”; dated model names change — use “Custom” to fill the latest." },
+  zhipu: { label: "Zhipu GLM (BigModel)", keyHint: "Zhipu API Key", note: "glm-5.2 flagship (1M context); glm-5v-turbo / glm-4.6v are vision multimodal (text+image)" },
+  kimi: { label: "Kimi (Moonshot)", note: "kimi-k3 flagship (2.8T/1M context); for the international site use https://api.moonshot.ai/v1; kimi-latest and *-vision-preview support text+image" },
+  "kimi-sub": { label: "Kimi Code subscription (membership)", keyHint: "sk-... (created in the Kimi Code console for members)", note: "Uses membership subscription quota (not pay-as-you-go API). base=/coding/v1; flagship model is k3 (≠ the open-platform kimi-k3). Create keys in the Kimi Code console — up to 5, shown only once. ⚠ Official rule: don't change the User-Agent to impersonate other tools, or your membership may be banned." },
+  hunyuan: { label: "Tencent Hunyuan (Yuanbao)", keyHint: "Hunyuan API Key", note: "Yuanbao maps to the Tencent Hunyuan API; hunyuan-vision supports text+image" },
+  grok: { label: "Grok (xAI)", note: "grok-4.x is natively multimodal (text+image); grok-4.3 is the 1M-context flagship" },
+  custom: { label: "Local / self-hosted endpoint (vLLM, Ollama, etc.)", keyHint: "Can be left blank locally", note: "Any OpenAI-compatible endpoint — just fill your Base URL + model name" },
+};
+const pLabel = (p: Preset, lang: Lang) => (lang === "en" && PRESET_EN[p.id]?.label) || p.label;
+const pKeyHint = (p: Preset, lang: Lang) => (lang === "en" && PRESET_EN[p.id]?.keyHint) || p.keyHint;
+const pNote = (p: Preset, lang: Lang) => (lang === "en" ? PRESET_EN[p.id]?.note ?? p.note : p.note);
+
 // 菜单/下拉里的展示顺序(不改 PRESETS 定义本身，PRESETS[0]=codex 仍作默认)
 const PROVIDER_ORDER = [
   "codex",
@@ -7935,7 +7961,7 @@ function SettingsModal({
     if (!bp) return;
     setEditIsBuiltin(true);
     setEditStationId(tid);
-    setNewStName(overridesRef.current[tid]?.label ?? bp.label);
+    setNewStName(overridesRef.current[tid]?.label ?? pLabel(bp, lang));
     setNewStUrl("");
     setShowAddStation(true);
   }
@@ -7951,7 +7977,7 @@ function SettingsModal({
       const bp = PRESETS.find((x) => x.id === id);
       const ovr = { ...overridesRef.current };
       // 与预设原名相同=清掉覆盖(恢复默认名)，否则存 label 覆盖
-      if (bp && label === bp.label) delete ovr[id];
+      if (bp && (label === bp.label || label === pLabel(bp, lang))) delete ovr[id];
       else ovr[id] = { ...(ovr[id] || {}), label };
       overridesRef.current = ovr;
       setOverrides(ovr);
@@ -8320,7 +8346,7 @@ function SettingsModal({
                 <select value={pid} onChange={(e) => changePreset(e.target.value)}>
                   {orderedPresets.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.label}
+                      {pLabel(p, lang)}
                     </option>
                   ))}
                 </select>
@@ -8349,7 +8375,7 @@ function SettingsModal({
                 )}
                 {preset.custom && (
                   <button type="button" className="station-del" onClick={() => deleteStation(pid)}>
-                    {t("set.m.delete")}「{preset.label.replace(/（中转）$/, "")}」
+                    {t("set.m.delete")}{lang === "en" ? ` “${pLabel(preset, lang).replace(/（中转）$/, "")}”` : `「${preset.label.replace(/（中转）$/, "")}」`}
                   </button>
                 )}
               </div>
@@ -8456,7 +8482,7 @@ function SettingsModal({
                 <div className="key-guide">
                   {t("set.m.noKey")}
                   <a onClick={startGetKey}>
-                    {lang === "zh" ? `去 ${preset.label} 官网获取（复制后自动填入验证）↗` : `Get one from ${preset.label} ↗`}
+                    {lang === "zh" ? `去 ${preset.label} 官网获取（复制后自动填入验证）↗` : `Get one from ${pLabel(preset, lang)} ↗`}
                   </a>
                   <span className="key-steps">{t("set.m.getKeySteps")}</span>
                   {(sKeyWaiting || sKeyMsg) && (
@@ -8476,7 +8502,7 @@ function SettingsModal({
                 </div>
               )}
 
-              {preset.note && <p className="s-note">{preset.note}</p>}
+              {pNote(preset, lang) && <p className="s-note">{pNote(preset, lang)}</p>}
 
               {preset.kind === "anthropic-oauth" && (
                 <>
@@ -8592,7 +8618,7 @@ function SettingsModal({
                       type={showKey ? "text" : "password"}
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={preset.keyHint}
+                      placeholder={pKeyHint(preset, lang)}
                     />
                     <button
                       type="button"
@@ -8675,7 +8701,7 @@ function SettingsModal({
                       <span className="prov-grip" title={t("set.p.dragSort")}>
                         ⋮⋮
                       </span>
-                      <span className="prov-name">{p.label}</span>
+                      <span className="prov-name">{pLabel(p, lang)}</span>
                       <button
                         type="button"
                         className="prov-mini"
@@ -8770,12 +8796,12 @@ function SettingsModal({
                 <span>
                   {lang === "zh"
                     ? `为当前平台「${preset.label}」单独设置（覆盖全局）`
-                    : `Override for “${preset.label}” (this provider only)`}
+                    : `Override for “${pLabel(preset, lang)}” (this provider only)`}
                 </span>
               </label>
               {platPromptOn && (
                 <label className="field pp-grow">
-                  <span>「{preset.label}」{t("set.pr.overrideLabelSuffix")}</span>
+                  <span>{lang === "en" ? `“${pLabel(preset, lang)}” ` : `「${preset.label}」`}{t("set.pr.overrideLabelSuffix")}</span>
                   <textarea
                     className="sysprompt-area pp-fill"
                     value={platPrompt}

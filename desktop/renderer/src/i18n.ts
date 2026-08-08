@@ -697,6 +697,8 @@ const DICT_EN: Record<string, string> = {
   "browser.detach": "Pop out to a separate window (draggable)",
   "browser.close": "Close browser panel",
   // 每日签到入口（menu.*）
+  "menu.checkinShort": "Check in",
+  "menu.checkedInShort": "Checked in",
   "menu.checkedIn": "Checked in today",
   "menu.checkedInTitle": "Already checked in today",
   "menu.checkinTitle": "Click to check in and claim your daily credits",
