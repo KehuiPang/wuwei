@@ -3403,26 +3403,23 @@ export function App() {
                               )}
                             </div>
 
-                            {/* 会员条：免费=靛青升级引导 / Pro=金色状态条 */}
+                            {/* 会员条：Pro 平时不显(顶部 chip 已标档位，避免重复)，仅快到期(≤7天)时作续费提醒出现；免费=靛青升级引导 */}
                             {isPro ? (
-                              <div className="acct-memb on">
-                                <div>
-                                  <div className="acct-memb-ttl">
-                                    <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
+                              nearExpiry ? (
+                                <div className="acct-memb on">
+                                  <div>
+                                    <div className="acct-memb-ttl">
+                                      <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
+                                    </div>
+                                    <div className="acct-memb-sub">
+                                      {lang === "en" ? `Expires ${expStr}` : `${expStr} 到期`}
+                                    </div>
                                   </div>
-                                  <div className="acct-memb-sub">
-                                    {nearExpiry
-                                      ? (lang === "en" ? `Expires ${expStr}` : `${expStr} 到期`)
-                                      : (lang === "en" ? "Active" : "生效中")}
-                                  </div>
-                                </div>
-                                {/* 只在快到期(≤7天)才显续费按钮，刚买不催 */}
-                                {nearExpiry && (
                                   <button className="acct-renew" onClick={openPlan}>
                                     {lang === "en" ? "Renew" : "续费"}
                                   </button>
-                                )}
-                              </div>
+                                </div>
+                              ) : null
                             ) : bal <= 0 ? (
                               // 只在无为币用完(余额=0)后才推会员——自然的升级时机，不打扰仍有币的用户
                               <div className="acct-memb up" onClick={openPlan}>
