@@ -1,6 +1,7 @@
 // Electron 主进程：创建窗口，复用核心(agent/tools/config)，
 // 通过 IPC 把 Agent 流式 hooks 推给渲染进程，权限确认走 IPC 往返。
 import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage, dialog } from "electron";
+import electronUpdater from "electron-updater";
 const safeStorageOk = () => {
   try {
     return safeStorage.isEncryptionAvailable();
@@ -1660,6 +1661,7 @@ if (!gotLock) {
     }
     createWindow();
     createTray();
+    setupUpdater(); // 自动更新：启动后延迟静默查一次
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -2813,6 +2815,45 @@ ipcMain.handle("announcement:get", async () => {
   } catch {
     return { active: false };
   }
+});
+// 当前应用版本号（帮助菜单显示 + 更新比对）
+ipcMain.handle("app:version", () => app.getVersion());
+
+// ── 自动更新（electron-updater + OSS generic 源，发布配置见 electron-builder.wuwei.yml）──
+// autoDownload：发现新版即后台静默下载；下载完推 evt:update-downloaded，用户点「升级」再 quitAndInstall。
+// 未打包(dev)或无更新源时 checkForUpdates 会抛错，一律吞掉，不影响使用。
+const { autoUpdater } = electronUpdater;
+let updaterWired = false;
+function setupUpdater(): void {
+  if (updaterWired) return;
+  updaterWired = true;
+  autoUpdater.autoDownload = true; // 发现新版即后台下载
+  autoUpdater.autoInstallOnAppQuit = false; // 不擅自在退出时装，由用户点「升级」触发
+  autoUpdater.on("update-available", (info) => {
+    send("evt:update-available", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
+  });
+  autoUpdater.on("update-downloaded", (info) => {
+    send("evt:update-downloaded", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
+  });
+  autoUpdater.on("error", (e) => log("updater", "更新出错", String(e?.message || e)));
+  // 启动后延迟自动查一次（静默；有新版会走 autoDownload → update-downloaded 提醒）
+  setTimeout(() => { autoUpdater.checkForUpdates().catch((e) => log("updater", "启动检查失败", String(e?.message || e))); }, 8000);
+}
+// 手动检查更新：返回是否有新版。dev/无源 → available:false + error。
+ipcMain.handle("updater:check", async () => {
+  try {
+    const r = await autoUpdater.checkForUpdates();
+    const info = r?.updateInfo;
+    if (!info) return { available: false };
+    const available = info.version !== app.getVersion();
+    return { available, version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" };
+  } catch (e: any) {
+    return { available: false, error: String(e?.message || e) };
+  }
+});
+// 立即安装已下载的更新并重启
+ipcMain.on("updater:install", () => {
+  try { autoUpdater.quitAndInstall(); } catch (e: any) { log("updater", "安装失败", String(e?.message || e)); }
 });
 // 每日签到：带 token 调后端 /api/signin（幂等，当天重复调不重复发）。返回 {success, amount, balanceAfter, streak, message}。
 ipcMain.handle("account:checkin", async () => {

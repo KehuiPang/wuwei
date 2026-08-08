@@ -1949,6 +1949,10 @@ export function App() {
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
   // 客户端公告：启动拉取，未读过该版本(version)且 active 才弹；读过存本地，同版本不再弹，后台更新(version 变)则再弹。
   const [announce, setAnnounce] = useState<{ version: string; title: string; body: string } | null>(null);
+  // 自动更新：版本号 + 检查态 + 新版就绪(已下载好，点即装)
+  const [appVer, setAppVer] = useState("");
+  const [updateReady, setUpdateReady] = useState<{ version: string; notes: string } | null>(null);
+  const [updateMsg, setUpdateMsg] = useState(""); // 「检查中/已是最新/发现新版下载中…」等提示
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -2342,6 +2346,24 @@ export function App() {
     window.wuwei.setAppSettings({ lang });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 自动更新：拿版本号 + 监听「发现新版下载中/已下载好」事件
+  useEffect(() => {
+    window.wuwei.getAppVersion().then(setAppVer).catch(() => {});
+    const off = window.wuwei.onEvent((ch, p: any) => {
+      if (ch === "evt:update-available") setUpdateMsg(lang === "en" ? `Downloading v${p?.version}…` : `发现新版 v${p?.version}，下载中…`);
+      else if (ch === "evt:update-downloaded") { setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); setUpdateMsg(""); }
+    });
+    return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function checkUpdateNow() {
+    setUpdateMsg(lang === "en" ? "Checking…" : "检查更新中…");
+    const r = await window.wuwei.checkUpdate();
+    if (r.available) setUpdateMsg(lang === "en" ? `New v${r.version} found, downloading…` : `发现新版 v${r.version}，下载中…`);
+    else setUpdateMsg(r.error ? (lang === "en" ? "Update check unavailable (dev build?)" : "暂无法检查更新（可能是开发版）") : (lang === "en" ? "You're on the latest version" : "已是最新版本"));
+  }
 
   // 启动拉公告：active 且未读过该 version → 弹窗（标题/正文随界面语言）。读过或后台没发则不弹。
   useEffect(() => {
@@ -3496,6 +3518,18 @@ export function App() {
                                   <path d="M20 19a4 4 0 0 1-4 4h-2" />
                                 </svg>
                                 {t("menu.contactSupport", "联系客服")}
+                              </button>
+                              {/* 帮助 · 检查更新：显示当前版本号，点击查新版(有则后台下载，好了弹升级提示) */}
+                              <button className="acct-it" onClick={() => (updateReady ? setUpdateReady(updateReady) : checkUpdateNow())}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 2.5" />
+                                  <circle cx="12" cy="16.5" r="0.5" fill="currentColor" />
+                                </svg>
+                                <span style={{ flex: 1, textAlign: "left" }}>{lang === "en" ? "Check for updates" : "检查更新"}</span>
+                                <span style={{ fontSize: 11, opacity: 0.55, whiteSpace: "nowrap" }}>
+                                  {updateReady ? (lang === "en" ? `v${updateReady.version} ready` : `v${updateReady.version} 可升级`) : (updateMsg || (appVer ? `v${appVer}` : ""))}
+                                </span>
                               </button>
                               <button
                                 className="acct-it danger"
@@ -4827,6 +4861,21 @@ export function App() {
           }}
           onSuccess={onWuweiLoggedIn}
         />
+      )}
+      {/* 新版已下载好：提示用户一键升级重启（含改进说明） */}
+      {updateReady && (
+        <div className="perm-overlay" onClick={() => setUpdateReady(null)}>
+          <div className="add-st-dialog" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>{lang === "en" ? `New version v${updateReady.version} is ready` : `新版本 v${updateReady.version} 已就绪`}</h3>
+            <div className="s-note" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 240, overflow: "auto" }}>
+              {updateReady.notes || (lang === "en" ? "Improvements and fixes. Update now to restart into the new version." : "包含改进与修复。点击升级将立即重启到新版本。")}
+            </div>
+            <div className="btns" style={{ marginTop: 16 }}>
+              <button onClick={() => setUpdateReady(null)}>{lang === "en" ? "Later" : "稍后"}</button>
+              <button className="allow" onClick={() => window.wuwei.installUpdate()}>{lang === "en" ? "Update & restart" : "升级并重启"}</button>
+            </div>
+          </div>
+        </div>
       )}
       {/* 客户端公告弹窗：打开即弹(未读过该版本)，读完关闭存本地，同版本不再弹 */}
       {announce && (

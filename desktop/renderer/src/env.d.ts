@@ -50,6 +50,9 @@ export interface WuweiApi {
   setBrainPrompt(text: string | null): void;
   setSecretsPrompt(text: string | null): void;
   getAnnouncement(): Promise<{ active: boolean; version?: string; titleZh?: string; titleEn?: string; bodyZh?: string; bodyEn?: string }>;
+  getAppVersion(): Promise<string>;
+  checkUpdate(): Promise<{ available: boolean; version?: string; notes?: string; error?: string }>;
+  installUpdate(): void;
   deleteExchange(sid: string, ordinal: number): void;
   bootstrap(): Promise<{ sessions: any[]; groups?: string[]; currentId: string; messages: any[]; usage?: any; rateLimits?: any; interrupted?: { id: string; title: string }[] }>;
   getSettings(): Promise<{ settings: any; backend: string; model: string; defaultPrompt?: string; defaultBrainPrompt?: string; defaultSecretsPrompt?: string }>;
