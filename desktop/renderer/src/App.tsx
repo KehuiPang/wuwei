@@ -4396,7 +4396,7 @@ export function App() {
               onClick={() => setShowUsage((v) => !v)}
             >
               <span
-                className={(busy || runningSet.size > 0 ? "fs-busy" : "") + (runningSet.size > 0 ? " fs-clickable" : "")}
+                className={"fs-hit" + (busy || runningSet.size > 0 ? " fs-busy" : "") + (runningSet.size > 0 ? " fs-clickable" : "")}
                 title={runningSet.size > 0 ? (lang === "en" ? "Click to view/stop running tasks" : "点击查看/停止运行中的任务") : undefined}
                 onClick={(e) => {
                   if (runningSet.size === 0) return;
@@ -4413,7 +4413,7 @@ export function App() {
                       ? `● ${t("foot.bgRunning")}`
                       : `○ ${t("foot.ready")}`}
               </span>
-              <span className="fs-extra">
+              <span className="fs-extra fs-hit">
                 <span>
                   {t("foot.context")} {(usage.lastInput / 1000).toFixed(1)}k
                 </span>
