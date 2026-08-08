@@ -529,12 +529,13 @@ function WechatMark() {
 }
 // 下单错误码 → 用户可读文案
 function payErrMsg(code?: string): string {
+  const en = getLang() === "en";
   switch (code) {
-    case "wechat_not_ready": return "微信支付即将开通，请先用支付宝";
-    case "not_logged_in": return "登录已过期，请重新登录后再试";
-    case "alipay_not_configured": return "支付暂未开通，请稍后再试";
-    case "unknown_sku": return "该档位暂不可购买";
-    default: return "下单失败，请稍后重试";
+    case "wechat_not_ready": return en ? "WeChat Pay coming soon — please use Alipay" : "微信支付即将开通，请先用支付宝";
+    case "not_logged_in": return en ? "Session expired, please sign in again" : "登录已过期，请重新登录后再试";
+    case "alipay_not_configured": return en ? "Payment not available yet, please try later" : "支付暂未开通，请稍后再试";
+    case "unknown_sku": return en ? "This option isn't available for purchase" : "该档位暂不可购买";
+    default: return en ? "Order failed, please retry" : "下单失败，请稍后重试";
   }
 }
 // 微信支付开关：微信商户尚未开通，先隐藏，只留支付宝；开通后翻成 true 即恢复。
@@ -832,20 +833,21 @@ function BrainIntroModal({ onClose, onUpgrade, t }: { onClose: () => void; onUpg
 // 付款页（国内支付宝/微信扫码）：向后端下单拿二维码串 → 渲染真 QR → 轮询订单状态，到账自动跳成功页。
 // 国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
 function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onContactSupport: () => void; onNeedLogin: () => void }) {
+  const en = getLang() === "en";
   const [method, setMethod] = useState<"ali" | "wx">("ali");
   const isPlan = order.kind === "plan";
   const sku = order.kind === "pack" ? order.pack.sku : order.plan.sku;
-  const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} 无为币` : order.plan.name;
+  const title = order.kind === "pack" ? `${order.pack.coins.toLocaleString()} ${en ? "credits" : "无为币"}` : order.plan.name;
   const gift =
     order.kind === "pack"
       ? order.pack.bonus > 0
-        ? `含赠送 ${order.pack.bonus} · ${order.pack.desc}`
-        : order.pack.desc
+        ? `${en ? `+${order.pack.bonus} bonus · ${order.pack.descEn}` : `含赠送 ${order.pack.bonus} · ${order.pack.desc}`}`
+        : (en ? order.pack.descEn : order.pack.desc)
       : order.plan.note
-        ? `${order.plan.sub} · ${order.plan.note}`
-        : order.plan.sub;
+        ? `${en ? `${order.plan.subEn} · ${order.plan.noteEn}` : `${order.plan.sub} · ${order.plan.note}`}`
+        : (en ? order.plan.subEn : order.plan.sub);
   const price = order.kind === "pack" ? order.pack.price : order.plan.price;
-  const unit = isPlan ? order.plan.unit : "";
+  const unit = isPlan ? (en ? order.plan.unitEn : order.plan.unit) : "";
   const methodName = method === "ali" ? "支付宝" : "微信";
 
   const [qr, setQr] = useState("");
@@ -872,7 +874,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
         }
         setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
       })
-      .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
+      .catch(() => { if (alive) { setPhase("error"); setErrMsg(en ? "Network error, please retry" : "网络异常，请重试"); } });
     return () => { alive = false; };
   }, [method, sku, reloadKey]);
 
@@ -884,7 +886,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
       const s = await window.wuwei.payStatus(orderId).catch(() => null);
       if (!alive || !s) return;
       if (s.status === "paid") { clearInterval(t); onPaid(s.balance); }
-      else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg("订单已失效，请重新下单"); }
+      else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg(en ? "Order expired, please reorder" : "订单已失效，请重新下单"); }
     }, 2500);
     return () => { alive = false; clearInterval(t); };
   }, [phase, orderId, onPaid]);
@@ -895,7 +897,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 8 }}>
           <PayEnso size={46} />
-          <h2>确认支付</h2>
+          <h2>{en ? "Confirm payment" : "确认支付"}</h2>
         </div>
         <div className={"paych-order" + (isPlan ? " gold" : "")}>
           <div className="paych-order-row">
@@ -909,7 +911,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
             </div>
           </div>
         </div>
-        <div className="paych-sect">选择支付方式</div>
+        <div className="paych-sect">{en ? "Choose payment method" : "选择支付方式"}</div>
         <div className="paych-pays">
           <button className={"paych-pay" + (method === "ali" ? " sel-ali" : "")} onClick={() => setMethod("ali")}>
             <AlipayMark />
@@ -938,15 +940,17 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
             <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, boxSizing: "border-box" }}>
               {/* 朱赭品牌色转圈(复用全局 tspin 动画) */}
               <div style={{ width: 28, height: 28, borderRadius: "50%", border: "3px solid #ECEFF2", borderTopColor: "#C05F3C", animation: "tspin 0.8s linear infinite" }} />
-              <div style={{ fontSize: 12, color: "#8A93A0", whiteSpace: "nowrap" }}>生成支付二维码…</div>
+              <div style={{ fontSize: 12, color: "#8A93A0", whiteSpace: "nowrap" }}>{en ? "Generating QR code…" : "生成支付二维码…"}</div>
             </div>
           )}
         </div>
         <div className="paych-qrtip">
           {phase === "ready" ? (
-            <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
+            en
+              ? <>Scan with <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{method === "ali" ? "Alipay" : "WeChat"}</b> to pay ¥{price} — redirects automatically once received</>
+              : <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
           ) : phase === "error" ? (
-            errDetail ? <span style={{ color: "#C0392B", wordBreak: "break-all" }}>{errDetail}</span> : "换个支付方式或稍后重试"
+            errDetail ? <span style={{ color: "#C0392B", wordBreak: "break-all" }}>{errDetail}</span> : (en ? "Try another method or retry later" : "换个支付方式或稍后重试")
           ) : ""}
         </div>
         {phase !== "loading" && (
@@ -960,7 +964,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
               <path d="M21 12a9 9 0 1 1-2.64-6.36" />
               <path d="M21 3v5h-5" />
             </svg>
-            刷新二维码
+            {en ? "Refresh QR code" : "刷新二维码"}
           </button>
         )}
         <div className="paych-secure">
@@ -968,10 +972,10 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
-          支付安全由<b>支付宝</b>官方保障
+          {en ? <>Payment secured by <b>Alipay</b></> : <>支付安全由<b>支付宝</b>官方保障</>}
         </div>
         <div className="paych-alt">
-          <button onClick={onContactSupport}>支付遇到问题？</button>
+          <button onClick={onContactSupport}>{en ? "Payment issue?" : "支付遇到问题？"}</button>
         </div>
       </div>
     </div>
@@ -984,6 +988,7 @@ type PayResult =
   | { kind: "fail" };
 // 支付结果页：积分到账 / Pro 月付·年付开通 / 失败。真实由 webhook 驱动，此处按订单即时展示。
 function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClose: () => void; onRetry: () => void }) {
+  const en = getLang() === "en";
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className={"pay-card payres-card" + (result.kind === "pro" ? " pro" : "")} onClick={(e) => e.stopPropagation()}>
@@ -994,22 +999,22 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
               <div className="payres-mark ok">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#3E9E6E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </div>
-              <div className="payres-ttl">支付成功</div>
-              <div className="payres-desc">无为币已到账，尽情使用无为托管模型</div>
+              <div className="payres-ttl">{en ? "Payment successful" : "支付成功"}</div>
+              <div className="payres-desc">{en ? "Credits added — enjoy Wuwei hosted models" : "无为币已到账，尽情使用无为托管模型"}</div>
             </div>
             <div className="payres-box">
-              <div className="payres-b1">本次到账</div>
+              <div className="payres-b1">{en ? "Added this time" : "本次到账"}</div>
               <div className="payres-b2">
                 <span className="pay-coin" /> +{result.added.toLocaleString()}
-                <span className="u">无为币</span>
+                <span className="u">{en ? "credits" : "无为币"}</span>
               </div>
               <div className="payres-b3">
-                <span>{result.bonus > 0 ? `含赠送 ${result.bonus}` : "即充即用"}</span>
-                <span>当前余额 <b>{result.balance.toLocaleString()}</b></span>
+                <span>{result.bonus > 0 ? (en ? `+${result.bonus} bonus` : `含赠送 ${result.bonus}`) : (en ? "instant" : "即充即用")}</span>
+                <span>{en ? "Balance" : "当前余额"} <b>{result.balance.toLocaleString()}</b></span>
               </div>
             </div>
-            <div className="payres-btns"><button className="payres-btn pri ok" onClick={onClose}>开始使用</button></div>
-            <div className="payres-foot">订单号 {result.order} · 已开具凭证</div>
+            <div className="payres-btns"><button className="payres-btn pri ok" onClick={onClose}>{en ? "Start using" : "开始使用"}</button></div>
+            <div className="payres-foot">{en ? `Order ${result.order} · receipt issued` : `订单号 ${result.order} · 已开具凭证`}</div>
           </>
         )}
         {result.kind === "pro" && (
@@ -1019,26 +1024,26 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
                 <svg viewBox="0 0 24 24" fill="none" stroke="#A97F2E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </div>
               <div className="payres-ttl">
-                开通成功 <span className="payres-pill"><PaySpark size={11} /> {result.planName}</span>
+                {en ? "Activated" : "开通成功"} <span className="payres-pill"><PaySpark size={11} /> {result.planName}</span>
               </div>
               <div className="payres-desc">
-                {result.planName} 已开通，尊享全部会员权益
+                {en ? `${result.planName} activated — enjoy all member benefits` : `${result.planName} 已开通，尊享全部会员权益`}
               </div>
             </div>
             <div className="payres-box gold">
-              <div className="payres-b1">会员有效期</div>
-              <div className="payres-b2">至 {result.expire}</div>
+              <div className="payres-b1">{en ? "Valid until" : "会员有效期"}</div>
+              <div className="payres-b2">{en ? result.expire : `至 ${result.expire}`}</div>
               <div className="payres-b3">
-                <span>含赠 <b>{result.giftCoins.toLocaleString()}</b> 无为币</span>
-                <span>每日签到 {result.signin}</span>
+                <span>{en ? <>+<b>{result.giftCoins.toLocaleString()}</b> credits</> : <>含赠 <b>{result.giftCoins.toLocaleString()}</b> 无为币</>}</span>
+                <span>{en ? `Daily check-in ${result.signin}` : `每日签到 ${result.signin}`}</span>
               </div>
             </div>
             <div className="payres-perks">
               {result.perks.map((pk) => (<span key={pk}>{pk}</span>))}
             </div>
-            <div className="payres-btns"><button className="payres-btn pri gold" onClick={onClose}>开始使用</button></div>
+            <div className="payres-btns"><button className="payres-btn pri gold" onClick={onClose}>{en ? "Start using" : "开始使用"}</button></div>
             <div className="payres-foot">
-              {result.saved ? `已省 ¥${result.saved} · 订单号 ${result.order}` : "到期前提醒续费 · 续费享 9 折"}
+              {result.saved ? (en ? `Saved ¥${result.saved} · order ${result.order}` : `已省 ¥${result.saved} · 订单号 ${result.order}`) : (en ? "We'll remind you before renewal · 10% off" : "到期前提醒续费 · 续费享 9 折")}
             </div>
           </>
         )}
@@ -1048,18 +1053,18 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
               <div className="payres-mark err">
                 <svg viewBox="0 0 24 24" fill="none" stroke="#C0483C" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </div>
-              <div className="payres-ttl err">支付未完成</div>
-              <div className="payres-desc">这笔订单没有扣款，可重新支付或换个方式</div>
+              <div className="payres-ttl err">{en ? "Payment not completed" : "支付未完成"}</div>
+              <div className="payres-desc">{en ? "This order wasn't charged — retry or try another method" : "这笔订单没有扣款，可重新支付或换个方式"}</div>
             </div>
             <div className="payres-reason">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
-              <span>可能原因：支付超时、主动取消或银行未通过。若已扣款，费用原路退回。</span>
+              <span>{en ? "Possible causes: payment timeout, cancellation, or bank decline. If charged, you'll be refunded to the original method." : "可能原因：支付超时、主动取消或银行未通过。若已扣款，费用原路退回。"}</span>
             </div>
             <div className="payres-btns">
-              <button className="payres-btn pri err" onClick={onRetry}>重新支付</button>
-              <button className="payres-btn ghost" onClick={onRetry}>更换支付方式</button>
+              <button className="payres-btn pri err" onClick={onRetry}>{en ? "Pay again" : "重新支付"}</button>
+              <button className="payres-btn ghost" onClick={onRetry}>{en ? "Change method" : "更换支付方式"}</button>
             </div>
-            <div className="payres-foot">仍有问题？联系客服</div>
+            <div className="payres-foot">{en ? "Still stuck? Contact support" : "仍有问题？联系客服"}</div>
           </>
         )}
       </div>
@@ -4771,14 +4776,14 @@ export function App() {
             <PayCloseX onClick={() => setCoinShortage(null)} />
             <div className="pay-top">
               <PayEnso />
-              <h2>无为币不足</h2>
-              <p>余额已用尽 —— 选一种方式，继续使用无为托管模型</p>
+              <h2>{lang === "en" ? "Out of credits" : "无为币不足"}</h2>
+              <p>{lang === "en" ? "Balance used up — pick a way to keep using Wuwei hosted models" : "余额已用尽 —— 选一种方式，继续使用无为托管模型"}</p>
             </div>
             <div className="pay-bal">
-              <div className="pay-bal-l">当前可用余额</div>
+              <div className="pay-bal-l">{lang === "en" ? "Available balance" : "当前可用余额"}</div>
               <div className="pay-bal-v">
                 <span className="pay-coin" /> {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
-                <small>无为币</small>
+                <small>{lang === "en" ? "credits" : "无为币"}</small>
               </div>
             </div>
             <div className="pay-opts">
@@ -4789,14 +4794,14 @@ export function App() {
                   setPlanOpen(true);
                 }}
               >
-                <span className="pay-badge">更划算</span>
+                <span className="pay-badge">{lang === "en" ? "Better value" : "更划算"}</span>
                 <span className="pay-oi">
                   <PaySpark size={20} />
                 </span>
                 <span style={{ minWidth: 0 }}>
-                  <span className="pay-ot">升级无为 Pro</span>
+                  <span className="pay-ot">{lang === "en" ? "Upgrade to Wuwei Pro" : "升级无为 Pro"}</span>
                   <span className="pay-os" style={{ display: "block" }}>
-                    ¥29/月 · 每月 1000 无为币 + 托管额度
+                    {lang === "en" ? "From $6.99/mo · monthly credits + hosted quota" : "¥29/月 · 每月 1000 无为币 + 托管额度"}
                   </span>
                 </span>
                 <span className="pay-arr">
@@ -4814,9 +4819,9 @@ export function App() {
                   <PackIcon size={21} />
                 </span>
                 <span style={{ minWidth: 0 }}>
-                  <span className="pay-ot">购买积分包</span>
+                  <span className="pay-ot">{lang === "en" ? "Buy a credit pack" : "购买积分包"}</span>
                   <span className="pay-os" style={{ display: "block" }}>
-                    按需充值，用多少买多少，即充即用
+                    {lang === "en" ? "Top up as needed — pay for what you use, instant" : "按需充值，用多少买多少，即充即用"}
                   </span>
                 </span>
                 <span className="pay-arr">
@@ -4825,8 +4830,8 @@ export function App() {
               </button>
             </div>
             <div className="pay-foot">
-              <button onClick={() => void refreshWuweiForShortage(coinShortage.message)}>↻ 刷新余额</button>
-              <button onClick={() => setCoinShortage(null)}>暂不需要</button>
+              <button onClick={() => void refreshWuweiForShortage(coinShortage.message)}>{lang === "en" ? "↻ Refresh balance" : "↻ 刷新余额"}</button>
+              <button onClick={() => setCoinShortage(null)}>{lang === "en" ? "Not now" : "暂不需要"}</button>
             </div>
           </div>
         </div>
