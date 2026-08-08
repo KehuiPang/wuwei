@@ -1525,7 +1525,7 @@ function WuweiLoginModal({
                           style={{ padding: "8px 11px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
                         >
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.email}</span>
-                          {a.password ? <span style={{ fontSize: 10.5, color: "var(--text-muted)", flex: "0 0 auto" }}>已记住</span> : null}
+                          {a.password ? <span style={{ fontSize: 10.5, color: "var(--text-muted)", flex: "0 0 auto" }}>{getLang() === "en" ? "Saved" : "已记住"}</span> : null}
                         </div>
                       ))}
                     </div>
@@ -1988,13 +1988,14 @@ export function App() {
   function onWuweiLoggedIn(me: WuweiMe, action?: "login" | "register" | "reset") {
     setWuwei(me);
     setShowLoginForm(false);
-    const who = me.user.name || me.user.email || "用户";
+    const en = getLang() === "en";
+    const who = me.user.name || me.user.email || (en ? "user" : "用户");
     const msg =
       action === "register"
-        ? `✓ 注册成功，欢迎加入无为！已登录：${who}`
+        ? (en ? `✓ Registered — welcome to Wuwei! Signed in: ${who}` : `✓ 注册成功，欢迎加入无为！已登录：${who}`)
         : action === "reset"
-          ? `✓ 密码已重置，已自动登录：${who}`
-          : `✓ 已登录：${who}`;
+          ? (en ? `✓ Password reset, signed in automatically: ${who}` : `✓ 密码已重置，已自动登录：${who}`)
+          : (en ? `✓ Signed in: ${who}` : `✓ 已登录：${who}`);
     push({ type: "notice", text: msg });
     if (loginResume) {
       const t = input.trim();
@@ -2806,17 +2807,18 @@ export function App() {
     const now = new Date();
     const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
     const diff = Math.round((day(now) - day(d)) / 86400000);
-    if (diff <= 0) return "今天";
-    if (diff === 1) return "昨天";
-    if (diff <= 7) return "近 7 天";
-    if (diff <= 30) return "近 30 天";
-    if (d.getFullYear() === now.getFullYear()) return `${d.getMonth() + 1} 月`;
-    return `${d.getFullYear()} 年`;
+    const en = getLang() === "en";
+    if (diff <= 0) return en ? "Today" : "今天";
+    if (diff === 1) return en ? "Yesterday" : "昨天";
+    if (diff <= 7) return en ? "Last 7 days" : "近 7 天";
+    if (diff <= 30) return en ? "Last 30 days" : "近 30 天";
+    if (d.getFullYear() === now.getFullYear())
+      return en ? d.toLocaleString("en-US", { month: "long" }) : `${d.getMonth() + 1} 月`;
+    return en ? `${d.getFullYear()}` : `${d.getFullYear()} 年`;
   };
+  const RECENT_BUCKETS = getLang() === "en" ? ["Today", "Yesterday", "Last 7 days", "Last 30 days"] : ["今天", "昨天", "近 7 天", "近 30 天"];
   const dateRank = (b: string) =>
-    ["今天", "昨天", "近 7 天", "近 30 天"].indexOf(b) >= 0
-      ? ["今天", "昨天", "近 7 天", "近 30 天"].indexOf(b)
-      : 100; // 具体月/年桶排后面，用桶内最新时间兜底排序
+    RECENT_BUCKETS.indexOf(b) >= 0 ? RECENT_BUCKETS.indexOf(b) : 100; // 具体月/年桶排后面，用桶内最新时间兜底排序
   // 会话所属分组(按当前模式)
   const groupOf = (s: SessionMeta): string =>
     groupMode === "date" ? dateBucket(s.updatedAt) : groupMode === "project" ? s.project || "未归类" : s.group || "";
@@ -3241,7 +3243,7 @@ export function App() {
                   }}
                 />
                 <div className="ctx-menu" style={{ left: groupCtx.x, top: groupCtx.y }}>
-                  <div className="ctx-head">分组「{groupCtx.name}」</div>
+                  <div className="ctx-head">{lang === "en" ? `Group "${groupCtx.name}"` : `分组「${groupCtx.name}」`}</div>
                   <button
                     className="ctx-item ctx-new"
                     onClick={() => {
@@ -3250,7 +3252,7 @@ export function App() {
                       close();
                     }}
                   >
-                    📋 一键生成日报
+                    {lang === "en" ? "📋 Generate daily report" : "📋 一键生成日报"}
                   </button>
                 </div>
               </>
@@ -3258,14 +3260,14 @@ export function App() {
           })()}
         {(() => {
           const name =
-            account.nickname || account.email || account.label || (account.loggedIn ? "已登录" : "未登录");
+            account.nickname || account.email || account.label || (account.loggedIn ? (lang === "en" ? "Signed in" : "已登录") : (lang === "en" ? "Not signed in" : "未登录"));
           return (
             <div className="sidebar-foot">
               {/* 订阅版入口（C2 占位）：默认隐藏，仅当后端 flags 含 "subscription" 才出现。
                   后台可按用户名/机器指纹对指定客户端单独放开——判定全在后端，客户端只渲染。 */}
               {showSubscription && (
                 <button
-                  onClick={() => push({ type: "notice", text: "订阅版入口（灰度已放开）。具体订阅页/权益后续接入。" })}
+                  onClick={() => push({ type: "notice", text: lang === "en" ? "Subscription entry (rollout enabled). Subscription page/benefits coming soon." : "订阅版入口（灰度已放开）。具体订阅页/权益后续接入。" })}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -3281,7 +3283,7 @@ export function App() {
                     fontSize: 13,
                   }}
                 >
-                  <span style={{ color: "#C05F3C" }}>✨</span> 订阅版
+                  <span style={{ color: "#C05F3C" }}>✨</span> {lang === "en" ? "Subscription" : "订阅版"}
                 </button>
               )}
               <button className="acct-btn" onClick={() => setShowAcctMenu((v) => !v)}>
@@ -3294,9 +3296,9 @@ export function App() {
                 </div>
                 <div
                   className="acct-name"
-                  title={wuwei ? wuwei.user.name || wuwei.user.email || "无为用户" : t("acct.notLoggedIn")}
+                  title={wuwei ? wuwei.user.name || wuwei.user.email || (lang === "en" ? "Wuwei user" : "无为用户") : t("acct.notLoggedIn")}
                 >
-                  {wuweiBusy ? "登录中…" : wuwei ? wuwei.user.name || wuwei.user.email || "无为用户" : t("acct.guest")}
+                  {wuweiBusy ? (lang === "en" ? "Signing in…" : "登录中…") : wuwei ? wuwei.user.name || wuwei.user.email || (lang === "en" ? "Wuwei user" : "无为用户") : t("acct.guest")}
                 </div>
                 <span className="acct-caret">⋯</span>
               </button>
@@ -3333,7 +3335,7 @@ export function App() {
                               </div>
                               <div className="acct-id-txt">
                                 <div className="acct-nm">
-                                  <span className="acct-name">{wuwei.user.name || wuwei.user.email || "无为用户"}</span>
+                                  <span className="acct-name">{wuwei.user.name || wuwei.user.email || (lang === "en" ? "Wuwei user" : "无为用户")}</span>
                                   {/* 顶部 chip 只显 Pro/Free 主标；月付/年付档位交给下方会员卡，避免同一行重复又过长 */}
                                   <span className={"acct-tier " + (isPro ? "pro" : "free")}>
                                     {isPro && <Spark />}
