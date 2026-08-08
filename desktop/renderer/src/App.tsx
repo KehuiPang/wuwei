@@ -64,15 +64,15 @@ interface SessionMeta {
 
 // 优先级方案：高/中/低 + 艾森豪威尔四象限。weight 用于排序(大在前)，tag=徽标短标签，label=全称
 const PRIO_HL = [
-  { tag: "高", weight: 3, label: "高" },
-  { tag: "中", weight: 2, label: "中" },
-  { tag: "低", weight: 1, label: "低" },
+  { tag: "高", weight: 3, label: "高", labelEn: "High" },
+  { tag: "中", weight: 2, label: "中", labelEn: "Medium" },
+  { tag: "低", weight: 1, label: "低", labelEn: "Low" },
 ];
 const PRIO_QUAD = [
-  { tag: "重急", weight: 4, label: "紧急重要" },
-  { tag: "重", weight: 3, label: "不紧急重要" },
-  { tag: "急", weight: 2, label: "紧急不重要" },
-  { tag: "缓", weight: 1, label: "不紧急不重要" },
+  { tag: "重急", weight: 4, label: "紧急重要", labelEn: "Urgent & important" },
+  { tag: "重", weight: 3, label: "不紧急重要", labelEn: "Important, not urgent" },
+  { tag: "急", weight: 2, label: "紧急不重要", labelEn: "Urgent, not important" },
+  { tag: "缓", weight: 1, label: "不紧急不重要", labelEn: "Neither" },
 ];
 const PRIO_TITLE: Record<string, string> = Object.fromEntries(
   [...PRIO_HL, ...PRIO_QUAD].map((p) => [p.tag, p.label]),
@@ -3141,10 +3141,10 @@ export function App() {
                       close();
                     }}
                   >
-                    {s.done ? "↩ 取消完成" : "✓ 标记完成"}
+                    {s.done ? t("ctx.markUndone", "↩ 取消完成") : t("ctx.markDone", "✓ 标记完成")}
                   </button>
                   <div className="ctx-sep" />
-                  <div className="ctx-head">移动到分组</div>
+                  <div className="ctx-head">{t("ctx.moveToGroup", "移动到分组")}</div>
                   {groups
                     .filter((g) => g !== s.group)
                     .map((g) => (
@@ -3154,14 +3154,14 @@ export function App() {
                     ))}
                   {s.group && (
                     <button className="ctx-item" onClick={() => move(null)}>
-                      移出「{s.group}」
+                      {t("ctx.moveOut", "移出「{g}」").replace("{g}", s.group)}
                     </button>
                   )}
                   {groupInputSid === ctxMenu.sid ? (
                     <input
                       className="ctx-input"
                       autoFocus
-                      placeholder="新组名，回车创建"
+                      placeholder={t("ctx.newGroupPlaceholder", "新组名，回车创建")}
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
                       onKeyDown={(e) => {
@@ -3180,11 +3180,11 @@ export function App() {
                         setNewGroupName("");
                       }}
                     >
-                      ＋ 新建分组…
+                      {t("ctx.newGroup", "＋ 新建分组…")}
                     </button>
                   )}
                   <div className="ctx-sep" />
-                  <div className="ctx-head">优先级</div>
+                  <div className="ctx-head">{t("ctx.priority", "优先级")}</div>
                   <div className="ctx-prio">
                     <button
                       className={"ctx-prio-b" + (!s.priorityTag ? " on" : "")}
@@ -3193,7 +3193,7 @@ export function App() {
                         close();
                       }}
                     >
-                      无
+                      {t("ctx.prioNone", "无")}
                     </button>
                     {PRIO_HL.map((p) => (
                       <button
@@ -3204,11 +3204,11 @@ export function App() {
                           close();
                         }}
                       >
-                        {p.label}
+                        {lang === "en" ? p.labelEn : p.label}
                       </button>
                     ))}
                   </div>
-                  <div className="ctx-head">四象限（重要/紧急）</div>
+                  <div className="ctx-head">{t("ctx.quadrant", "四象限（重要/紧急）")}</div>
                   <div className="ctx-quad">
                     {PRIO_QUAD.map((p) => (
                       <button
@@ -3219,7 +3219,7 @@ export function App() {
                           close();
                         }}
                       >
-                        {p.label}
+                        {lang === "en" ? p.labelEn : p.label}
                       </button>
                     ))}
                   </div>
