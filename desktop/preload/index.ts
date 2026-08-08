@@ -218,6 +218,9 @@ const api = {
   // 每日签到（幂等）：返回 {success, amount, balanceAfter, streak, message} 或 null
   checkin: () =>
     ipcRenderer.invoke("account:checkin") as Promise<{ success?: boolean; amount?: number; balanceAfter?: number; streak?: number; message?: string } | null>,
+  // 客户端公告（公开）：返回当前发布中的公告 + version(updated_at)，未发布/异常 → {active:false}
+  getAnnouncement: () =>
+    ipcRenderer.invoke("announcement:get") as Promise<{ active: boolean; version?: string; titleZh?: string; titleEn?: string; bodyZh?: string; bodyEn?: string }>,
   // 扫码支付：下单拿二维码串 + 轮询订单状态
   payCreate: (sku: string, channel: string) =>
     ipcRenderer.invoke("pay:create", sku, channel) as Promise<{

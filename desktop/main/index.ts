@@ -2802,6 +2802,18 @@ ipcMain.handle("login:remember-clear-password", (_e, email: string) => {
   clearRememberedPassword(email);
   return true;
 });
+// 客户端公告：从 wuwei-site 拉当前发布中的公告(公开、无需登录)。走主进程避免 CORS。
+// 返回 { active, version, titleZh/En, bodyZh/En }；异常/未发布 → { active:false }。
+ipcMain.handle("announcement:get", async () => {
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const res = await fetch(`${site}/api/announcement`);
+    if (!res.ok) return { active: false };
+    return await res.json();
+  } catch {
+    return { active: false };
+  }
+});
 // 每日签到：带 token 调后端 /api/signin（幂等，当天重复调不重复发）。返回 {success, amount, balanceAfter, streak, message}。
 ipcMain.handle("account:checkin", async () => {
   const sess = await getFreshWuweiSession();

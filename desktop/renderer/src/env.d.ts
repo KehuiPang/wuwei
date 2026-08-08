@@ -49,6 +49,7 @@ export interface WuweiApi {
   codexConsumeReset(creditId: string): Promise<{ ok: boolean; error?: string }>;
   setBrainPrompt(text: string | null): void;
   setSecretsPrompt(text: string | null): void;
+  getAnnouncement(): Promise<{ active: boolean; version?: string; titleZh?: string; titleEn?: string; bodyZh?: string; bodyEn?: string }>;
   deleteExchange(sid: string, ordinal: number): void;
   bootstrap(): Promise<{ sessions: any[]; groups?: string[]; currentId: string; messages: any[]; usage?: any; rateLimits?: any; interrupted?: { id: string; title: string }[] }>;
   getSettings(): Promise<{ settings: any; backend: string; model: string; defaultPrompt?: string; defaultBrainPrompt?: string; defaultSecretsPrompt?: string }>;

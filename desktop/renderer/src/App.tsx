@@ -1947,6 +1947,8 @@ export function App() {
   const isPro = (wuwei?.membership?.tier ?? "free") !== "free"; // 会员态：脑网络等专享功能门控
   const [wuweiBusy, setWuweiBusy] = useState(false);
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
+  // 客户端公告：启动拉取，未读过该版本(version)且 active 才弹；读过存本地，同版本不再弹，后台更新(version 变)则再弹。
+  const [announce, setAnnounce] = useState<{ version: string; title: string; body: string } | null>(null);
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -2338,6 +2340,21 @@ export function App() {
   // 保证主进程 tt()/工具描述/系统提示默认从一开始就跟随界面语言（此后已持久化，下次启动即正确）。
   useEffect(() => {
     window.wuwei.setAppSettings({ lang });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 启动拉公告：active 且未读过该 version → 弹窗（标题/正文随界面语言）。读过或后台没发则不弹。
+  useEffect(() => {
+    window.wuwei.getAnnouncement().then((a) => {
+      if (!a?.active || !a.version) return;
+      let seen = "";
+      try { seen = localStorage.getItem("wuwei_seen_announcement") || ""; } catch { /* ignore */ }
+      if (seen === a.version) return; // 这版读过了，不再弹
+      const title = (lang === "en" ? a.titleEn : a.titleZh) || a.titleZh || a.titleEn || "";
+      const body = (lang === "en" ? a.bodyEn : a.bodyZh) || a.bodyZh || a.bodyEn || "";
+      if (!title && !body) return;
+      setAnnounce({ version: a.version, title, body });
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -4810,6 +4827,20 @@ export function App() {
           }}
           onSuccess={onWuweiLoggedIn}
         />
+      )}
+      {/* 客户端公告弹窗：打开即弹(未读过该版本)，读完关闭存本地，同版本不再弹 */}
+      {announce && (
+        <div className="perm-overlay" onClick={() => { try { localStorage.setItem("wuwei_seen_announcement", announce.version); } catch { /* ignore */ } setAnnounce(null); }}>
+          <div className="add-st-dialog" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>{announce.title}</h3>
+            <div className="s-note" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 320, overflow: "auto" }}>{announce.body}</div>
+            <div className="btns" style={{ marginTop: 16 }}>
+              <button className="allow" onClick={() => { try { localStorage.setItem("wuwei_seen_announcement", announce.version); } catch { /* ignore */ } setAnnounce(null); }}>
+                {lang === "en" ? "Got it" : "知道了"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {/* ① 无为币不足触发弹窗（v2）：金色升级Pro在上(更划算) + 朱色购买积分包在下 */}
       {coinShortage && (
