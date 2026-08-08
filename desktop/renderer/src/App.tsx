@@ -9036,16 +9036,16 @@ function SettingsModal({
                           color: brainView === v ? "#fff" : "var(--text)",
                         }}
                       >
-                        {v === "graph" ? "可视化" : "提示词"}
+                        {v === "graph" ? t("set.brain.viewGraph", "可视化") : t("set.brain.viewPrompt", "提示词")}
                       </button>
                     ))}
                   </div>
                   {/* 总开关：关掉后不注入脑网络说明、不再提供 brain_* 工具 */}
                   <div className="app-set-row" style={{ order: -2, cursor: "default" }}>
                     <div className="app-set-text">
-                      <div className="app-set-label">启用脑网络</div>
+                      <div className="app-set-label">{t("set.brain.enableTitle", "启用脑网络")}</div>
                       <div className="app-set-hint">
-                        开：给模型注入脑网络说明并提供 brain_recall / brain_learn 等工具。关：完全停用（下面的概念/文档仍在，随时可重新开启）。
+                        {t("set.brain.enableHint", "开：给模型注入脑网络说明并提供 brain_recall / brain_learn 等工具。关：完全停用（下面的概念/文档仍在，随时可重新开启）。")}
                       </div>
                     </div>
                     <input
@@ -9061,9 +9061,9 @@ function SettingsModal({
                   {/* 子开关：recall 是否连带扫描『相关文档』(文档冷存储) */}
                   <div className="app-set-row" style={{ order: -1, cursor: "default", opacity: brainOn ? 1 : 0.5 }}>
                     <div className="app-set-text">
-                      <div className="app-set-label">检索时扫描相关文档</div>
+                      <div className="app-set-label">{t("set.brain.scanDocsTitle", "检索时扫描相关文档")}</div>
                       <div className="app-set-hint">
-                        开：brain_recall 除概念子图外，还返回知识宫殿等文档库的相关原文片段。关：只返回概念子图、不扫文档。
+                        {t("set.brain.scanDocsHint", "开：brain_recall 除概念子图外，还返回知识宫殿等文档库的相关原文片段。关：只返回概念子图、不扫文档。")}
                       </div>
                     </div>
                     <input
@@ -9184,7 +9184,7 @@ function SettingsModal({
                     {brainLeftOpen ? (
                     <div style={{ width: 220, flex: "0 0 220px", display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>概念列表</span>
+                        <span className="s-note" style={{ margin: 0, flex: 1, fontWeight: 600 }}>{t("set.brain.conceptList", "概念列表")}</span>
                         <button type="button" className="brain-col-btn" title={t("set.brain.collapseList", "收起概念列表")} onClick={() => setBrainLeftOpen(false)}>
                           ◀
                         </button>
@@ -9248,7 +9248,7 @@ function SettingsModal({
                         onClick={() => setBrainLeftOpen(true)}
                       >
                         <span className="brain-rail-arrow">▶</span>
-                        <span className="brain-rail-label">概念列表</span>
+                        <span className="brain-rail-label">{t("set.brain.conceptList", "概念列表")}</span>
                       </button>
                     )}
 
