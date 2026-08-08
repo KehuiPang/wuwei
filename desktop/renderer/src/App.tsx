@@ -322,23 +322,33 @@ function PackIcon({ size = 20 }: { size?: number }) {
   );
 }
 
-// sku：下单时传给后端，服务端据此查金额/币量（价格以后端为准，绝不信任客户端）。须与 wuwei-site catalog.ts 一致。
-type CoinPack = { sku: string; coins: number; bonus: number; price: number; desc: string; badge?: string; badgeType?: "rec" | "val" };
-// 积分包（按需充值）：单价刻意高于包月，形成「充值不如包月」的转化漏斗。无 bonus，单价随量微降。
+// 价格显示：EN 显示美元、CN 显示人民币。仅影响展示；实收金额始终以后端按 sku 查表为准。
+const money = (en: boolean, cn: number, usd: number): string => (en ? `$${usd}` : `¥${cn}`);
+// 客户端(人民币)sku → 网页 Paddle 的美元 sku。英文用户走网页结账(系统浏览器)。
+const EN_SKU: Record<string, string> = {
+  plan_pro: "plan_pro_en",
+  plan_pro_5x: "plan_plus_en",
+  plan_pro_50x: "plan_max_en",
+  pack_s: "pack_s_en",
+  pack_m: "pack_m_en",
+  pack_l: "pack_l_en",
+};
+// sku：下单时传给后端，服务端据此查金额/币量（价格以后端为准，绝不信任客户端）。价/币量已对齐 wuwei-site coin_catalog。
+type CoinPack = { sku: string; coins: number; bonus: number; price: number; priceUsd: number; desc: string; descEn: string; badge?: string; badgeEn?: string; badgeType?: "rec" | "val" };
+// 积分包（按需充值，价对齐库：pack_s/m/l = ¥19/69/199 · $3.99/12.99/39.99，币量 800/3000/9000 CN=EN）。
 const COIN_PACKS: CoinPack[] = [
-  { sku: "pack_1000", coins: 1000, bonus: 0, price: 29, desc: "按需充值，随用随充" },
-  { sku: "pack_3000", coins: 3000, bonus: 0, price: 79, desc: "常用档", badge: "推荐", badgeType: "rec" },
-  { sku: "pack_8000", coins: 8000, bonus: 0, price: 199, desc: "高频 / 团队", badge: "最超值", badgeType: "val" },
+  { sku: "pack_s", coins: 800, bonus: 0, price: 19, priceUsd: 3.99, desc: "按需充值，随用随充", descEn: "Pay as you go" },
+  { sku: "pack_m", coins: 3000, bonus: 0, price: 69, priceUsd: 12.99, desc: "常用档", descEn: "Popular", badge: "推荐", badgeEn: "Recommended", badgeType: "rec" },
+  { sku: "pack_l", coins: 9000, bonus: 0, price: 199, priceUsd: 39.99, desc: "高频 / 团队", descEn: "Heavy / team", badge: "最超值", badgeEn: "Best value", badgeType: "val" },
 ];
-// ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示(后台按用户/设备/IP 放开，正式用户看不到)
-const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, desc: "测试专用 · 小额验证", badge: "测试", badgeType: "val" };
-// 月付阶梯（去年付，3 档）：1x / 5x / 50x。成本基准 1 无为币=¥0.01，各档 ~2 倍毛利。saved=按基础价买同量能省多少。
-// (XorPay fee_error 实为手续费余额不足，非硬限额；充够手续费后大额单正常，故顶配回 ¥999=2倍。)
-type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; price: number; unit: string; coins: number; signin: number; saved: number; sub: string; note: string; tag: string; tagType: "rec" | "pop" };
+// ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示；海外无对应 Paddle 档，EN 不显示。
+const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, priceUsd: 0, desc: "测试专用 · 小额验证", descEn: "Test · small verification", badge: "测试", badgeEn: "Test", badgeType: "val" };
+// 月付阶梯（价/币量/签到 对齐库 coin_catalog）：CN plan_pro/5x/50x = ¥29/99/899；EN pro/plus/max = $6.99/19.99/199。
+type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
-  { id: "pro", sku: "plan_pro", name: "无为 Pro", price: 25, unit: "/月", coins: 1000, signin: 30, saved: 0, sub: "每月 1000 无为币 · 每日签到 30", note: "", tag: "入门", tagType: "pop" },
-  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", price: 109, unit: "/月", coins: 5000, signin: 50, saved: 16, sub: "每月 5000 无为币 · 每日签到 50", note: "省 13%", tag: "最受欢迎", tagType: "rec" },
-  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", price: 999, unit: "/月", coins: 50000, signin: 150, saved: 251, sub: "每月 50000 无为币 · 每日签到 150", note: "省 20%", tag: "顶配", tagType: "pop" },
+  { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "每月 1000 无为币 · 每日签到 20", subEn: "2000 credits/mo · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
+  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "每月 5000 无为币 · 每日签到 40", subEn: "6000 credits/mo · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
+  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "每月 50000 无为币 · 每日签到 100", subEn: "70000 credits/mo · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
@@ -346,9 +356,16 @@ const PRO_FEATS: [string, string][] = [
   ["多任务并行", "同时跑多个会话"],
   ["脑网络记忆", "持续学习，长期记忆"],
 ];
+const PRO_FEATS_EN: [string, string][] = [
+  ["Hosted credits", "No API key needed"],
+  ["Priority support", "Faster responses"],
+  ["Parallel tasks", "Run multiple chats at once"],
+  ["Brain memory", "Learns and remembers long-term"],
+];
 
-// ② 购买积分包（朱系）：站内选档，付款按钮暂跳 pricing（Paddle 接入待后端产品 ID）
-function CoinPackModal({ packs, onClose, onCheckout, onUpgrade }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void; onUpgrade: () => void }) {
+// ② 购买积分包（朱系）：站内选档；CN 走扫码，EN 走网页 Paddle 结账。
+function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void; onUpgrade: () => void; t: T; lang: Lang }) {
+  const en = lang === "en";
   const [sel, setSel] = useState(() => { const i = packs.findIndex((x) => x.badgeType === "rec"); return i >= 0 ? i : 0; }); // 默认选中"推荐"档
   const p = packs[sel];
   return (
@@ -357,36 +374,36 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade }: { packs: CoinP
         <PayCloseX onClick={onClose} />
         <div className="pay-top">
           <PayEnso />
-          <h2>购买积分包</h2>
-          <p>按需充值，用多少买多少，即充即用，永久有效</p>
+          <h2>{t("pay.coinpack.title", "购买积分包")}</h2>
+          <p>{t("pay.coinpack.sub", "按需充值，用多少买多少，即充即用，永久有效")}</p>
         </div>
         <div className="pay-rows">
           {packs.map((pack, i) => (
             <button key={pack.coins} className={"pay-rw" + (i === sel ? " sel" : "")} onClick={() => setSel(i)}>
-              {pack.badge && <span className={"pay-rbadge " + pack.badgeType}>{pack.badge}</span>}
+              {pack.badge && <span className={"pay-rbadge " + pack.badgeType}>{en ? pack.badgeEn : pack.badge}</span>}
               <span className="pay-rw-ic">
                 <PackIcon />
               </span>
               <span style={{ minWidth: 0 }}>
                 <span className="pay-amt">
                   {pack.coins.toLocaleString()}
-                  <span className="u"> 无为币</span>
+                  <span className="u"> {t("pay.credits", "无为币")}</span>
                 </span>
                 <span className="pay-desc" style={{ display: "block" }}>
-                  {pack.desc}
-                  {pack.bonus > 0 && <em> +{pack.bonus} 赠送</em>}
+                  {en ? pack.descEn : pack.desc}
+                  {pack.bonus > 0 && <em> +{pack.bonus} {t("pay.bonusWord", "赠送")}</em>}
                 </span>
               </span>
-              <span className="pay-price">¥{pack.price}</span>
+              <span className="pay-price">{money(en, pack.price, pack.priceUsd)}</span>
             </button>
           ))}
         </div>
         <button className="pay-cta red" onClick={() => onCheckout(p)}>
-          确认购买 ¥{p.price}
+          {t("pay.coinpack.ctaPrefix", "确认购买")} {money(en, p.price, p.priceUsd)}
         </button>
         <div className="pay-cancel">
           <button onClick={onUpgrade} style={{ color: "#A97F2E", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <PaySpark size={12} /> 升级会员 · 更多优惠 →
+            <PaySpark size={12} /> {t("pay.coinpack.upgrade", "升级会员 · 更多优惠 →")}
           </button>
         </div>
       </div>
@@ -394,38 +411,40 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade }: { packs: CoinP
   );
 }
 
-// ③ 升级无为 Pro（金系）：月付/年付选择 + 2×2 权益；付款按钮暂跳 pricing
-function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (plan: ProPlan) => void }) {
+// ③ 升级无为 Pro（金系）：档位选择 + 2×2 权益；CN 走扫码，EN 走网页 Paddle 结账。
+function PlanModal({ onClose, onCheckout, t, lang }: { onClose: () => void; onCheckout: (plan: ProPlan) => void; t: T; lang: Lang }) {
+  const en = lang === "en";
   const [sel, setSel] = useState<ProPlan["id"]>("pro5x");
   const selPlan = PRO_PLANS.find((x) => x.id === sel)!;
+  const feats = en ? PRO_FEATS_EN : PRO_FEATS;
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className="pay-card plan" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
         <div className="pay-top">
           <PayEnso />
-          <h2>升级无为 Pro</h2>
-          <p>托管额度、专属客服、多任务并行。用得越多，选越高档越划算。</p>
+          <h2>{t("pay.plan.title", "升级无为 Pro")}</h2>
+          <p>{t("pay.plan.sub", "托管额度、专属客服、多任务并行。用得越多，选越高档越划算。")}</p>
         </div>
         <div className="pay-plans">
           {PRO_PLANS.map((plan) => (
             <button key={plan.id} className={"pay-pc" + (plan.id === sel ? " sel" : "")} onClick={() => setSel(plan.id)}>
-              <span className={"pay-tag " + plan.tagType}>{plan.tag}</span>
+              <span className={"pay-tag " + plan.tagType}>{en ? plan.tagEn : plan.tag}</span>
               <span className="pay-pc-r1">
                 <span className="pay-pc-nm">
-                  <PaySpark size={13} /> {plan.name}
+                  <PaySpark size={13} /> {en ? plan.nameEn : plan.name}
                 </span>
                 <span className="pay-pc-pr">
-                  ¥{plan.price}
-                  <span className="u">{plan.unit}</span>
+                  {money(en, plan.price, plan.priceUsd)}
+                  <span className="u">{en ? plan.unitEn : plan.unit}</span>
                 </span>
               </span>
               <span className="pay-pc-r2" style={{ display: "block" }}>
-                {plan.sub}
-                {plan.note && (
+                {en ? plan.subEn : plan.sub}
+                {(en ? plan.noteEn : plan.note) && (
                   <>
                     {" · "}
-                    <em>{plan.note}</em>
+                    <em>{en ? plan.noteEn : plan.note}</em>
                   </>
                 )}
               </span>
@@ -433,7 +452,7 @@ function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (
           ))}
         </div>
         <div className="pay-feats">
-          {PRO_FEATS.map(([tt, ss]) => (
+          {feats.map(([tt, ss]) => (
             <div key={tt} className="pay-f">
               <div className="pay-ft">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -446,10 +465,10 @@ function PlanModal({ onClose, onCheckout }: { onClose: () => void; onCheckout: (
           ))}
         </div>
         <button className="pay-cta gold" onClick={() => onCheckout(selPlan)}>
-          升级 {selPlan.name} ¥{selPlan.price}/月
+          {t("pay.plan.cta", "升级 {name} ¥{p}/月").replace("{name}", en ? selPlan.nameEn : selPlan.name).replace("{p}", en ? String(selPlan.priceUsd) : String(selPlan.price))}
         </button>
         <div className="pay-fnote">
-          <span className="ok">✓</span> 随时可升级　<span className="ok">✓</span> 功能权益与官网一致
+          <span className="ok">✓</span> {t("pay.plan.footAny", "随时可升级")}　<span className="ok">✓</span> {t("pay.plan.footSame", "功能权益与官网一致")}
         </div>
       </div>
     </div>
@@ -1952,6 +1971,18 @@ export function App() {
     } finally {
       setCheckinBusy(false);
     }
+  }
+  // 海外结账：英文用户点购买/升级 → 系统浏览器打开网页 Paddle 结账页(已验证可付+webhook发币)。
+  // clientSku=人民币档 sku，经 EN_SKU 映射成美元档 sku。内嵌 3DS 走不通，故用系统浏览器。
+  function startEnCheckout(clientSku: string) {
+    const enSku = EN_SKU[clientSku];
+    if (!enSku) return;
+    const uid = wuwei?.user.id;
+    const email = wuwei?.user.email ?? "";
+    const url =
+      `https://wuweiai.io/en/checkout?sku=${encodeURIComponent(enSku)}` +
+      (uid ? `&uid=${encodeURIComponent(uid)}&email=${encodeURIComponent(email)}` : "");
+    window.wuwei.openExternal(url);
   }
   // 应用内登录框成功回调：更新账号 + 关框 + (若从发送门槛来)续发刚才拦下的消息
   function onWuweiLoggedIn(me: WuweiMe, action?: "login" | "register" | "reset") {
@@ -4786,10 +4817,13 @@ export function App() {
       )}
       {coinPackOpen && (
         <CoinPackModal
-          packs={wuwei?.flags?.includes("coinpack_test") ? [TEST_COIN_PACK, ...COIN_PACKS] : COIN_PACKS}
+          t={t}
+          lang={lang}
+          packs={wuwei?.flags?.includes("coinpack_test") && lang !== "en" ? [TEST_COIN_PACK, ...COIN_PACKS] : COIN_PACKS}
           onClose={() => setCoinPackOpen(false)}
           onCheckout={(pack) => {
             setCoinPackOpen(false);
+            if (lang === "en") { startEnCheckout(pack.sku); return; } // 海外走网页 Paddle 结账
             setPayCheckout({ kind: "pack", pack });
           }}
           onUpgrade={() => {
@@ -4800,9 +4834,12 @@ export function App() {
       )}
       {planOpen && (
         <PlanModal
+          t={t}
+          lang={lang}
           onClose={() => setPlanOpen(false)}
           onCheckout={(plan) => {
             setPlanOpen(false);
+            if (lang === "en") { startEnCheckout(plan.sku); return; } // 海外走网页 Paddle 结账
             setPayCheckout({ kind: "plan", plan });
           }}
         />
