@@ -3417,7 +3417,7 @@ export function App() {
                                   <rect x="3" y="5" width="18" height="14" rx="2.5" />
                                   <path d="M3 10h18M7 15h4" />
                                 </svg>
-                                捐赠
+                                {t("menu.donate", "捐赠")}
                               </button>
                               <button
                                 className="acct-it"
@@ -3443,7 +3443,7 @@ export function App() {
                                   <rect x="17" y="13" width="4" height="6" rx="1.5" />
                                   <path d="M20 19a4 4 0 0 1-4 4h-2" />
                                 </svg>
-                                联系客服
+                                {t("menu.contactSupport", "联系客服")}
                               </button>
                               <button
                                 className="acct-it danger"
@@ -4246,7 +4246,7 @@ export function App() {
                         setShowSettings(true);
                       }}
                     >
-                      全部供应商设置…
+                      {t("mq.allProviders", "全部供应商设置…")}
                     </button>
                   </div>
                 </>
@@ -4451,7 +4451,7 @@ export function App() {
         {showUsage && (
           <div className="usage-panel">
             <div className="u-row">
-              <span>上下文窗口</span>
+              <span>{t("usage.ctxWindow", "上下文窗口")}</span>
               <span>
                 {(usage.lastInput / 1000).toFixed(1)}k / {ctxWinLabel} ({ctxPct}%)
               </span>
@@ -4467,7 +4467,7 @@ export function App() {
                 <div
                   className="u-row"
                   style={{ color: "#C05F3C", cursor: webLoginBusy ? "default" : "pointer", alignItems: "center" }}
-                  title="登录对应网站授权后自动刷新余额/额度"
+                  title={t("usage.webLoginTitle", "登录对应网站授权后自动刷新余额/额度")}
                   onClick={async () => {
                     if (webLoginBusy) return;
                     setWebLoginBusy(true);
@@ -4478,14 +4478,14 @@ export function App() {
                   <span>
                     {account.providerId === "kimi-sub"
                       ? account.expired
-                        ? "额度登录已过期"
-                        : "额度未登录"
+                        ? t("usage.quotaExpired", "额度登录已过期")
+                        : t("usage.quotaNoLogin", "额度未登录")
                       : account.expired
-                        ? "余额登录已过期"
-                        : "余额未登录"}
+                        ? t("usage.balExpired", "余额登录已过期")
+                        : t("usage.balNoLogin", "余额未登录")}
                   </span>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                    {webLoginBusy ? "登录中…" : "点此登录"}
+                    {webLoginBusy ? t("usage.loggingIn", "登录中…") : t("usage.clickLogin", "点此登录")}
                     <RefreshIcon size={13} />
                   </span>
                 </div>
@@ -4496,24 +4496,24 @@ export function App() {
               <>
                 {rate.planType && (
                   <div className="u-row">
-                    <span>订阅套餐</span>
+                    <span>{t("usage.plan", "订阅套餐")}</span>
                     <span style={{ textTransform: "capitalize" }}>
                       {rate.planType}
-                      {rate.creditsUnlimited ? " · 无限" : ""}
+                      {rate.creditsUnlimited ? t("usage.unlimited", " · 无限") : ""}
                     </span>
                   </div>
                 )}
                 {typeof rate.primaryUsedPercent === "number" && (
                   <LimitRow
                     // 主窗口≥24h(如 Codex 现在的 168h=7天)：本身就是周尺度，直接标「周限额」，不再单列短窗口
-                    label={(rate.primaryWindowMinutes ?? 300) >= 1440 ? "周限额" : windowLabel(rate.primaryWindowMinutes)}
+                    label={(rate.primaryWindowMinutes ?? 300) >= 1440 ? t("limit.weekly", "周限额") : windowLabel(rate.primaryWindowMinutes)}
                     used={rate.primaryUsedPercent}
                     resetSec={rate.primaryResetAfterSeconds}
                   />
                 )}
                 {(rate.primaryWindowMinutes ?? 300) < 1440 && typeof rate.secondaryUsedPercent === "number" && (
                   <LimitRow
-                    label={`周限额`}
+                    label={t("limit.weekly", "周限额")}
                     used={rate.secondaryUsedPercent}
                     resetSec={rate.secondaryResetAfterSeconds}
                   />
@@ -4521,8 +4521,8 @@ export function App() {
                 {curProviderId === "codex" && codexResets && codexResets.availableCount > 0 && (
                   <div className="u-reset">
                     <div className="u-row">
-                      <span>限额重置</span>
-                      <span>可用 {codexResets.availableCount} 次</span>
+                      <span>{t("usage.limitReset", "限额重置")}</span>
+                      <span>{t("usage.availCount", "可用 {n} 次").replace("{n}", String(codexResets.availableCount))}</span>
                     </div>
                     {codexResets.credits
                       .filter((c) => c.status === "available")
@@ -4531,20 +4531,20 @@ export function App() {
                           <div className="u-reset-info">
                             <span className="u-reset-title">{c.title || "Full reset"}</span>
                             {c.expires_at && (
-                              <span className="u-reset-exp">{new Date(c.expires_at).toLocaleDateString()} 到期</span>
+                              <span className="u-reset-exp">{t("usage.expiresOn", "{d} 到期").replace("{d}", new Date(c.expires_at).toLocaleDateString())}</span>
                             )}
                           </div>
                           {resetConfirm === c.id ? (
                             <span className="u-reset-confirm">
-                              用掉这次？
+                              {t("usage.useThis", "用掉这次？")}
                               <button className="allow" onClick={() => doConsumeReset(c.id)}>
-                                确认
+                                {t("usage.confirm", "确认")}
                               </button>
-                              <button onClick={() => setResetConfirm(null)}>取消</button>
+                              <button onClick={() => setResetConfirm(null)}>{lang === "en" ? "Cancel" : "取消"}</button>
                             </span>
                           ) : (
                             <button className="u-reset-btn" onClick={() => setResetConfirm(c.id)}>
-                              使用重置
+                              {t("usage.useReset", "使用重置")}
                             </button>
                           )}
                         </div>
@@ -4552,23 +4552,23 @@ export function App() {
                     {resetMsg && <div className="u-reset-msg">{resetMsg}</div>}
                   </div>
                 )}
-                <div className="u-note">数据来自订阅额度（发一条消息后刷新）。</div>
+                <div className="u-note">{t("usage.subNote", "数据来自订阅额度（发一条消息后刷新）。")}</div>
               </>
             ) : curPreset?.hosted || curProviderId.startsWith("wuwei-") ? (
               // 无为托管：显示无为币余额（未登录则引导登录）
               wuwei ? (
                 <>
                   <div className="u-row">
-                    <span>无为币余额</span>
-                    <span>{wuwei.coin.balance.toLocaleString()} 无为币</span>
+                    <span>{t("usage.coinBal", "无为币余额")}</span>
+                    <span>{t("usage.coinAmount", "{n} 无为币").replace("{n}", wuwei.coin.balance.toLocaleString())}</span>
                   </div>
                   <div className="u-row">
-                    <span>本会话 tokens</span>
+                    <span>{t("usage.sessTokens", "本会话 tokens")}</span>
                     <span>
                       ↑{usage.totalInput.toLocaleString()} ↓{usage.totalOutput.toLocaleString()}
                     </span>
                   </div>
-                  <div className="u-note">无为托管按 token×单价扣无为币（余额随对话刷新）。</div>
+                  <div className="u-note">{t("usage.hostedNote", "无为托管按 token×单价扣无为币（余额随对话刷新）。")}</div>
                 </>
               ) : (
                 <div
@@ -4579,8 +4579,8 @@ export function App() {
                     setShowLoginForm(true);
                   }}
                 >
-                  <span>无为币余额</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>登录后查看 · 点此登录</span>
+                  <span>{t("usage.coinBal", "无为币余额")}</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{t("usage.loginToView", "登录后查看 · 点此登录")}</span>
                 </div>
               )
             ) : account.balance ? (
@@ -4588,37 +4588,37 @@ export function App() {
               <>
                 {account.balance.total && (
                   <div className="u-row">
-                    <span>账户余额</span>
-                    <span>{account.balance.total} 元</span>
+                    <span>{t("usage.acctBal", "账户余额")}</span>
+                    <span>{t("usage.yuanAmount", "{n} 元").replace("{n}", String(account.balance.total))}</span>
                   </div>
                 )}
                 {account.balance.consumed && (
                   <div className="u-row">
-                    <span>本会话已消耗</span>
-                    <span>≈ {account.balance.consumed} 元</span>
+                    <span>{t("usage.sessConsumed", "本会话已消耗")}</span>
+                    <span>≈ {t("usage.yuanAmount", "{n} 元").replace("{n}", String(account.balance.consumed))}</span>
                   </div>
                 )}
                 <div className="u-row">
-                  <span>本会话 tokens</span>
+                  <span>{t("usage.sessTokens", "本会话 tokens")}</span>
                   <span>
                     ↑{usage.totalInput.toLocaleString()} ↓{usage.totalOutput.toLocaleString()}
                   </span>
                 </div>
                 <div className="u-note">
                   {account.balance.total
-                    ? `余额实时来自 ${account.label} 账户（每轮对话后刷新）。`
-                    : `消耗按 token×单价估算（每轮对话后刷新）。`}
+                    ? t("usage.balNote", "余额实时来自 {label} 账户（每轮对话后刷新）。").replace("{label}", account.label)
+                    : t("usage.consumeNote", "消耗按 token×单价估算（每轮对话后刷新）。")}
                 </div>
               </>
             ) : (
               // 无额度/无余额信息：显示 token 统计
               <>
                 <div className="u-row">
-                  <span>本会话累计输入</span>
+                  <span>{t("usage.totalIn", "本会话累计输入")}</span>
                   <span>{usage.totalInput.toLocaleString()} tokens</span>
                 </div>
                 <div className="u-row">
-                  <span>本会话累计输出</span>
+                  <span>{t("usage.totalOut", "本会话累计输出")}</span>
                   <span>{usage.totalOutput.toLocaleString()} tokens</span>
                 </div>
               </>
