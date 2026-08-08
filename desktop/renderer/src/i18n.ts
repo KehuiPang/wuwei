@@ -29,6 +29,10 @@ export function setLang(l: Lang) {
 }
 
 const DICT: Record<string, { zh: string; en: string }> = {
+  // 开屏动画（Splash）：调用处无兜底，必须 DICT 里 zh+en 全给，否则显示成键名
+  "splash.brand": { zh: "无为", en: "Wuwei" },
+  "splash.slogan": { zh: "一念既出，万事自成", en: "One intention. Everything done." },
+  "splash.aria": { zh: "无为 · 启动中", en: "Wuwei · loading" },
   "login.title": { zh: "登录 / 注册无为账号", en: "Sign in to Wuwei" },
   "login.incentive": { zh: "注册即得 100 无为币 · 每日签到再领 10", en: "Get 100 credits on sign-up · +10 daily check-in" },
   "login.freeModels": { zh: "免费使用最新顶级模型", en: "Use the latest top-tier models for free" },
