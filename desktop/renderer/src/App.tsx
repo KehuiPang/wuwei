@@ -1923,6 +1923,8 @@ export function App() {
   function changeLang(l: Lang) {
     persistLang(l);
     setLangState(l);
+    // 同步到主进程 settings.app.lang → 刷新 WUWEI_LANG，让主进程 tt()/工具描述/系统提示默认跟随界面语言
+    window.wuwei.setAppSettings({ lang: l });
   }
   const [webLoginBusy, setWebLoginBusy] = useState(false);
   const [authBusy, setAuthBusy] = useState(false); // 失败处一键授权 Claude 进行中
@@ -2331,6 +2333,13 @@ export function App() {
     setCurProviderId(p.id);
     setShowProviderMenu(false);
   }
+
+  // 启动即把当前界面语言同步进主进程 settings.app.lang → WUWEI_LANG，
+  // 保证主进程 tt()/工具描述/系统提示默认从一开始就跟随界面语言（此后已持久化，下次启动即正确）。
+  useEffect(() => {
+    window.wuwei.setAppSettings({ lang });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const off = window.wuwei.onEvent((ch, payload: any) => {

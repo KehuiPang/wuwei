@@ -2217,10 +2217,11 @@ ipcMain.on(
 
 // 应用级开关(app.*：密钥检测/知识网络/扫描相关文档)：只并进 app 字段落盘，不重启 provider。
 // 热更：知识网络开关变了→重建系统提示 + 加/摘 brain_* 工具；文档开关→同步 brain 模块。
-ipcMain.on("settings:set-app", (_e, patch: Record<string, boolean>) => {
+ipcMain.on("settings:set-app", (_e, patch: Record<string, boolean | string>) => {
   const s = loadSettings() || ({} as Settings);
   s.app = { ...(s.app || {}), ...patch } as any;
   saveSettings(s);
+  applyEnvFromSettings(s); // 关键：app.lang 变了要刷 WUWEI_LANG，主进程 tt()/工具描述/系统提示默认才跟随界面语言
   syncBrainDocsFlag(s);
   sysPrompt = buildSysPrompt(cwd, modelLabel, s.providerId);
   for (const a of agents.values()) a.setSystem(sysPrompt);
