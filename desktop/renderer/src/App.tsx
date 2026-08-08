@@ -3982,20 +3982,26 @@ export function App() {
                               <em>≈{fmtTok(Math.round(tok.inT / tok.steps))}{lang === "en" ? " (avg)" : "（平均）"}</em>
                             </span>
                           )}
-                          <span className="tf-tok-div">
-                            <b>{lang === "en" ? "Total input" : "总输入"}</b>
-                            <em>{tok.inT.toLocaleString()}</em>
-                          </span>
-                          {tok.split && (
-                            <span className="tf-tok-sub">
-                              <b>{lang === "en" ? "· Cache hit" : "· 缓存命中"}</b>
-                              <em>{tok.hit.toLocaleString()}{lang === "en" ? " (cheap)" : "（便宜）"}</em>
-                            </span>
-                          )}
-                          {tok.split && (
-                            <span className="tf-tok-sub">
-                              <b>{lang === "en" ? "· New input" : "· 新增输入"}</b>
-                              <em>{tok.miss.toLocaleString()}{lang === "en" ? " (new · costly)" : "（新花的·贵）"}</em>
+                          {tok.split ? (
+                            // 有缓存拆分：突出「新增输入」(真花钱)，总输入/缓存命中降为淡色副行(折叠感)
+                            <>
+                              <span className="tf-tok-div" style={{ fontWeight: 600 }}>
+                                <b>{lang === "en" ? "New input" : "新增输入"}</b>
+                                <em style={{ color: "var(--accent, #C05F3C)", fontWeight: 700 }}>{tok.miss.toLocaleString()}{lang === "en" ? " (costly)" : "（花钱）"}</em>
+                              </span>
+                              <span className="tf-tok-sub" style={{ opacity: 0.55 }}>
+                                <b>{lang === "en" ? "· Total input" : "· 总输入"}</b>
+                                <em>{tok.inT.toLocaleString()}</em>
+                              </span>
+                              <span className="tf-tok-sub" style={{ opacity: 0.55 }}>
+                                <b>{lang === "en" ? "· Cache hit" : "· 缓存命中"}</b>
+                                <em>{tok.hit.toLocaleString()}{lang === "en" ? " (cheap)" : "（便宜）"}</em>
+                              </span>
+                            </>
+                          ) : (
+                            <span className="tf-tok-div">
+                              <b>{lang === "en" ? "Total input" : "总输入"}</b>
+                              <em>{tok.inT.toLocaleString()}</em>
                             </span>
                           )}
                           <span>
