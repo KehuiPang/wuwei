@@ -1892,6 +1892,7 @@ export function App() {
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
   const [checkinDone, setCheckinDone] = useState(false); // 今日是否已签到（手动签或已签后置 true）
   const [checkinBusy, setCheckinBusy] = useState(false); // 签到请求中，防重复点击
+  const [checkinPop, setCheckinPop] = useState<{ amount: number; streak?: number } | "already" | null>(null); // 居中签到弹窗
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
   const t = makeT(lang);
@@ -1939,11 +1940,13 @@ export function App() {
     try {
       const r = await window.wuwei.checkin();
       if (r?.success && (r.amount ?? 0) > 0) {
-        setCheckinToast(t("checkin.toast", "每日签到 +{n} 无为币").replace("{n}", String(r.amount)) + (r.streak && r.streak > 1 ? t("checkin.streak", " · 连续 {d} 天").replace("{d}", String(r.streak)) : ""));
-        setTimeout(() => setCheckinToast(""), 4200);
+        setCheckinPop({ amount: r.amount ?? 0, streak: r.streak }); // 居中成功弹窗
         window.wuwei.wuweiMe().then((m) => { if (m) setWuwei(m); }).catch(() => {});
+      } else if (r) {
+        setCheckinPop("already"); // 今日已签到，也给个反馈
       }
       if (r) setCheckinDone(true);
+      if (r) setTimeout(() => setCheckinPop(null), 2800); // 自动消失
     } catch {
       /* 忽略，稍后可重试 */
     } finally {
@@ -4634,30 +4637,27 @@ export function App() {
           }}
         />
       )}
-      {/* 每日签到到账：顶部居中轻量 toast，自动消失 */}
-      {checkinToast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 46,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 1400,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "9px 16px",
-            borderRadius: 999,
-            background: "var(--bg-raised)",
-            color: "var(--text)",
-            border: "1px solid var(--border)",
-            boxShadow: "0 10px 30px -8px rgba(0,0,0,.35)",
-            fontSize: 13,
-            fontWeight: 600,
-            animation: "pay-pop 0.2s ease",
-          }}
-        >
-          <CoinIcon size={15} /> {checkinToast}
+      {/* 每日签到：窗口居中小弹窗，自动消失。点任意处也可关。 */}
+      {checkinPop && (
+        <div className="checkin-pop-overlay" onClick={() => setCheckinPop(null)}>
+          <div className="checkin-pop" onClick={(e) => e.stopPropagation()}>
+            <div className="checkin-pop-ic">
+              <CheckinDoneIcon size={30} />
+            </div>
+            {checkinPop === "already" ? (
+              <div className="checkin-pop-title">{t("checkin.popAlready", "今日已签到")}</div>
+            ) : (
+              <>
+                <div className="checkin-pop-title">{t("checkin.popTitle", "签到成功")}</div>
+                <div className="checkin-pop-amt">
+                  <CoinIcon size={18} /> +{checkinPop.amount} {t("pay.credits", "无为币")}
+                </div>
+                {checkinPop.streak && checkinPop.streak > 1 && (
+                  <div className="checkin-pop-sub">{t("checkin.popStreak", "连续签到 {d} 天").replace("{d}", String(checkinPop.streak))}</div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
       {/* 脑网络功能介绍：欢迎页案例 / 非会员点灰置菜单弹出；点开通跳升级 Pro */}

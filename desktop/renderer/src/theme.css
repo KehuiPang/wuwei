@@ -473,6 +473,25 @@ body {
   color: var(--text-muted); background: transparent;
   border-color: var(--border, rgba(128,128,128,.25)); cursor: default;
 }
+/* 每日签到 · 居中小弹窗 */
+.checkin-pop-overlay {
+  position: fixed; inset: 0; z-index: 1600; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .28); animation: checkin-fade .15s ease;
+}
+.checkin-pop {
+  min-width: 210px; max-width: 300px; padding: 26px 30px 24px; border-radius: 18px; text-align: center;
+  background: var(--bg-raised); border: 1px solid var(--border);
+  box-shadow: 0 24px 60px -16px rgba(0, 0, 0, .5); animation: checkin-pop-in .28s cubic-bezier(.2, .8, .2, 1);
+}
+.checkin-pop-ic {
+  width: 52px; height: 52px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; color: #5c8a73; background: rgba(92, 138, 115, .14);
+}
+.checkin-pop-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.checkin-pop-amt { margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; font-size: 20px; font-weight: 700; color: #c0873a; }
+.checkin-pop-sub { margin-top: 8px; font-size: 12px; color: var(--text-muted); }
+@keyframes checkin-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes checkin-pop-in { from { opacity: 0; transform: scale(.9) translateY(6px); } to { opacity: 1; transform: none; } }
 /* 会员条：窄侧栏内纵向堆叠(标题+副文案在上, 动作按钮占满一行在下), 不换行不被裁 */
 .acct-memb { margin: 0 12px 11px; border-radius: 12px; overflow: hidden; position: relative; }
 .acct-memb > div:first-child { min-width: 0; }
