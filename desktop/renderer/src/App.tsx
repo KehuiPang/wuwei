@@ -4606,7 +4606,7 @@ export function App() {
                 </div>
                 <div className="u-note">
                   {account.balance.total
-                    ? t("usage.balNote", "余额实时来自 {label} 账户（每轮对话后刷新）。").replace("{label}", account.label)
+                    ? t("usage.balNote", "余额实时来自 {label} 账户（每轮对话后刷新）。").replace("{label}", account.label ?? "")
                     : t("usage.consumeNote", "消耗按 token×单价估算（每轮对话后刷新）。")}
                 </div>
               </>
