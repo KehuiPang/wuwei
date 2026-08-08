@@ -9221,24 +9221,35 @@ function SettingsModal({
                     </button>
                   </div>
                   {brainRecallOut && (
-                    <pre
-                      style={{
-                        margin: 0,
-                        maxHeight: 140,
-                        overflow: "auto",
-                        fontSize: 12,
-                        whiteSpace: "pre-wrap",
-                        opacity: 0.85,
-                        background: "rgba(127,127,127,0.08)",
-                        padding: 8,
-                        borderRadius: 6,
-                      }}
-                    >
-                      {brainRecallOut}
-                    </pre>
+                    <div style={{ position: "relative", flex: "0 0 auto" }}>
+                      <button
+                        type="button"
+                        onClick={() => setBrainRecallOut("")}
+                        title={t("set.brain.closeResult", "关闭结果")}
+                        style={{ position: "absolute", top: 4, right: 4, zIndex: 1, width: 20, height: 20, lineHeight: "18px", textAlign: "center", padding: 0, borderRadius: 4, border: "none", background: "rgba(127,127,127,0.15)", cursor: "pointer", fontSize: 13 }}
+                      >
+                        ✕
+                      </button>
+                      <pre
+                        style={{
+                          margin: 0,
+                          maxHeight: 140,
+                          overflow: "auto",
+                          fontSize: 12,
+                          whiteSpace: "pre-wrap",
+                          opacity: 0.85,
+                          background: "rgba(127,127,127,0.08)",
+                          padding: 8,
+                          paddingRight: 28,
+                          borderRadius: 6,
+                        }}
+                      >
+                        {brainRecallOut}
+                      </pre>
+                    </div>
                   )}
 
-                  <div style={{ display: "flex", gap: 12, flex: "1 1 auto", minHeight: 340 }}>
+                  <div style={{ display: "flex", gap: 12, flex: "1 1 auto", minHeight: 200 }}>
                     {/* 左：概念列表（可收起成竖条，给中间图谱腾空间） */}
                     {brainLeftOpen ? (
                     <div style={{ width: 220, flex: "0 0 220px", display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>

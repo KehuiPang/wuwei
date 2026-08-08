@@ -776,6 +776,7 @@ const DICT_EN: Record<string, string> = {
   "set.brain.detail": "Concept detail",
   "set.brain.collapseDetail": "Collapse detail",
   "set.brain.graphEmpty": "No concepts yet — click \"Extract concepts\" above, or have the model brain_learn during chat",
+  "set.brain.closeResult": "Close results",
   "set.brain.proOnly": "Brain is a members-only feature",
   "set.g.grouping": "Session grouping",
   // 设置 · MCP / 密钥（set.mcp.* set.sec.*）
