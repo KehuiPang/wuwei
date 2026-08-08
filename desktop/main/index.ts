@@ -1229,10 +1229,73 @@ let isProCached = false;
 function brainAvailable(st: ReturnType<typeof loadSettings>): boolean {
   return brainEnabled(st) && isProCached;
 }
+// 工具描述/参数说明的英文版（发给模型那份；界面显示侧另有渲染端 TOOL_DESC_EN）。
+// WUWEI_LANG=en 时把内置工具的中文描述替换为英文，让英文用户的模型上下文也全英文。
+const TOOL_DESC_EN_MODEL: Record<string, string> = {
+  read_file: "Read a text file's content with line numbers. For viewing code/files.",
+  write_file: "Write/overwrite a file (creates it and parent dirs if missing).",
+  edit_file: "Make an exact string replacement in a file. old_string must appear exactly once, or it errors.",
+  bash: "Run a shell command in the working dir (bash on macOS/Linux). Returns stdout+stderr. Default timeout 120s.",
+  glob: "Find files by glob pattern (e.g. '**/*.ts'), returns matching paths.",
+  grep: "Search file contents by regex/string, returns matching lines (file:line:content).",
+  remember: "Save a long-term memory (a concise, self-contained sentence); auto-loaded in future chats.",
+  web_search: "Search the web — returns titles/links/snippets of relevant pages.",
+  web_fetch: "Fetch a web page's main text (HTML stripped). For reading docs, articles, API pages.",
+  brain_recall: "Recall relevant concepts and relations from the local Brain (knowledge graph).",
+  brain_learn: "Record or update a high-value concept in the local Brain (same name auto-merges). For durable knowledge: what a project is, git paths, test/prod env, deploy scripts, caveats. attrs holds structured key-values.",
+  brain_link: "Create a relation between two concepts in the Brain.",
+  brain_forget: "Remove a wrong/outdated concept (and all its relations) from the Brain. Use only when sure it's wrong.",
+  brain_read_doc: "Read the full source of a document indexed in the Brain.",
+  ask_user: "[Preferred interaction] Whenever you want the user to pick/confirm among clear options, call this to pop up clickable choices instead of listing 'Option A/B' in prose. Supports single/multi-select and multiple questions.",
+  browser_open: "Open a web page URL in the built-in browser (can run JS; better than web_fetch for dynamic/interactive pages). Then use browser_read for text and browser_click to click.",
+  browser_read: "Read the visible text of the built-in browser's current page (open one first with browser_open).",
+  browser_click: "Click an element matching a CSS selector on the built-in browser's current page (buttons/links etc). Follow with browser_read to see changes.",
+};
+const TOOL_PARAM_EN_MODEL: Record<string, Record<string, string>> = {
+  read_file: { path: "File path (relative or absolute)", offset: "Start line (1-based), optional", limit: "Lines to read, default 2000" },
+  edit_file: { replace_all: "Replace all occurrences, default false" },
+  bash: { timeout_ms: "Timeout in ms, default 120000" },
+  glob: { path: "Search root directory, default working dir" },
+  grep: { path: "Directory/file to search, default working dir", glob: "Filter by file type, e.g. '*.ts' (optional)" },
+  web_search: { query: "Search query" },
+  web_fetch: { url: "Web page URL (http/https)" },
+  remember: { text: "One line to remember long-term (concise, self-contained)" },
+  brain_recall: { query: "Topic/concept to recall, e.g. 'figcheck deploy'", limit: "Max concepts to return, default 6" },
+  brain_learn: {
+    name: "Primary concept name, e.g. 'figcheck', 'deploy_view_prod.sh'",
+    type: "Type: project / server / script / caveat / command / concept…",
+    summary: "One-line summary",
+    aliases: "Aliases, optional",
+    attrs: "Structured key-value attributes, e.g. {git: '~/...', test_env: 'fig01'}",
+  },
+  brain_link: { from: "Source concept", relation: "Relation: deploy script / test env / prod server / contains / caveat / related…", to: "Target concept" },
+  brain_forget: { name: "Concept name to remove" },
+  brain_read_doc: { ref: "Document relative path or chunk id (the file value returned by brain_recall)" },
+  browser_click: { selector: "CSS selector" },
+};
+// 深度替换 inputSchema.properties[*].description（仅顶层属性；ask_user 嵌套不译，模型可从字段名推断）
+function localizeSchemaEn(name: string, schema: any): any {
+  const pmap = TOOL_PARAM_EN_MODEL[name];
+  if (!pmap || !schema?.properties || typeof schema.properties !== "object") return schema;
+  const props: any = {};
+  for (const [k, v] of Object.entries(schema.properties as Record<string, any>)) {
+    props[k] = pmap[k] ? { ...v, description: pmap[k] } : v;
+  }
+  return { ...schema, properties: props };
+}
+function localizeToolEn(t: Tool): Tool {
+  const desc = TOOL_DESC_EN_MODEL[t.name];
+  if (!desc && !TOOL_PARAM_EN_MODEL[t.name]) return t;
+  return { ...t, description: desc ?? t.description, inputSchema: localizeSchemaEn(t.name, t.inputSchema) };
+}
+
 function desktopTools(): Tool[] {
   const brainOn = brainAvailable(loadSettings());
   const base = brainOn ? ALL_TOOLS : ALL_TOOLS.filter((t) => !t.name.startsWith("brain_"));
-  return [...base, askUserTool, ...BROWSER_TOOLS, ...mcpTools()].map(wrapSecret);
+  const en = process.env.WUWEI_LANG === "en";
+  let tools = [...base, askUserTool, ...BROWSER_TOOLS, ...mcpTools()];
+  if (en) tools = tools.map(localizeToolEn); // 英文用户：模型侧工具描述也走英文
+  return tools.map(wrapSecret);
 }
 function desktopToolMap(): Map<string, Tool> {
   return new Map(desktopTools().map((t) => [t.name, t]));
