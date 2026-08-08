@@ -155,28 +155,28 @@ function messagesToItems(messages: any[]): Item[] {
 
 // 把后端/SDK 的原始报错（多为英文）归纳成一句中文提示，避免把整段英文甩给用户。
 // 返回值以「出错：」开头，鉴权类务必含 isAuthError 能识别的关键词（未授权/凭证），以便触发一键授权条。
-function friendlyError(raw: string): string {
+function friendlyError(raw: string, t: T): string {
   const r = raw || "";
-  // 无为托管网关的业务错误 → 友好中文（优先，避免被下方通用 401/429 规则吃掉）
-  if (/insufficient_balance/i.test(r)) return "无为币余额不足：请点账号头像「充值」后，再使用无为托管模型。";
-  if (/daily_cap_reached/i.test(r)) return "今日无为托管消耗已达上限：明日自动恢复，或联系客服提额。";
-  if (/gateway_not_configured/i.test(r)) return "无为托管暂不可用（服务维护中）：请稍后再试，或切换到其它模型。";
-  if (/unknown_hosted_model/i.test(r)) return "该无为托管模型暂不可用，请换一个模型。";
-  if (/upstream_error/i.test(r)) return "模型服务商暂时不可用：请稍后重试。";
+  // 无为托管网关的业务错误 → 友好文案（优先，避免被下方通用 401/429 规则吃掉）
+  if (/insufficient_balance/i.test(r)) return t("err.insufficientBalance", "无为币余额不足：请点账号头像「充值」后，再使用无为托管模型。");
+  if (/daily_cap_reached/i.test(r)) return t("err.dailyCap", "今日无为托管消耗已达上限：明日自动恢复，或联系客服提额。");
+  if (/gateway_not_configured/i.test(r)) return t("err.gatewayNotConfigured", "无为托管暂不可用（服务维护中）：请稍后再试，或切换到其它模型。");
+  if (/unknown_hosted_model/i.test(r)) return t("err.unknownModel", "该无为托管模型暂不可用，请换一个模型。");
+  if (/upstream_error/i.test(r)) return t("err.upstream", "模型服务商暂时不可用：请稍后重试。");
   if (/gateway_error[\s\S]*(invalid_token|no_token)/i.test(r))
-    return "无为账号登录已过期：请重新登录后再用托管模型。";
+    return t("err.tokenExpired", "无为账号登录已过期：请重新登录后再用托管模型。");
   if (/authentication method|apiKey or authToken|x-api-key|unauthorized|\b401\b|invalid.*key|api key/i.test(r))
-    return "出错：当前模型未授权或缺少凭证（API Key / 订阅授权），请先完成授权。";
+    return t("err.auth", "出错：当前模型未授权或缺少凭证（API Key / 订阅授权），请先完成授权。");
   if (/rate.?limit|\b429\b|quota|exceed|too many/i.test(r))
-    return "出错：请求过于频繁或额度已用尽（触发限流），请稍后再试。";
+    return t("err.rateLimit", "出错：请求过于频繁或额度已用尽（触发限流），请稍后再试。");
   if (/timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|network|fetch failed|socket hang/i.test(r))
-    return "出错：网络连接失败，请检查网络 / 代理后重试。";
+    return t("err.network", "出错：网络连接失败，请检查网络 / 代理后重试。");
   if (/\b400\b|invalid_request|bad request|context length|too long|max.*token/i.test(r))
-    return "出错：请求有误（可能是模型名不对或上下文超长）。";
+    return t("err.badRequest", "出错：请求有误（可能是模型名不对或上下文超长）。");
   if (/\b5\d\d\b|server error|internal error|overloaded/i.test(r))
-    return "出错：服务端错误或繁忙，请稍后重试。";
-  // 未知错误：只取首行 + 截断，加中文前缀，不整段英文轰炸
-  return "出错：" + (r.split("\n")[0] || r).slice(0, 120);
+    return t("err.server", "出错：服务端错误或繁忙，请稍后重试。");
+  // 未知错误：只取首行 + 截断，加前缀，不整段英文轰炸
+  return t("err.prefix", "出错：") + (r.split("\n")[0] || r).slice(0, 120);
 }
 
 function isCoinShortage(raw: string): boolean {
@@ -2467,7 +2467,7 @@ export function App() {
           if (payload.sid && payload.sid !== currentIdRef.current) break;
           thinkStartRef.current = null;
           const rawMsg = String(payload.message ?? payload);
-          const friendly = friendlyError(rawMsg);
+          const friendly = friendlyError(rawMsg, t);
           if (isCoinShortage(rawMsg) || isCoinShortage(friendly)) {
             setShowAcctMenu(false);
             void refreshWuweiForShortage(friendly);
