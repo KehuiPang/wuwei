@@ -269,7 +269,8 @@ const rememberTool: Tool = {
         /* 首次 */
       }
       const line = "- " + text;
-      const next = cur.trim() ? cur.trimEnd() + "\n" + line + "\n" : "# 记忆\n\n" + line + "\n";
+      const seedHeader = process.env.WUWEI_LANG === "en" ? "# Memory" : "# 记忆";
+      const next = cur.trim() ? cur.trimEnd() + "\n" + line + "\n" : seedHeader + "\n\n" + line + "\n";
       await fs.writeFile(MEMORY_FILE, next, "utf8");
       return { content: "已记住：" + text };
     } catch (e: any) {

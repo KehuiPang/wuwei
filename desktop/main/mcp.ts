@@ -56,7 +56,9 @@ class McpClient {
       setTimeout(() => {
         if (this.pending.has(id)) {
           this.pending.delete(id);
-          reject(new Error("MCP 请求超时: " + method + "（首次 npx/uvx 会下载依赖，可能较慢；或命令/参数不对）"));
+          reject(new Error(process.env.WUWEI_LANG === "en"
+            ? "MCP request timed out: " + method + " (the first npx/uvx run downloads deps and can be slow; or the command/args are wrong)"
+            : "MCP 请求超时: " + method + "（首次 npx/uvx 会下载依赖，可能较慢；或命令/参数不对）"));
         }
       }, 60000); // 首次 npx 下载包可能慢，给足 60s
     });
@@ -95,16 +97,23 @@ class McpClient {
           p.reject(new Error(this.error || msg));
         }
       };
+      const enMsg = process.env.WUWEI_LANG === "en";
       this.proc.on("error", (e: any) => {
         failAll(
           e?.code === "ENOENT"
-            ? `命令不存在：${this.cfg.command}（需先安装它，如 uvx 要装 uv）`
-            : e?.message || "spawn 失败",
+            ? enMsg
+              ? `Command not found: ${this.cfg.command} (install it first, e.g. uvx needs uv)`
+              : `命令不存在：${this.cfg.command}（需先安装它，如 uvx 要装 uv）`
+            : e?.message || (enMsg ? "spawn failed" : "spawn 失败"),
         );
       });
       // 进程提前退出(如 npx 拉不到包/命令报错)→立即失败，不再干等超时
       this.proc.on("exit", (code) => {
-        failAll(`进程已退出(code ${code})：命令或包名可能无效、或依赖缺失`);
+        failAll(
+          enMsg
+            ? `Process exited (code ${code}): the command or package name may be invalid, or a dependency is missing`
+            : `进程已退出(code ${code})：命令或包名可能无效、或依赖缺失`,
+        );
       });
       this.proc.stdout!.setEncoding("utf8");
       this.proc.stdout!.on("data", (d: string) => {
@@ -211,7 +220,9 @@ export async function connectMcp(onChange?: () => void): Promise<void> {
       // 含 <占位> 的配置(如 <目录路径>/<token>)先别连，避免用无效参数启动服务器→30s 超时假失败
       if (JSON.stringify(c.cfg).includes("<")) {
         c.status = "needs-config";
-        c.error = "配置里还有 <占位> 待填写（点「高级：编辑 JSON」替换后再保存）";
+        c.error = process.env.WUWEI_LANG === "en"
+          ? "Config still has <placeholders> to fill in (click “Advanced: edit JSON”, replace them, then save)"
+          : "配置里还有 <占位> 待填写（点「高级：编辑 JSON」替换后再保存）";
         return Promise.resolve();
       }
       return c.connect().then(() => onChange?.());

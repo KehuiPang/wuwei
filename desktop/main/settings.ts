@@ -224,6 +224,8 @@ export function applyEnvFromSettings(s: Settings | null) {
   ]) {
     delete process.env[k];
   }
+  // 界面语言 → env，供 CLI 侧（mcp 状态、remember 的默认记忆头 # 记忆/# Memory）跟随
+  process.env.WUWEI_LANG = s?.app?.lang === "en" ? "en" : "zh";
   if (!s) return; // 无设置：走 loadConfig 自动推断（有 ~/.codex 即 codex）
   if (s.model) process.env.MINICC_MODEL = s.model;
   // 当前生效模型的能力开关：优先按模型(modelCaps[model])，回退到旧的平台级(迁移兼容)
