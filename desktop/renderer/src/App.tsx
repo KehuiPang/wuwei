@@ -5863,20 +5863,21 @@ function baseName(p: string): string {
 // 单段命令→动作名
 function segAction(seg: string): string {
   const c = seg.toLowerCase().trim();
-  if (/\b(test|pytest|jest|vitest|go test|npm (run )?test)\b/.test(c)) return "测试";
+  const en = getLang() === "en";
+  if (/\b(test|pytest|jest|vitest|go test|npm (run )?test)\b/.test(c)) return en ? "Test" : "测试";
   if (/(electron-vite build|vite build|tsc\b|\b(npm|yarn|pnpm) (run )?build\b|cargo build|go build|\bmake\b)/.test(c))
-    return "构建";
-  if (/(electron-builder|--dir|\bpkg\b|package)/.test(c)) return "打包";
+    return en ? "Build" : "构建";
+  if (/(electron-builder|--dir|\bpkg\b|package)/.test(c)) return en ? "Package" : "打包";
   if (/\b(deploy|scp|rsync|publish)\b|docker (push|cp)|rm -rf .*app|cp -R .*\.app|xattr/.test(c))
-    return "部署";
-  if (/\b(install|pip install|npm i\b|yarn add|apt|brew install)\b/.test(c)) return "安装依赖";
-  if (/\bgit\b/.test(c)) return "Git 操作";
-  if (/\b(grep|rg|ag|ack)\b/.test(c)) return "搜索内容";
-  if (/\b(ls|find|tree|du|stat|fd)\b/.test(c)) return "浏览目录";
-  if (/\b(cat|head|tail|less|more|sed|awk)\b/.test(c)) return "查看文件";
-  if (/\b(mkdir|touch|cp|mv|rm|chmod|ln)\b/.test(c)) return "文件操作";
-  if (/\b(node|python3?|electron|osascript|open|kill|pkill)\b|(^|\s)\.\//.test(c)) return "运行";
-  return "执行命令";
+    return en ? "Deploy" : "部署";
+  if (/\b(install|pip install|npm i\b|yarn add|apt|brew install)\b/.test(c)) return en ? "Install deps" : "安装依赖";
+  if (/\bgit\b/.test(c)) return en ? "Git" : "Git 操作";
+  if (/\b(grep|rg|ag|ack)\b/.test(c)) return en ? "Search" : "搜索内容";
+  if (/\b(ls|find|tree|du|stat|fd)\b/.test(c)) return en ? "List dir" : "浏览目录";
+  if (/\b(cat|head|tail|less|more|sed|awk)\b/.test(c)) return en ? "View file" : "查看文件";
+  if (/\b(mkdir|touch|cp|mv|rm|chmod|ln)\b/.test(c)) return en ? "File op" : "文件操作";
+  if (/\b(node|python3?|electron|osascript|open|kill|pkill)\b|(^|\s)\.\//.test(c)) return en ? "Run" : "运行";
+  return en ? "Run command" : "执行命令";
 }
 // 把整条命令按 && / ; / | / 换行 拆开，逐段识别动作，拼成"构建 · 部署 · 运行"这种摘要
 function bashIntent(cmd: string): { label: string; category: string } {
@@ -5889,7 +5890,7 @@ function bashIntent(cmd: string): { label: string; category: string } {
     const a = segAction(s);
     if (!acts.includes(a)) acts.push(a);
   }
-  const uniq = acts.length ? acts : ["执行命令"];
+  const uniq = acts.length ? acts : [getLang() === "en" ? "Run command" : "执行命令"];
   return { label: uniq.slice(0, 4).join(" · "), category: uniq[0] };
 }
 
@@ -5902,6 +5903,7 @@ function toolMeta(item: Extract<Item, { type: "tool" }>): {
   del?: number;
 } {
   const inp = item.input as any;
+  const en = getLang() === "en";
   switch (item.name) {
     case "bash": {
       const bi = bashIntent(String(inp.command || ""));
@@ -5910,40 +5912,40 @@ function toolMeta(item: Extract<Item, { type: "tool" }>): {
     case "read_file":
       return {
         icon: "◎",
-        label: "读取 " + baseName(String(inp.path || "")),
-        category: "读取文件",
+        label: (en ? "Read " : "读取 ") + baseName(String(inp.path || "")),
+        category: en ? "Read file" : "读取文件",
       };
     case "write_file":
       return {
         icon: "✎",
-        label: "新建 " + baseName(String(inp.path || "")),
-        category: "新建文件",
+        label: (en ? "Create " : "新建 ") + baseName(String(inp.path || "")),
+        category: en ? "Create file" : "新建文件",
         add: String(inp.content ?? "").length, // 字符数
       };
     case "edit_file":
       return {
         icon: "✎",
-        label: "编辑 " + baseName(String(inp.path || "")),
-        category: "编辑文件",
+        label: (en ? "Edit " : "编辑 ") + baseName(String(inp.path || "")),
+        category: en ? "Edit file" : "编辑文件",
         add: String(inp.new_string ?? "").length, // 新增字符数
         del: String(inp.old_string ?? "").length, // 删除字符数
       };
     case "glob":
-      return { icon: "⌕", label: "查找文件", category: "搜索内容" };
+      return { icon: "⌕", label: en ? "Find files" : "查找文件", category: en ? "Search" : "搜索内容" };
     case "grep":
-      return { icon: "⌕", label: "搜索内容", category: "搜索内容" };
+      return { icon: "⌕", label: en ? "Search content" : "搜索内容", category: en ? "Search" : "搜索内容" };
     case "web_search":
-      return { icon: "🌐", label: "搜索网络：" + String(inp.query || ""), category: "联网搜索" };
+      return { icon: "🌐", label: (en ? "Web search: " : "搜索网络：") + String(inp.query || ""), category: en ? "Web search" : "联网搜索" };
     case "web_fetch":
-      return { icon: "🌐", label: "抓取网页 " + String(inp.url || ""), category: "读取网页" };
+      return { icon: "🌐", label: (en ? "Fetch page " : "抓取网页 ") + String(inp.url || ""), category: en ? "Read page" : "读取网页" };
     case "browser_open":
-      return { icon: "🖥", label: "浏览器打开 " + String(inp.url || ""), category: "浏览器" };
+      return { icon: "🖥", label: (en ? "Browser open " : "浏览器打开 ") + String(inp.url || ""), category: en ? "Browser" : "浏览器" };
     case "browser_read":
-      return { icon: "🖥", label: "读取当前页面", category: "浏览器" };
+      return { icon: "🖥", label: en ? "Read current page" : "读取当前页面", category: en ? "Browser" : "浏览器" };
     case "browser_click":
-      return { icon: "🖥", label: "点击 " + String(inp.selector || ""), category: "浏览器" };
+      return { icon: "🖥", label: (en ? "Click " : "点击 ") + String(inp.selector || ""), category: en ? "Browser" : "浏览器" };
     case "remember":
-      return { icon: "✦", label: "记住：" + String(inp.text || ""), category: "写入记忆" };
+      return { icon: "✦", label: (en ? "Remember: " : "记住：") + String(inp.text || ""), category: en ? "Save memory" : "写入记忆" };
     default:
       return { icon: "•", label: item.name, category: item.name };
   }
@@ -5952,29 +5954,30 @@ function toolMeta(item: Extract<Item, { type: "tool" }>): {
 // 工具输入预览：展开后显示"具体在执行啥"(运行中也能看)
 function toolInputPreview(item: Extract<Item, { type: "tool" }>): string {
   const inp = (item.input || {}) as any;
+  const en = getLang() === "en";
   switch (item.name) {
     case "bash":
       return "$ " + String(inp.command || "");
     case "read_file":
-      return "读取 " + String(inp.path || "");
+      return (en ? "Read " : "读取 ") + String(inp.path || "");
     case "write_file":
-      return "写入 " + String(inp.path || "");
+      return (en ? "Write " : "写入 ") + String(inp.path || "");
     case "edit_file":
-      return "编辑 " + String(inp.path || "");
+      return (en ? "Edit " : "编辑 ") + String(inp.path || "");
     case "grep":
-      return `搜索 “${inp.pattern ?? ""}”` + (inp.path ? `  ·  路径 ${inp.path}` : "");
+      return (en ? `Search "${inp.pattern ?? ""}"` : `搜索 “${inp.pattern ?? ""}”`) + (inp.path ? (en ? `  ·  path ${inp.path}` : `  ·  路径 ${inp.path}`) : "");
     case "glob":
-      return `匹配 ${inp.pattern ?? inp.glob ?? ""}` + (inp.path ? `  ·  路径 ${inp.path}` : "");
+      return (en ? `Match ${inp.pattern ?? inp.glob ?? ""}` : `匹配 ${inp.pattern ?? inp.glob ?? ""}`) + (inp.path ? (en ? `  ·  path ${inp.path}` : `  ·  路径 ${inp.path}`) : "");
     case "web_search":
-      return `搜索网络：${inp.query ?? ""}`;
+      return (en ? `Web search: ${inp.query ?? ""}` : `搜索网络：${inp.query ?? ""}`);
     case "web_fetch":
-      return `抓取 ${inp.url ?? ""}`;
+      return (en ? `Fetch ${inp.url ?? ""}` : `抓取 ${inp.url ?? ""}`);
     case "browser_open":
-      return `浏览器打开 ${inp.url ?? ""}`;
+      return (en ? `Browser open ${inp.url ?? ""}` : `浏览器打开 ${inp.url ?? ""}`);
     case "browser_click":
-      return `点击 ${inp.selector ?? ""}`;
+      return (en ? `Click ${inp.selector ?? ""}` : `点击 ${inp.selector ?? ""}`);
     case "remember":
-      return `记住：${inp.text ?? ""}`;
+      return (en ? `Remember: ${inp.text ?? ""}` : `记住：${inp.text ?? ""}`);
     default: {
       const s = JSON.stringify(inp);
       return s === "{}" ? "" : s;
@@ -5985,6 +5988,7 @@ function toolInputPreview(item: Extract<Item, { type: "tool" }>): string {
 const ToolView = React.memo(function ToolView({ item }: { item: Extract<Item, { type: "tool" }> }) {
   const [open, setOpen] = useState(false); // 默认折叠
   const m = toolMeta(item);
+  const en = getLang() === "en";
   const running = item.status === "running";
   const diff = renderDiff(item);
   const cmd = item.name === "bash" ? String((item.input as any).command || "") : "";
@@ -5998,16 +6002,16 @@ const ToolView = React.memo(function ToolView({ item }: { item: Extract<Item, { 
         {(m.add != null || m.del != null) && (
           <span
             className="tdelta"
-            title={`新增 ${m.add ?? 0} 字符${m.del != null ? ` · 删除 ${m.del} 字符` : ""}`}
+            title={en ? `+${m.add ?? 0} chars${m.del != null ? ` · -${m.del} chars` : ""}` : `新增 ${m.add ?? 0} 字符${m.del != null ? ` · 删除 ${m.del} 字符` : ""}`}
           >
             {m.add != null && <span className="add">+{m.add}</span>}
             {m.del != null && <span className="del">-{m.del}</span>}
-            <span className="tunit"> 字符</span>
+            <span className="tunit">{en ? " chars" : " 字符"}</span>
           </span>
         )}
         <span className="tspacer" />
         <span className={"tstat " + (running ? "run" : item.isError ? "err" : "ok")}>
-          {running ? "运行中" : item.isError ? "失败" : "完成"}
+          {running ? (en ? "Running" : "运行中") : item.isError ? (en ? "Failed" : "失败") : (en ? "Done" : "完成")}
         </span>
         {hasDetail && <span className="tcaret">{open ? "▾" : "▸"}</span>}
       </div>
@@ -6034,12 +6038,13 @@ function ToolGroup({ tools }: { tools: ToolItem[] }) {
     const c = toolMeta(t).category;
     counts[c] = (counts[c] || 0) + 1;
   }
-  const mainCat = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "操作";
+  const en = getLang() === "en";
+  const mainCat = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || (en ? "Actions" : "操作");
   return (
     <div className="tool">
       <div className="trow" onClick={() => setOpen((v) => !v)}>
         <span className="tlabel">
-          {mainCat} · {tools.length} 步{running ? `（${done}/${tools.length}）` : ""}
+          {mainCat} · {tools.length}{en ? " steps" : " 步"}{running ? `（${done}/${tools.length}）` : ""}
         </span>
         <span className="tspacer" />
         <span className="tcaret">{open ? "▾" : "▸"}</span>
