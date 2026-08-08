@@ -7510,25 +7510,27 @@ function SettingsModal({
       if (d?.building) {
         setDocBuilding(true);
         setDocProg(
-          d.phase === "scan" ? `扫描到 ${d.files} 个文档，开始向量化…` : `向量化 ${d.done}/${d.total} 块…`,
+          d.phase === "scan"
+            ? (lang === "en" ? `Found ${d.files} docs, vectorizing…` : `扫描到 ${d.files} 个文档，开始向量化…`)
+            : (lang === "en" ? `Vectorizing ${d.done}/${d.total} chunks…` : `向量化 ${d.done}/${d.total} 块…`),
         );
       }
     });
     window.wuwei.brainEmbedReady().then((r) => {
-      if (r) setBrainWarmMsg("✓ 向量模型就绪，语义检索已启用。");
+      if (r) setBrainWarmMsg(lang === "en" ? "✓ Embedding model ready — semantic search enabled." : "✓ 向量模型就绪，语义检索已启用。");
     });
     window.wuwei.brainConceptProgress().then((c) => setConExtract(c));
     const off = window.wuwei.onEvent((ch, p) => {
       if (ch === "evt:brain-docs") {
         const d = p as { building?: boolean; phase: string; files?: number; total?: number; done?: number };
-        if (d.phase === "scan") setDocProg(`扫描到 ${d.files} 个文档，开始向量化…`);
-        else if (d.phase === "embed") setDocProg(`向量化 ${d.done}/${d.total} 块…`);
+        if (d.phase === "scan") setDocProg(lang === "en" ? `Found ${d.files} docs, vectorizing…` : `扫描到 ${d.files} 个文档，开始向量化…`);
+        else if (d.phase === "embed") setDocProg(lang === "en" ? `Vectorizing ${d.done}/${d.total} chunks…` : `向量化 ${d.done}/${d.total} 块…`);
         else if (d.phase === "done") {
-          setDocProg(`✓ 完成，共 ${d.total} 块`);
+          setDocProg(lang === "en" ? `✓ Done, ${d.total} chunks total` : `✓ 完成，共 ${d.total} 块`);
           setDocBuilding(false);
           window.wuwei.brainDocStats().then(setDocStat);
         } else if (d.phase === "error") {
-          setDocProg("✗ 构建失败");
+          setDocProg(lang === "en" ? "✗ Build failed" : "✗ 构建失败");
           setDocBuilding(false);
         }
       } else if (ch === "evt:brain-concepts") {
@@ -7559,7 +7561,7 @@ function SettingsModal({
     setUnlockErr("");
     const r = await window.wuwei.secretsReveal(unlockPw);
     if (!r.ok) {
-      setUnlockErr(r.error || "验证失败");
+      setUnlockErr(r.error || (lang === "en" ? "Verification failed" : "验证失败"));
       return;
     }
     const map: Record<string, string> = {};
@@ -7589,7 +7591,7 @@ function SettingsModal({
       note: secNew.note.trim() || undefined,
     });
     if (!r.ok) {
-      setSecErr(r.error || "添加失败");
+      setSecErr(r.error || (lang === "en" ? "Add failed" : "添加失败"));
       return;
     }
     setSecNew({ name: "", envVar: "", value: "", note: "" });
@@ -7601,7 +7603,7 @@ function SettingsModal({
       setSecImportText("");
       setSecImportOpen(false);
       reloadSecrets();
-    } else setSecErr(r.error || "导入失败");
+    } else setSecErr(r.error || (lang === "en" ? "Import failed" : "导入失败"));
   }
   // 内置平台 + 中转站(合并成一份预设列表；下拉与查找都用它)
   const allPresets = applyProviderEdits(
@@ -7948,25 +7950,25 @@ function SettingsModal({
     const key = (candidate || "").trim();
     if (!key || sKeyTestingRef.current) return false;
     sKeyTestingRef.current = true;
-    if (!silent) setSKeyMsg("检测中…");
+    if (!silent) setSKeyMsg(lang === "en" ? "Checking…" : "检测中…");
     try {
       const res = await window.wuwei.testKey(key, keyOverride());
       if (res.ok) {
         setApiKey(key);
         persist({ apiKeyOverride: key, close: false }); // 保存但不关，留在弹窗看结果
         setSKeyWaiting(false);
-        setSKeyMsg("✓ API Key 已验证通过并设置完成，可直接使用（可关闭本窗）。");
+        setSKeyMsg(lang === "en" ? "✓ API Key verified and set — ready to use (you can close this window)." : "✓ API Key 已验证通过并设置完成，可直接使用（可关闭本窗）。");
         return true;
       }
       if (keyRejected(res.reason)) {
-        if (!silent) setSKeyMsg("✗ Key 无效（鉴权失败）：" + res.reason);
+        if (!silent) setSKeyMsg((lang === "en" ? "✗ Key invalid (auth failed): " : "✗ Key 无效（鉴权失败）：") + res.reason);
         return false;
       }
       // Key 有效但请求未通过(余额/额度/账单等)：照样保存并提醒
       setApiKey(key);
       persist({ apiKeyOverride: key, close: false });
       setSKeyWaiting(false);
-      setSKeyMsg("⚠ Key 已保存（本身有效），但请求未通过，多为账户余额/额度问题：" + res.reason);
+      setSKeyMsg((lang === "en" ? "⚠ Key saved (valid), but the request didn't go through — usually an account balance/quota issue: " : "⚠ Key 已保存（本身有效），但请求未通过，多为账户余额/额度问题：") + res.reason);
       return true;
     } finally {
       sKeyTestingRef.current = false;
@@ -7977,7 +7979,7 @@ function SettingsModal({
   function startGetKey() {
     if (preset.keyUrl) window.wuwei.openExternal(preset.keyUrl);
     sLastClipRef.current = "";
-    setSKeyMsg("已打开获取页面：复制 API Key 后会自动填入并验证…");
+    setSKeyMsg(lang === "en" ? "Opened the sign-up page: copy your API Key and it'll be auto-filled and verified…" : "已打开获取页面：复制 API Key 后会自动填入并验证…");
     setSKeyWaiting(true);
   }
 
@@ -9851,7 +9853,7 @@ function SettingsModal({
                           setMcpConfig(e.target.value);
                           mcpTouchedRef.current = true;
                         }}
-                        placeholder='{ "mcpServers": { "名称": { "command": "npx", "args": ["-y", "..."] } } }'
+                        placeholder={lang === "en" ? '{ "mcpServers": { "name": { "command": "npx", "args": ["-y", "..."] } } }' : '{ "mcpServers": { "名称": { "command": "npx", "args": ["-y", "..."] } } }'}
                       />
                       <button
                         type="button"
