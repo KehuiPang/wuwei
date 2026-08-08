@@ -564,57 +564,76 @@ function ContactSupportModal({ onClose, onLeaveMessage, t }: { onClose: () => vo
           <h2>{t("pay.support.title", "联系客服")}</h2>
         </div>
         <div style={{ padding: "0 30px 28px" }}>
-        <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 14px" }}>
-          {t("pay.support.hint", "遇到问题？扫码或搜索微信号，添加客服「大成」")}
-        </p>
-        <div
-          style={{
-            width: 184,
-            height: 184,
-            margin: "0 auto 12px",
-            borderRadius: 14,
-            background: "#fff",
-            border: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            overflow: "hidden",
-          }}
-        >
-          {WECHAT_CS_QR ? (
-            <img src={WECHAT_CS_QR} alt={t("pay.support.qrAlt", "客服微信二维码")} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-          ) : (
-            <span style={{ fontSize: 12, color: "#8A93A0" }}>{t("pay.support.qrAlt", "客服微信二维码")}</span>
-          )}
-        </div>
-        <div
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 10,
-            background: "var(--bg-soft)",
-            borderRadius: 10,
-            padding: "8px 12px",
-            marginBottom: 14,
-          }}
-        >
-          <span style={{ fontSize: 13, color: "var(--text)" }}>
-            {t("pay.support.wechatId", "微信号")} <b style={{ letterSpacing: 0.5 }}>{WECHAT_CS_ID}</b>
-          </span>
-          <button
-            onClick={copyId}
-            style={{ border: "none", background: "var(--spark)", color: "#fff", fontSize: 12, borderRadius: 7, padding: "4px 10px", cursor: "pointer" }}
-          >
-            {copied ? t("pay.support.copied", "已复制") : t("pay.support.copy", "复制")}
-          </button>
-        </div>
-        <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
-          {t("pay.support.cantAddPre", "加不上微信？")}
-          <span onClick={onLeaveMessage} style={{ color: "var(--spark)", cursor: "pointer", fontWeight: 600 }}>
-            {t("pay.support.leaveLink", "直接留言")}
-          </span>
-          {t("pay.support.cantAddPost", "，客服会尽快回复你。")}
-        </p>
+        {getLang() === "en" ? (
+          // 英文版：海外不用微信，只给留言反馈入口
+          <>
+            <p style={{ fontSize: 13, color: "var(--text-dim)", margin: "0 0 18px", lineHeight: 1.6 }}>
+              Having trouble? Leave us a message and we&apos;ll reply as soon as we can.
+            </p>
+            <button
+              onClick={onLeaveMessage}
+              className="allow"
+              style={{ border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, borderRadius: 10, padding: "10px 22px", cursor: "pointer" }}
+            >
+              Leave a message
+            </button>
+          </>
+        ) : (
+          // 中文版：客服微信二维码 + 微信号 + 加不上走留言
+          <>
+            <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 14px" }}>
+              {t("pay.support.hint", "遇到问题？扫码或搜索微信号，添加客服「大成」")}
+            </p>
+            <div
+              style={{
+                width: 184,
+                height: 184,
+                margin: "0 auto 12px",
+                borderRadius: 14,
+                background: "#fff",
+                border: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
+              }}
+            >
+              {WECHAT_CS_QR ? (
+                <img src={WECHAT_CS_QR} alt={t("pay.support.qrAlt", "客服微信二维码")} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+              ) : (
+                <span style={{ fontSize: 12, color: "#8A93A0" }}>{t("pay.support.qrAlt", "客服微信二维码")}</span>
+              )}
+            </div>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                background: "var(--bg-soft)",
+                borderRadius: 10,
+                padding: "8px 12px",
+                marginBottom: 14,
+              }}
+            >
+              <span style={{ fontSize: 13, color: "var(--text)" }}>
+                {t("pay.support.wechatId", "微信号")} <b style={{ letterSpacing: 0.5 }}>{WECHAT_CS_ID}</b>
+              </span>
+              <button
+                onClick={copyId}
+                style={{ border: "none", background: "var(--spark)", color: "#fff", fontSize: 12, borderRadius: 7, padding: "4px 10px", cursor: "pointer" }}
+              >
+                {copied ? t("pay.support.copied", "已复制") : t("pay.support.copy", "复制")}
+              </button>
+            </div>
+            <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
+              {t("pay.support.cantAddPre", "加不上微信？")}
+              <span onClick={onLeaveMessage} style={{ color: "var(--spark)", cursor: "pointer", fontWeight: 600 }}>
+                {t("pay.support.leaveLink", "直接留言")}
+              </span>
+              {t("pay.support.cantAddPost", "，客服会尽快回复你。")}
+            </p>
+          </>
+        )}
         </div>
       </div>
     </div>
