@@ -8793,7 +8793,7 @@ function SettingsModal({
                     setShowAddStation(true);
                   }}
                 >
-                  ＋ 添加供应商 / 中转站
+                  {t("set.st.addBtn", "＋ 添加供应商 / 中转站")}
                 </button>
               </div>
               <div className="prov-list">
@@ -8835,19 +8835,19 @@ function SettingsModal({
                       <button
                         type="button"
                         className="prov-mini"
-                        title={p.custom ? "编辑名称 / 端点 / 类型" : "重命名该平台"}
+                        title={p.custom ? t("set.st.editBtnCustom", "编辑名称 / 端点 / 类型") : t("set.st.renameBtn", "重命名该平台")}
                         onClick={() => openEditStation(p.id)}
                       >
-                        编辑
+                        {t("set.st.editShort", "编辑")}
                       </button>
                       <button
                         type="button"
                         className="prov-mini del"
-                        title={p.custom ? "删除该自定义供应商" : "删除该平台(可一键恢复默认)"}
+                        title={p.custom ? t("set.st.delCustom", "删除该自定义供应商") : t("set.st.delBuiltin", "删除该平台(可一键恢复默认)")}
                         disabled={orderedPresets.length <= 1}
                         onClick={() => deleteProvider(p.id)}
                       >
-                        删除
+                        {t("set.st.delShort", "删除")}
                       </button>
                       <button
                         type="button"
@@ -10192,69 +10192,69 @@ function SettingsModal({
     {showAddStation && (
       <div className="perm-overlay add-st-overlay" onClick={() => { setShowAddStation(false); setEditStationId(null); setEditIsBuiltin(false); }}>
         <div className="add-st-dialog" onClick={(e) => e.stopPropagation()}>
-          <h3>{editIsBuiltin ? "重命名平台" : editStationId ? "编辑" : "添加"}{editIsBuiltin ? "" : "供应商 / 中转站"}</h3>
+          <h3>{editIsBuiltin ? t("set.st.renameTitle", "重命名平台") : editStationId ? t("set.st.editTitle", "编辑供应商 / 中转站") : t("set.st.addTitle", "添加供应商 / 中转站")}</h3>
 
           {!editIsBuiltin && (
             <div className="st-field">
-              <span className="st-label">类型</span>
+              <span className="st-label">{t("set.st.type", "类型")}</span>
               <div className="theme-pick">
                 <button
                   type="button"
                   className={"theme-opt" + (!newStRelay ? " on" : "")}
                   onClick={() => setNewStRelay(false)}
                 >
-                  自建供应商
+                  {t("set.st.selfhost", "自建供应商")}
                 </button>
                 <button
                   type="button"
                   className={"theme-opt" + (newStRelay ? " on" : "")}
                   onClick={() => setNewStRelay(true)}
                 >
-                  中转站
+                  {t("set.st.relayType", "中转站")}
                 </button>
               </div>
               <p className="st-hint">
                 {newStRelay
-                  ? "中转站：一个 key 直连多平台（OpenAI 兼容）。名字会带「（中转）」后缀。"
-                  : "自建供应商：你自己的 OpenAI 兼容端点，如公司 vLLM / Ollama / llama-server。"}
+                  ? t("set.st.relayHint", "中转站：一个 key 直连多平台（OpenAI 兼容）。名字会带「（中转）」后缀。")
+                  : t("set.st.selfhostHint", "自建供应商：你自己的 OpenAI 兼容端点，如公司 vLLM / Ollama / llama-server。")}
               </p>
             </div>
           )}
 
           <div className="st-field">
-            <span className="st-label">名称</span>
+            <span className="st-label">{t("set.st.name", "名称")}</span>
             <input
               className="st-input"
               autoFocus
               value={newStName}
               onChange={(e) => setNewStName(e.target.value)}
-              placeholder={editIsBuiltin ? "显示名" : newStRelay ? "如：我的便宜中转" : "如：公司 Qwen"}
+              placeholder={editIsBuiltin ? t("set.st.namePhBuiltin", "显示名") : newStRelay ? t("set.st.namePhRelay", "如：我的便宜中转") : t("set.st.namePhSelf", "如：公司 Qwen")}
             />
           </div>
 
           {!editIsBuiltin && (
             <div className="st-field">
-              <span className="st-label">Base URL（OpenAI 兼容端点）</span>
+              <span className="st-label">{t("set.st.baseUrlLabel", "Base URL（OpenAI 兼容端点）")}</span>
               <input
                 className="st-input"
                 value={newStUrl}
                 onChange={(e) => setNewStUrl(e.target.value)}
-                placeholder="如 http://192.168.2.195:8000/v1"
+                placeholder={t("set.st.baseUrlPh", "如 http://192.168.2.195:8000/v1")}
               />
             </div>
           )}
 
           <p className="st-note">
             {editIsBuiltin
-              ? "只改这个平台的显示名（端点/密钥/模型都不变；改回原名即恢复默认）。"
+              ? t("set.st.noteBuiltin", "只改这个平台的显示名（端点/密钥/模型都不变；改回原名即恢复默认）。")
               : editStationId
-                ? "改名 / 改类型 / 改端点地址；API Key 与模型在上一页各自保留不变。"
-                : "添加后回上一页填 API Key、模型名。⚠️ 填 key = 把 key 交给该端点，请只添加你信任的。"}
+                ? t("set.st.noteEdit", "改名 / 改类型 / 改端点地址；API Key 与模型在上一页各自保留不变。")
+                : t("set.st.noteAdd", "添加后回上一页填 API Key、模型名。⚠️ 填 key = 把 key 交给该端点，请只添加你信任的。")}
           </p>
           <div className="btns">
-            <button onClick={() => { setShowAddStation(false); setEditStationId(null); setEditIsBuiltin(false); }}>取消</button>
+            <button onClick={() => { setShowAddStation(false); setEditStationId(null); setEditIsBuiltin(false); }}>{t("set.st.cancel", "取消")}</button>
             <button className="allow" onClick={editStationId ? saveStationEdit : addStation}>
-              {editStationId ? "保存" : "添加"}
+              {editStationId ? t("set.st.save", "保存") : t("set.st.add", "添加")}
             </button>
           </div>
         </div>
