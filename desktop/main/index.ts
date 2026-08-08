@@ -142,6 +142,8 @@ protocol.registerSchemesAsPrivileged([
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
+// 关闭按钮(✕)默认隐藏到托盘常驻；只有托盘「退出」/before-quit 把它置 true 才真正退出。
+let quitting = false;
 
 // provider/系统提示全局共享；每个会话一个 Agent（各自 messages）
 let provider: ReturnType<typeof makeProvider> | null = null;
@@ -1548,8 +1550,13 @@ function createWindow() {
   };
   win.on("resize", persistBounds);
   win.on("move", persistBounds);
-  win.on("close", () => {
+  win.on("close", (event) => {
     if (win && !win.isDestroyed()) saveWindowBounds(win.getBounds());
+    // 点 ✕ 不退出：拦截并隐藏到系统托盘常驻；只有托盘「退出」/before-quit 置 quitting=true 才放行真正退出。
+    if (!quitting) {
+      event.preventDefault();
+      win?.hide();
+    }
   });
 
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
@@ -1602,7 +1609,7 @@ if (!gotLock) {
       tray.setContextMenu(
         Menu.buildFromTemplate([
           {
-            label: `打开${APP_NAME}`,
+            label: tt(`显示主窗口`, `Show main window`),
             click: () => {
               win?.show();
               win?.focus();
@@ -1610,20 +1617,23 @@ if (!gotLock) {
           },
           { type: "separator" },
           {
-            label: "退出",
+            label: tt("退出", "Quit"),
             click: () => {
+              quitting = true; // 放行 close 事件，真正退出
               app.quit();
             },
           },
         ]),
       );
-      tray.on("click", () => {
+      const showAndFocus = () => {
         if (win?.isVisible()) win.focus();
         else {
           win?.show();
           win?.focus();
         }
-      });
+      };
+      tray.on("click", showAndFocus); // 左键单击：显示并聚焦主窗口
+      tray.on("double-click", showAndFocus); // 双击同理
     } catch (e) {
       log("boot", "托盘创建失败", String(e));
     }
@@ -1673,6 +1683,7 @@ app.on("window-all-closed", () => {
 });
 // 退出前把异步合并写里还没落盘的会话同步刷完，别丢最后一段
 app.on("before-quit", () => {
+  quitting = true; // 自动更新 quitAndInstall / 系统关机等触发退出时放行 close，避免卡在托盘隐藏无法退出
   try {
     flushAllSessionsSync();
   } catch {
