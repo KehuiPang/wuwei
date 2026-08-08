@@ -4311,7 +4311,7 @@ export function App() {
                         setShowSettings(true);
                       }}
                     >
-                      全部设置 / 换平台…
+                      {t("mq.allSettings", "全部设置 / 换平台…")}
                     </button>
                   </div>
                 </>
