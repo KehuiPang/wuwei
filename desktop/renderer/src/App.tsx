@@ -7325,15 +7325,18 @@ function SettingsModal({
   const [claudeBusy, setClaudeBusy] = useState(false); // Claude 一键授权进行中
   const [sCodexBusy, setSCodexBusy] = useState(false); // 设置里 Codex 一键授权进行中
   const [sysPrompt, setSysPrompt] = useState(""); // 系统提示词(可编辑)
-  const [sysPromptDefault, setSysPromptDefault] = useState(""); // 默认模板(恢复默认用)
+  const [sysPromptDefault, setSysPromptDefault] = useState(""); // 中文默认模板
+  const [sysPromptDefaultEn, setSysPromptDefaultEn] = useState(""); // 英文默认模板(随界面语言实时切)
   const [sysPromptTouched, setSysPromptTouched] = useState(false); // 是否自定义过(否则存 undefined=用默认)
   // 脑网络说明提示词(脑网络页「提示词」视图查看/编辑) + 密钥说明提示词(密钥页查看/编辑)
   const [brainView, setBrainView] = useState<"graph" | "prompt">("graph"); // 脑网络页：可视化 / 提示词
   const [brainPrompt, setBrainPrompt] = useState("");
   const [brainPromptDefault, setBrainPromptDefault] = useState("");
+  const [brainPromptDefaultEn, setBrainPromptDefaultEn] = useState("");
   const [brainPromptTouched, setBrainPromptTouched] = useState(false);
   const [secretsPrompt, setSecretsPrompt] = useState("");
   const [secretsPromptDefault, setSecretsPromptDefault] = useState("");
+  const [secretsPromptDefaultEn, setSecretsPromptDefaultEn] = useState("");
   const [secretsPromptTouched, setSecretsPromptTouched] = useState(false);
   const [platPromptOn, setPlatPromptOn] = useState(false); // 当前平台是否用专属提示词覆盖全局
   const [platPrompt, setPlatPrompt] = useState(""); // 当前平台专属提示词内容
@@ -7644,6 +7647,13 @@ function SettingsModal({
   useEffect(() => {
     setMemory((cur) => swapMemHeader(cur, lang));
   }, [lang]);
+  // 语言切换时，未自定义的「默认提示词」跟着切中英（系统/脑网络/密钥三段）
+  useEffect(() => {
+    if (!sysPromptTouched && sysPromptDefaultEn) setSysPrompt(lang === "en" ? sysPromptDefaultEn : sysPromptDefault);
+    if (!brainPromptTouched && brainPromptDefaultEn) setBrainPrompt(lang === "en" ? brainPromptDefaultEn : brainPromptDefault);
+    if (!secretsPromptTouched && secretsPromptDefaultEn) setSecretsPrompt(lang === "en" ? secretsPromptDefaultEn : secretsPromptDefault);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
   useEffect(() => {
     window.wuwei.getMemory().then((m) => setMemory(swapMemHeader(m || "", lang)));
     window.wuwei.getMcp().then((r) => {
@@ -7811,8 +7821,11 @@ function SettingsModal({
       setPlatPrompt(typeof f.systemPrompt === "string" ? f.systemPrompt : "");
       setCustomModel(!!curModel && !p.models.includes(curModel));
       // 系统提示词：有自定义(含空串)就用它+标记已改；否则显示默认模板(未改，保存时不写入=跟随默认)
-      const def = r?.defaultPrompt || "";
-      setSysPromptDefault(def);
+      const defZh = r?.defaultPrompt || "";
+      const defEn = (r as any)?.defaultPromptEn || defZh;
+      setSysPromptDefault(defZh);
+      setSysPromptDefaultEn(defEn);
+      const def = lang === "en" ? defEn : defZh; // 按当前界面语言选默认
       if (typeof s.systemPrompt === "string") {
         setSysPrompt(s.systemPrompt);
         setSysPromptTouched(true);
@@ -7821,23 +7834,27 @@ function SettingsModal({
         setSysPromptTouched(false);
       }
       // 脑网络说明提示词：有覆盖就用它+标记已改，否则回填默认(未改，保存不写=跟随默认)
-      const bDef = (r as any)?.defaultBrainPrompt || "";
-      setBrainPromptDefault(bDef);
+      const bDefZh = (r as any)?.defaultBrainPrompt || "";
+      const bDefEn = (r as any)?.defaultBrainPromptEn || bDefZh;
+      setBrainPromptDefault(bDefZh);
+      setBrainPromptDefaultEn(bDefEn);
       if (typeof s.brainPrompt === "string") {
         setBrainPrompt(s.brainPrompt);
         setBrainPromptTouched(true);
       } else {
-        setBrainPrompt(bDef);
+        setBrainPrompt(lang === "en" ? bDefEn : bDefZh);
         setBrainPromptTouched(false);
       }
       // 密钥说明提示词：同上
-      const sDef = (r as any)?.defaultSecretsPrompt || "";
-      setSecretsPromptDefault(sDef);
+      const sDefZh = (r as any)?.defaultSecretsPrompt || "";
+      const sDefEn = (r as any)?.defaultSecretsPromptEn || sDefZh;
+      setSecretsPromptDefault(sDefZh);
+      setSecretsPromptDefaultEn(sDefEn);
       if (typeof s.secretsPrompt === "string") {
         setSecretsPrompt(s.secretsPrompt);
         setSecretsPromptTouched(true);
       } else {
-        setSecretsPrompt(sDef);
+        setSecretsPrompt(lang === "en" ? sDefEn : sDefZh);
         setSecretsPromptTouched(false);
       }
     });
@@ -8910,7 +8927,7 @@ function SettingsModal({
                     type="button"
                     className="link-inline"
                     onClick={() => {
-                      setSysPrompt(sysPromptDefault);
+                      setSysPrompt(lang === "en" ? sysPromptDefaultEn : sysPromptDefault);
                       setSysPromptTouched(false);
                     }}
                   >
@@ -9074,18 +9091,18 @@ function SettingsModal({
                         />
                       </label>
                       <p className="s-note pp-fixed">
-                        这段会拼进系统提示词，告诉模型如何使用本地脑网络（brain_recall/brain_learn/brain_link）。改完失焦即保存并热更当前所有会话；「已沉淀的概念」目录会自动追加在其后。
+                        {t("set.brain.promptNote", "这段会拼进系统提示词，告诉模型如何使用本地脑网络（brain_recall/brain_learn/brain_link）。改完失焦即保存并热更当前所有会话；「已沉淀的概念」目录会自动追加在其后。")}
                         {brainPromptTouched && (
                           <button
                             type="button"
                             className="link-inline"
                             onClick={() => {
-                              setBrainPrompt(brainPromptDefault);
+                              setBrainPrompt(lang === "en" ? brainPromptDefaultEn : brainPromptDefault);
                               setBrainPromptTouched(false);
                               window.wuwei.setBrainPrompt(null);
                             }}
                           >
-                            恢复默认
+                            {t("set.pr.restore", "恢复默认")}
                           </button>
                         )}
                       </p>
@@ -10165,18 +10182,18 @@ function SettingsModal({
                   />
                 </label>
                 <p className="s-note">
-                  这段会拼进系统提示词，告诉模型密钥走本地保险箱/环境变量、不索取明文。改完失焦即保存并热更当前所有会话。
+                  {t("set.sec.promptNote", "这段会拼进系统提示词，告诉模型密钥走本地保险箱/环境变量、不索取明文。改完失焦即保存并热更当前所有会话。")}
                   {secretsPromptTouched && (
                     <button
                       type="button"
                       className="link-inline"
                       onClick={() => {
-                        setSecretsPrompt(secretsPromptDefault);
+                        setSecretsPrompt(lang === "en" ? secretsPromptDefaultEn : secretsPromptDefault);
                         setSecretsPromptTouched(false);
                         window.wuwei.setSecretsPrompt(null);
                       }}
                     >
-                      恢复默认
+                      {t("set.pr.restore", "恢复默认")}
                     </button>
                   )}
                 </p>

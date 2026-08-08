@@ -421,3 +421,7 @@ export function detect(text: string): Candidate[] {
 export const SECRETS_SYSTEM_NOTE =
   `\n\n## 本地密钥管理\n所有敏感密钥由本地密钥管理器 + 环境变量统一加密管理，你无需、也不会看到具体明文——凡是 ${PH_OPEN}名字${PH_CLOSE} 形式的占位符都是被脱敏的真实密钥，本地执行时会自动回填。` +
   `需要用到密钥时：优先在 bash 里用环境变量(如 $OPENAI_API_KEY)引用，minicc 会把真实值注入子进程；或直接沿用占位符，写入文件/命令时本地会替换。不要向用户索要或试图打印明文密钥。`;
+// 英文版密钥说明（跟随界面语言）
+export const SECRETS_SYSTEM_NOTE_EN =
+  `\n\n## Local secret management\nAll sensitive secrets are encrypted and managed centrally by a local secret manager plus environment variables, so you neither need nor will ever see the plaintext values — any placeholder in the form ${PH_OPEN}name${PH_CLOSE} is a masked real secret, auto-restored at local execution time.` +
+  ` When you need a secret: prefer referencing it via an env var in bash (e.g. $OPENAI_API_KEY) and the app injects the real value into the child process; or keep the placeholder as-is and it's substituted locally when writing files/commands. Never ask the user for, or try to print, plaintext secrets.`;

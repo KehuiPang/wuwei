@@ -901,6 +901,9 @@ async function emitAccount() {
 // 脑网络说明的默认提示词(可在「知识网络」设置里查看/覆盖)。追加的『已沉淀概念』动态目录不含在内。
 export const DEFAULT_BRAIN_NOTE =
   `\n\n## 本地知识网络（Brain）\n你有一个本地概念知识网络，沉淀着项目/服务器/脚本/部署/注意事项等结构化知识。\n- 涉及具体项目或部署/环境的任务，**开工前先用 brain_recall 检索**，按返回的结构化子图行动，别每次全量翻文档、省 token。\n- 发现值得长期固化的高价值知识（项目背景、git路径、测试/线上环境、部署脚本位置、踩坑注意事项）时，用 brain_learn 记住、brain_link 串联关系；旧信息有误就用同名 brain_learn 覆盖纠正。\n- brain_recall 还会命中知识宫殿等文档库的原文片段（『相关文档』），只给摘要+路径；需要完整内容时用 brain_read_doc 按该路径读全文，不必全量翻。`;
+// 英文版脑网络说明（跟随界面语言）
+export const DEFAULT_BRAIN_NOTE_EN =
+  `\n\n## Local knowledge network (Brain)\nYou have a local concept knowledge network holding structured knowledge about projects/servers/scripts/deployments/caveats.\n- For tasks about a specific project or deployment/environment, **run brain_recall first** and act on the returned structured subgraph — don't re-read whole docs every time (saves tokens).\n- When you find high-value knowledge worth keeping (project background, git paths, test/prod environments, where deploy scripts live, pitfalls), save it with brain_learn and connect relations with brain_link; correct stale info by brain_learn with the same name.\n- brain_recall also surfaces source snippets from doc libraries ("related docs") as summary+path only; when you need the full text, read it by that path with brain_read_doc instead of scanning everything.`;
 
 // 构造系统提示词：优先本平台专属覆盖(creds[pid].systemPrompt)，再全局(settings.systemPrompt)，都没有=默认模板；渲染 {model}/{cwd}
 function buildSysPrompt(cwd: string, model: string, providerId?: string): string {
@@ -919,7 +922,7 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall；提示词可在设置里覆盖。
   // 关掉「脑网络」或非会员：不注入说明、不追加概念目录(brain_* 工具也在别处一并停掉)。
   if (brainAvailable(st)) {
-    base += typeof st?.brainPrompt === "string" ? st.brainPrompt : DEFAULT_BRAIN_NOTE;
+    base += typeof st?.brainPrompt === "string" ? st.brainPrompt : (lang === "en" ? DEFAULT_BRAIN_NOTE_EN : DEFAULT_BRAIN_NOTE);
     try {
       const idx = brain.conceptIndex(40);
       if (idx.length) base += `\n已沉淀的概念（可 brain_recall 展开）：${idx.join("、")}`;
@@ -928,7 +931,7 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
     }
   }
   // 密钥说明：告知模型密钥走本地保险箱/环境变量，无需明文；提示词可在设置里覆盖
-  base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : secrets.SECRETS_SYSTEM_NOTE;
+  base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : (lang === "en" ? secrets.SECRETS_SYSTEM_NOTE_EN : secrets.SECRETS_SYSTEM_NOTE);
   // 与用户交互：需要用户拍板时必须弹选择框(强引导，否则模型习惯用文字罗列)
   base +=
     lang === "en"
@@ -2094,9 +2097,12 @@ ipcMain.handle("settings:get", () => ({
   settings: loadSettings(),
   backend: backendLabel,
   model: modelLabel,
-  defaultPrompt: loadSettings()?.app?.lang === "en" ? DEFAULT_SYSTEM_PROMPT_EN : DEFAULT_SYSTEM_PROMPT, // 供设置页显示"未自定义时的默认提示词"(跟随界面语言)
+  defaultPrompt: DEFAULT_SYSTEM_PROMPT, // 中文默认(设置页按界面语言在渲染层实时选)
+  defaultPromptEn: DEFAULT_SYSTEM_PROMPT_EN, // 英文默认
   defaultBrainPrompt: DEFAULT_BRAIN_NOTE, // 脑网络说明默认(知识网络设置页显示/恢复默认)
+  defaultBrainPromptEn: DEFAULT_BRAIN_NOTE_EN,
   defaultSecretsPrompt: secrets.SECRETS_SYSTEM_NOTE, // 密钥说明默认(密钥设置页显示/恢复默认)
+  defaultSecretsPromptEn: secrets.SECRETS_SYSTEM_NOTE_EN,
 }));
 
 // 脑网络/密钥 提示词覆盖：只落盘该字段并热更所有会话系统提示(不重启 provider)。传 null=恢复默认
