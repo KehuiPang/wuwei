@@ -1973,6 +1973,8 @@ export function App() {
   const [updateReady, setUpdateReady] = useState<{ version: string; notes: string } | null>(null);
   const [updateMsg, setUpdateMsg] = useState(""); // 「检查中/已是最新/发现新版下载中…」等提示
   const [hasUpdate, setHasUpdate] = useState(false); // 有新版可用(小红点标志)：发现新版即 true
+  // 左下角「重启更新」药丸：新版下载好后常驻显示，点主体即装、点叉关闭；关掉的版本记 localStorage，同版本不再弹、更新的版本会重新出现
+  const [updateChipHidden, setUpdateChipHidden] = useState<string>(() => { try { return localStorage.getItem("wuwei_dismissed_update_chip") || ""; } catch { return ""; } });
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -3349,6 +3351,46 @@ export function App() {
             account.nickname || account.email || account.label || (account.loggedIn ? (lang === "en" ? "Signed in" : "已登录") : (lang === "en" ? "Not signed in" : "未登录"));
           return (
             <div className="sidebar-foot">
+              {/* 「重启更新」药丸：仿 Claude Code，新版已下载好即常驻显示在账号上方；点主体=立即安装重启，点右侧叉=关闭(该版本不再提示) */}
+              {updateReady && updateReady.version !== updateChipHidden && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "6px 8px",
+                    marginBottom: 6,
+                    borderRadius: 8,
+                    background: "rgba(192,95,60,0.12)",
+                    border: "1px solid rgba(192,95,60,0.55)",
+                  }}
+                >
+                  <button
+                    onClick={() => window.wuwei.installUpdate()}
+                    title={lang === "en" ? `Restart to install v${updateReady.version}` : `重启以安装新版本 v${updateReady.version}`}
+                    style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, minWidth: 0, background: "none", border: "none", color: "#F4F6F8", cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C05F3C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+                      <path d="M21 12a9 9 0 1 1-3.5-7.1" />
+                      <path d="M21 4v5h-5" />
+                    </svg>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {lang === "en" ? "Relaunch to update" : "重启以更新"}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => { const v = updateReady.version; setUpdateChipHidden(v); try { localStorage.setItem("wuwei_dismissed_update_chip", v); } catch {} }}
+                    title={lang === "en" ? "Dismiss" : "关闭"}
+                    aria-label={lang === "en" ? "Dismiss" : "关闭"}
+                    style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, background: "none", border: "none", color: "#9AA4AE", cursor: "pointer", padding: 0 }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               {/* 订阅版入口（C2 占位）：默认隐藏，仅当后端 flags 含 "subscription" 才出现。
                   后台可按用户名/机器指纹对指定客户端单独放开——判定全在后端，客户端只渲染。 */}
               {showSubscription && (

@@ -42,10 +42,10 @@ nsis:
   allowToChangeInstallationDirectory: true
   artifactName: "wuwei-${version}-setup.${ext}"
 npmRebuild: false
-# 自动更新源：阿里云 OSS（generic provider）。发布时把 release/ 下的
-#   wuwei-<ver>-setup.exe + latest.yml（+ mac/linux 对应文件）传到该 URL 路径。
+# 自动更新源：阿里云 OSS（generic provider）。无为专属 bucket = wuwei-repo。
+#   发布时把 release/ 下的 wuwei-<ver>-setup.exe + latest.yml（+ mac/linux 对应文件）传到该 URL 路径。
 # electron-updater 从这里读 latest.yml 比对版本、下载安装包。
 publish:
   provider: generic
-  url: https://shengcai888.oss-cn-hangzhou.aliyuncs.com/wuwei/updates/
+  url: https://wuwei-repo.oss-cn-hangzhou.aliyuncs.com/updates/
   channel: latest
