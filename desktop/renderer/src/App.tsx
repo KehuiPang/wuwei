@@ -2041,7 +2041,7 @@ export function App() {
   const keyTestingRef = useRef(false); // 防并发验证
   const [conn, setConn] = useState<{ status: "green" | "yellow" | "red" | "checking"; reason: string }>({
     status: "checking",
-    reason: "检测连通状态…",
+    reason: getLang() === "en" ? "Checking connection…" : "检测连通状态…",
   });
   const [showConn, setShowConn] = useState(false); // 状态灯说明气泡
   const thinkStartRef = useRef<number | null>(null); // 本轮开始时间（思考计时）
@@ -3332,6 +3332,9 @@ export function App() {
                         const tierLabel = tierMain + (tierQual ? " " + tierQual : "");
                         const exp = wuwei.membership?.expireAt;
                         const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
+                        // 快到期(≤7天)才提示到期日 + 续费按钮；刚买还早就别催，只显「生效中」
+                        const daysLeft = exp ? Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000) : Infinity;
+                        const nearExpiry = daysLeft <= 7;
                         const bal = wuwei.coin.balance;
                         const openPack = () => { setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
                         const openPlan = () => { setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
@@ -3408,14 +3411,17 @@ export function App() {
                                     <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
                                   </div>
                                   <div className="acct-memb-sub">
-                                    {expStr
+                                    {nearExpiry
                                       ? (lang === "en" ? `Expires ${expStr}` : `${expStr} 到期`)
                                       : (lang === "en" ? "Active" : "生效中")}
                                   </div>
                                 </div>
-                                <button className="acct-renew" onClick={openPlan}>
-                                  {lang === "en" ? "Renew" : "续费"}
-                                </button>
+                                {/* 只在快到期(≤7天)才显续费按钮，刚买不催 */}
+                                {nearExpiry && (
+                                  <button className="acct-renew" onClick={openPlan}>
+                                    {lang === "en" ? "Renew" : "续费"}
+                                  </button>
+                                )}
                               </div>
                             ) : bal <= 0 ? (
                               // 只在无为币用完(余额=0)后才推会员——自然的升级时机，不打扰仍有币的用户
