@@ -2782,15 +2782,15 @@ export function App() {
   // 相对时间(最新消息多久前)：随 now(每15s)更新
   const relTime = (ts: number): string => {
     const sec = Math.max(0, Math.floor((now - ts) / 1000));
-    if (sec < 60) return sec + "秒前";
+    if (sec < 60) return t("rel.sec", "{n}秒前").replace("{n}", String(sec));
     const min = Math.floor(sec / 60);
-    if (min < 60) return min + "分钟前";
+    if (min < 60) return t("rel.min", "{n}分钟前").replace("{n}", String(min));
     const hr = Math.floor(min / 60);
-    if (hr < 24) return hr + "小时前";
+    if (hr < 24) return t("rel.hour", "{n}小时前").replace("{n}", String(hr));
     const day = Math.floor(hr / 24);
-    if (day < 30) return day + "天前";
+    if (day < 30) return t("rel.day", "{n}天前").replace("{n}", String(day));
     const mo = Math.floor(day / 30);
-    return mo < 12 ? mo + "个月前" : Math.floor(mo / 12) + "年前";
+    return mo < 12 ? t("rel.month", "{n}个月前").replace("{n}", String(mo)) : t("rel.year", "{n}年前").replace("{n}", String(Math.floor(mo / 12)));
   };
   // 组内排序：已完成沉底 → 优先级(数字大在前) → 手动拖拽键(未拖过=按最近更新)
   const sortRows = (arr: SessionMeta[]) =>
@@ -3309,7 +3309,9 @@ export function App() {
                       (() => {
                         const tier = wuwei.membership?.tier ?? "free";
                         const isPro = tier !== "free";
-                        const tierLabel = tier === "pro_year" ? "Pro 年付" : tier === "pro_month" ? "Pro 月付" : "免费版";
+                        const tierLabel = lang === "en"
+                          ? (tier === "pro_year" ? "Pro yearly" : tier === "pro_month" ? "Pro monthly" : "Free")
+                          : (tier === "pro_year" ? "Pro 年付" : tier === "pro_month" ? "Pro 月付" : "免费版");
                         const exp = wuwei.membership?.expireAt;
                         const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
                         const bal = wuwei.coin.balance;
@@ -3384,14 +3386,16 @@ export function App() {
                               <div className="acct-memb on">
                                 <div>
                                   <div className="acct-memb-ttl">
-                                    <Spark /> {tierLabel}会员
+                                    <Spark /> {tierLabel}{lang === "en" ? "" : "会员"}
                                   </div>
                                   <div className="acct-memb-sub">
-                                    {expStr ? expStr + " 到期 · 续费享 9 折" : "续费享 9 折"}
+                                    {lang === "en"
+                                      ? (expStr ? `Expires ${expStr} · 10% off renewal` : "10% off renewal")
+                                      : (expStr ? expStr + " 到期 · 续费享 9 折" : "续费享 9 折")}
                                   </div>
                                 </div>
                                 <button className="acct-renew" onClick={openPlan}>
-                                  续费
+                                  {lang === "en" ? "Renew" : "续费"}
                                 </button>
                               </div>
                             ) : bal <= 0 ? (
@@ -3402,11 +3406,11 @@ export function App() {
                                     <span className="acct-crown">
                                       <Spark />
                                     </span>{" "}
-                                    开通 Pro 会员
+                                    {lang === "en" ? "Upgrade to Pro" : "开通 Pro 会员"}
                                   </div>
-                                  <div className="acct-memb-sub">更多额度 · 更省 · ¥29/月起</div>
+                                  <div className="acct-memb-sub">{lang === "en" ? "More quota · better value · from $6.99/mo" : "更多额度 · 更省 · ¥29/月起"}</div>
                                 </div>
-                                <span className="acct-go">立即开通</span>
+                                <span className="acct-go">{lang === "en" ? "Upgrade now" : "立即开通"}</span>
                               </div>
                             ) : null}
 
@@ -3675,15 +3679,15 @@ export function App() {
           )}
           {window.wuwei.platform !== "darwin" && (
             <span className="win-ctrl">
-              <button className="wc-btn" title="最小化" onClick={() => window.wuwei.winMinimize()}>
+              <button className="wc-btn" title={t("win.minimize", "最小化")} onClick={() => window.wuwei.winMinimize()}>
                 ─
               </button>
-              <button className="wc-btn" title="最大化" onClick={() => window.wuwei.winMaximize()}>
+              <button className="wc-btn" title={t("win.maximize", "最大化")} onClick={() => window.wuwei.winMaximize()}>
                 ☐
               </button>
               <button
                 className="wc-btn wc-close"
-                title="关闭"
+                title={t("win.close", "关闭")}
                 onClick={() => window.wuwei.winClose()}
               >
                 ✕
@@ -3867,7 +3871,7 @@ export function App() {
                     </div>
                     {aiTs && (
                       <span className="tf-time" title={new Date(aiTs).toLocaleString()}>
-                        {relTime(aiTs, now)}
+                        {relTime(aiTs)}
                       </span>
                     )}
                     {tok && (
@@ -5199,18 +5203,19 @@ function LimitRow({ label, used, resetSec }: { label: string; used: number; rese
 }
 
 // 相对时间：刚刚 / X秒前 / X分钟前 / X小时前 / X天前 / 超过一周显示月日
-function relTime(ts: number, now: number): string {
+function relTime(ts: number, now: number, tt?: T): string {
+  const t = tt ?? makeT(getLang());
   const s = Math.max(0, Math.floor((now - ts) / 1000));
-  if (s < 10) return "刚刚";
-  if (s < 60) return `${s}秒前`;
+  if (s < 10) return t("rel.now", "刚刚");
+  if (s < 60) return t("rel.sec", "{n}秒前").replace("{n}", String(s));
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}分钟前`;
+  if (m < 60) return t("rel.min", "{n}分钟前").replace("{n}", String(m));
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}小时前`;
+  if (h < 24) return t("rel.hour", "{n}小时前").replace("{n}", String(h));
   const d = Math.floor(h / 24);
-  if (d < 7) return `${d}天前`;
+  if (d < 7) return t("rel.day", "{n}天前").replace("{n}", String(d));
   const dt = new Date(ts);
-  return `${dt.getMonth() + 1}月${dt.getDate()}日`;
+  return t("rel.date", "{mo}月{d}日").replace("{mo}", String(dt.getMonth() + 1)).replace("{d}", String(dt.getDate()));
 }
 
 
