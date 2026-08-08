@@ -3653,7 +3653,7 @@ export function App() {
                         setShowBrowserMenu(false);
                       }}
                     >
-                      收回为半屏
+                      {lang === "en" ? "Dock to split" : "收回为半屏"}
                     </button>
                     <button
                       onClick={() => {
@@ -3662,7 +3662,7 @@ export function App() {
                         setShowBrowserMenu(false);
                       }}
                     >
-                      收回为全屏
+                      {lang === "en" ? "Dock to full" : "收回为全屏"}
                     </button>
                     <button
                       className="tb-bm-close"
@@ -3672,7 +3672,7 @@ export function App() {
                         setShowBrowserMenu(false);
                       }}
                     >
-                      关闭浏览器
+                      {lang === "en" ? "Close browser" : "关闭浏览器"}
                     </button>
                   </div>
                 </>
@@ -3887,39 +3887,39 @@ export function App() {
                         <span className="tf-tok-badge">
                           {/* ↑ 显示「新增输入」(真正新花的·贵)，不显示总输入(含缓存重发的累计，看着大但没意义)；
                               无 round 明细的旧快照才回退到总输入。完整拆分见悬浮面板。 */}
-                          {tok.steps > 0 ? `${tok.steps}步 · ` : ""}↑{fmtTok(tok.split ? tok.miss : tok.inT)} ↓{fmtTok(tok.outT)}
+                          {tok.steps > 0 ? `${tok.steps}${lang === "en" ? " steps" : "步"} · ` : ""}↑{fmtTok(tok.split ? tok.miss : tok.inT)} ↓{fmtTok(tok.outT)}
                         </span>
                         <span className="tf-tok-pop">
                           {tok.steps > 0 && (
                             <span>
-                              <b>本次步数</b>
-                              <em>{tok.steps} 步</em>
+                              <b>{lang === "en" ? "Steps this turn" : "本次步数"}</b>
+                              <em>{tok.steps}{lang === "en" ? "" : " 步"}</em>
                             </span>
                           )}
                           {tok.steps > 0 && (
                             <span>
-                              <b>每步上下文</b>
-                              <em>≈{fmtTok(Math.round(tok.inT / tok.steps))}（平均）</em>
+                              <b>{lang === "en" ? "Context per step" : "每步上下文"}</b>
+                              <em>≈{fmtTok(Math.round(tok.inT / tok.steps))}{lang === "en" ? " (avg)" : "（平均）"}</em>
                             </span>
                           )}
                           <span className="tf-tok-div">
-                            <b>总输入</b>
+                            <b>{lang === "en" ? "Total input" : "总输入"}</b>
                             <em>{tok.inT.toLocaleString()}</em>
                           </span>
                           {tok.split && (
                             <span className="tf-tok-sub">
-                              <b>· 缓存命中</b>
-                              <em>{tok.hit.toLocaleString()}（便宜）</em>
+                              <b>{lang === "en" ? "· Cache hit" : "· 缓存命中"}</b>
+                              <em>{tok.hit.toLocaleString()}{lang === "en" ? " (cheap)" : "（便宜）"}</em>
                             </span>
                           )}
                           {tok.split && (
                             <span className="tf-tok-sub">
-                              <b>· 新增输入</b>
-                              <em>{tok.miss.toLocaleString()}（新花的·贵）</em>
+                              <b>{lang === "en" ? "· New input" : "· 新增输入"}</b>
+                              <em>{tok.miss.toLocaleString()}{lang === "en" ? " (new · costly)" : "（新花的·贵）"}</em>
                             </span>
                           )}
                           <span>
-                            <b>新增输出</b>
+                            <b>{lang === "en" ? "New output" : "新增输出"}</b>
                             <em>{tok.outT.toLocaleString()}</em>
                           </span>
                         </span>
@@ -4072,7 +4072,7 @@ export function App() {
             >
               <span className="suggest-ico">💡</span>
               <span className="suggest-text">{suggestion}</span>
-              <span className="suggest-key">Tab 采纳</span>
+              <span className="suggest-key">{lang === "en" ? "Tab to accept" : "Tab 采纳"}</span>
             </div>
           )}
           <div className="input-wrap">
@@ -4132,12 +4132,12 @@ export function App() {
                     <div className="conn-pop-title">
                       <span className={`conn-dot conn-${conn.status}`} />
                       {conn.status === "green"
-                        ? "已连通"
+                        ? (lang === "en" ? "Connected" : "已连通")
                         : conn.status === "yellow"
-                          ? "有报错，未完全连通"
+                          ? (lang === "en" ? "Errors — not fully connected" : "有报错，未完全连通")
                           : conn.status === "red"
-                            ? "未连通 / 未配置"
-                            : "检测中…"}
+                            ? (lang === "en" ? "Not connected / not configured" : "未连通 / 未配置")
+                            : (lang === "en" ? "Checking…" : "检测中…")}
                     </div>
                     <p className="conn-pop-reason">{conn.reason}</p>
                     <div className="conn-pop-actions">
@@ -4147,7 +4147,7 @@ export function App() {
                           void runConnCheck();
                         }}
                       >
-                        重新检测
+                        {lang === "en" ? "Re-check" : "重新检测"}
                       </button>
                       {(conn.status === "red" || conn.status === "yellow") && (
                         <button
@@ -4158,7 +4158,7 @@ export function App() {
                             setShowSettings(true);
                           }}
                         >
-                          {conn.status === "red" ? "去配置 / 授权" : "去解决"}
+                          {conn.status === "red" ? (lang === "en" ? "Configure / authorize" : "去配置 / 授权") : (lang === "en" ? "Resolve" : "去解决")}
                         </button>
                       )}
                     </div>
@@ -4209,9 +4209,9 @@ export function App() {
                 />
                 {idxProg?.building
                   ? idxProg.phase === "scan"
-                    ? `索引·扫描 ${idxProg.files} 文档`
-                    : `索引 ${idxProg.done}/${idxProg.total || "…"} 块`
-                  : `抽概念 ${conProg?.done}/${conProg?.total}`}
+                    ? (lang === "en" ? `Index · scanning ${idxProg.files} docs` : `索引·扫描 ${idxProg.files} 文档`)
+                    : (lang === "en" ? `Index ${idxProg.done}/${idxProg.total || "…"} chunks` : `索引 ${idxProg.done}/${idxProg.total || "…"} 块`)
+                  : (lang === "en" ? `Extract ${conProg?.done}/${conProg?.total}` : `抽概念 ${conProg?.done}/${conProg?.total}`)}
               </button>
             )}
 
@@ -4368,7 +4368,7 @@ export function App() {
             >
               <span
                 className={(busy || runningSet.size > 0 ? "fs-busy" : "") + (runningSet.size > 0 ? " fs-clickable" : "")}
-                title={runningSet.size > 0 ? "点击查看/停止运行中的任务" : undefined}
+                title={runningSet.size > 0 ? (lang === "en" ? "Click to view/stop running tasks" : "点击查看/停止运行中的任务") : undefined}
                 onClick={(e) => {
                   if (runningSet.size === 0) return;
                   e.stopPropagation(); // 别触发用量面板
@@ -4393,12 +4393,12 @@ export function App() {
                     <span className="fs-dot">·</span>
                     {(rate.primaryWindowMinutes ?? 300) >= 1440 ? (
                       // 主窗口已是周尺度(Codex 168h)：只显示一个「周」用量，不再摆短窗口
-                      <span>周 {rate.primaryUsedPercent}%</span>
+                      <span>{lang === "en" ? "Week" : "周"} {rate.primaryUsedPercent}%</span>
                     ) : (
                       <>
-                        <span>5小时 {rate.primaryUsedPercent}%</span>
+                        <span>{lang === "en" ? "5h" : "5小时"} {rate.primaryUsedPercent}%</span>
                         <span className="fs-dot">·</span>
-                        <span>周 {rate.secondaryUsedPercent ?? 0}%</span>
+                        <span>{lang === "en" ? "Week" : "周"} {rate.secondaryUsedPercent ?? 0}%</span>
                       </>
                     )}
                   </>
@@ -4408,8 +4408,8 @@ export function App() {
                     <span className="fs-dot">·</span>
                     <span>
                       {account.balance.total
-                        ? `余额 ${account.balance.total} 元`
-                        : `已消耗 ${account.balance.consumed} 元`}
+                        ? (lang === "en" ? `Balance ¥${account.balance.total}` : `余额 ${account.balance.total} 元`)
+                        : (lang === "en" ? `Spent ¥${account.balance.consumed}` : `已消耗 ${account.balance.consumed} 元`)}
                     </span>
                   </>
                 )}
@@ -4423,10 +4423,10 @@ export function App() {
           <>
             <div className="mq-overlay" onClick={() => setShowTasks(false)} />
             <div className="tasks-panel">
-              <div className="tp-head">运行中的任务（{runningSet.size}）</div>
+              <div className="tp-head">{lang === "en" ? `Running tasks (${runningSet.size})` : `运行中的任务（${runningSet.size}）`}</div>
               {[...runningSet].map((sid) => {
                 const meta = sessions.find((s) => s.id === sid);
-                const title = meta?.title || (sid === currentId ? "当前会话" : "未命名会话");
+                const title = meta?.title || (sid === currentId ? (lang === "en" ? "Current chat" : "当前会话") : (lang === "en" ? "Untitled chat" : "未命名会话"));
                 return (
                   <div key={sid} className={"tp-item" + (sid === currentId ? " cur" : "")}>
                     <span className="tp-dot" />
@@ -4445,14 +4445,14 @@ export function App() {
                       title={t("tasks.stopThis", "停止该任务")}
                       onClick={() => window.wuwei.stop(sid)}
                     >
-                      停止
+                      {lang === "en" ? "Stop" : "停止"}
                     </button>
                   </div>
                 );
               })}
               <div className="tp-foot">
                 <button className="tp-stopall" onClick={() => [...runningSet].forEach((s) => window.wuwei.stop(s))}>
-                  全部停止
+                  {lang === "en" ? "Stop all" : "全部停止"}
                 </button>
               </div>
             </div>
