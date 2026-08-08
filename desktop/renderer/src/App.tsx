@@ -1931,7 +1931,12 @@ export function App() {
   const [wuwei, setWuwei] = useState<{
     user: { id: string; email: string | null; name: string | null; avatar: string | null };
     coin: { balance: number };
-    membership?: { tier: "free" | "pro_month" | "pro_year"; expireAt?: string | number };
+    membership?: {
+      tier: "free" | "pro_month" | "pro_year";
+      expireAt?: string | number;
+      plan?: string | null; // 档位显示名 Pro/Plus/Max
+      weeklyQuota?: { active: boolean; remainingPct: number; resetsAt: string | null };
+    };
     flags?: string[];
     providers?: { hidden?: string[] };
   } | null>(null);
@@ -3316,12 +3321,22 @@ export function App() {
                       (() => {
                         const tier = wuwei.membership?.tier ?? "free";
                         const isPro = tier !== "free";
-                        // 徽标/会员条：主标只显 Pro / Free，档位(月付/年付)作小灰字，避免英文过长挤掉昵称
-                        const tierMain = tier === "free" ? (lang === "en" ? "Free" : "免费版") : "Pro";
+                        // 徽标/会员条：主标显档位名(Pro/Plus/Max，后端按套餐档给)，档位(月付/年付)作小灰字
+                        const tierMain = tier === "free" ? (lang === "en" ? "Free" : "免费版") : (wuwei.membership?.plan || "Pro");
                         const tierQual = tier === "pro_year" ? (lang === "en" ? "yearly" : "年付") : tier === "pro_month" ? (lang === "en" ? "monthly" : "月付") : "";
                         const tierLabel = tierMain + (tierQual ? " " + tierQual : "");
                         const exp = wuwei.membership?.expireAt;
                         const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
+                        // 本周额度（订阅感：隐藏具体币数，只显剩余百分比 + 重置时间）
+                        const wq = wuwei.membership?.weeklyQuota;
+                        const wqActive = !!wq?.active;
+                        const wqPct = Math.max(0, Math.min(100, wq?.remainingPct ?? 0));
+                        const wqReset = wq?.resetsAt ? new Date(wq.resetsAt) : null;
+                        const wqResetStr = wqReset
+                          ? (lang === "en"
+                              ? wqReset.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                              : `${wqReset.getMonth() + 1}月${wqReset.getDate()}日`)
+                          : "";
                         const bal = wuwei.coin.balance;
                         const openPack = () => { setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
                         const openPlan = () => { setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
@@ -3392,20 +3407,34 @@ export function App() {
 
                             {/* 会员条：免费=靛青升级引导 / Pro=金色状态条 */}
                             {isPro ? (
-                              <div className="acct-memb on">
-                                <div>
-                                  <div className="acct-memb-ttl">
-                                    <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
+                              <div className="acct-memb on" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                                  <div style={{ minWidth: 0 }}>
+                                    <div className="acct-memb-ttl">
+                                      <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
+                                    </div>
+                                    <div className="acct-memb-sub">
+                                      {expStr
+                                        ? (lang === "en" ? `Expires ${expStr}` : `${expStr} 到期`)
+                                        : (lang === "en" ? "Active" : "生效中")}
+                                    </div>
                                   </div>
-                                  <div className="acct-memb-sub">
-                                    {lang === "en"
-                                      ? (expStr ? `Expires ${expStr} · 10% off` : "10% off renewal")
-                                      : (expStr ? expStr + " 到期 · 续费 9 折" : "续费享 9 折")}
-                                  </div>
+                                  <button className="acct-renew" onClick={openPlan} style={{ flex: "0 0 auto" }}>
+                                    {lang === "en" ? "Renew" : "续费"}
+                                  </button>
                                 </div>
-                                <button className="acct-renew" onClick={openPlan}>
-                                  {lang === "en" ? "Renew" : "续费"}
-                                </button>
+                                {wqActive && (
+                                  // 本周额度进度条：只显剩余百分比 + 重置日，不暴露具体币数（订阅感）
+                                  <div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--acct-memb-sub, #9a7b3c)", marginBottom: 4 }}>
+                                      <span>{lang === "en" ? `${wqPct}% left this week` : `本周剩余 ${wqPct}%`}</span>
+                                      {wqResetStr && <span>{lang === "en" ? `Resets ${wqResetStr}` : `${wqResetStr} 重置`}</span>}
+                                    </div>
+                                    <div style={{ height: 6, borderRadius: 999, background: "rgba(169,127,46,0.18)", overflow: "hidden" }}>
+                                      <div style={{ width: `${wqPct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#C9A24B,#A97F2E)", transition: "width .3s ease" }} />
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : bal <= 0 ? (
                               // 只在无为币用完(余额=0)后才推会员——自然的升级时机，不打扰仍有币的用户
@@ -4580,6 +4609,22 @@ export function App() {
                     <span>{t("usage.coinBal", "无为币余额")}</span>
                     <span>{t("usage.coinAmount", "{n} 无为币").replace("{n}", wuwei.coin.balance.toLocaleString())}</span>
                   </div>
+                  {wuwei.membership?.weeklyQuota?.active && (() => {
+                    // 订阅版本周额度：隐藏具体币数，显剩余百分比 + 重置日 + 进度条
+                    const wq = wuwei.membership!.weeklyQuota!;
+                    const pct = Math.max(0, Math.min(100, wq.remainingPct));
+                    const rd = wq.resetsAt ? new Date(wq.resetsAt) : null;
+                    const rs = rd ? (lang === "en" ? rd.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `${rd.getMonth() + 1}月${rd.getDate()}日`) : "";
+                    return (
+                      <div style={{ margin: "2px 0 4px" }}>
+                        <div className="u-row" style={{ marginBottom: 4 }}>
+                          <span>{lang === "en" ? "This week" : "本周额度"}</span>
+                          <span>{lang === "en" ? `${pct}% left${rs ? ` · resets ${rs}` : ""}` : `剩余 ${pct}%${rs ? ` · ${rs} 重置` : ""}`}</span>
+                        </div>
+                        <div className="u-bar"><div className="u-fill" style={{ width: pct + "%" }} /></div>
+                      </div>
+                    );
+                  })()}
                   <div className="u-row">
                     <span>{t("usage.sessTokens", "本会话 tokens")}</span>
                     <span>

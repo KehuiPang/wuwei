@@ -22,8 +22,13 @@ export interface WuweiSession {
 export interface WuweiMe {
   user: { id: string; email: string | null; name: string | null; avatar: string | null };
   coin: { balance: number };
-  // 会员身份（后端补：tier=免费/Pro月付/Pro年付 + 到期日）。缺该字段=降级免费版+升级引导。
-  membership?: { tier: "free" | "pro_month" | "pro_year"; expireAt?: string | number };
+  // 会员身份（后端补：tier=免费/Pro月付/Pro年付 + 到期日 + 档位显示名 + 本周额度）。缺=降级免费版+升级引导。
+  membership?: {
+    tier: "free" | "pro_month" | "pro_year";
+    expireAt?: string | number;
+    plan?: string | null; // 档位显示名 Pro/Plus/Max
+    weeklyQuota?: { active: boolean; remainingPct: number; resetsAt: string | null };
+  };
   providers?: { hidden?: string[] };
   // 灰度开关（C2）：后端按 用户+设备指纹 返回的功能白名单，如 ["subscription"]。
   // 缺省/未含对应项 = 隐藏。客户端只渲染、不判定；判定全在后端。
