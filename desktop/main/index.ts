@@ -16,7 +16,7 @@ import { homedir } from "node:os";
 import { loadConfig } from "../../src/config.js";
 import { makeProvider } from "../../src/agent/provider.js";
 import { Agent } from "../../src/agent/loop.js";
-import { systemPrompt, renderPrompt, DEFAULT_SYSTEM_PROMPT } from "../../src/agent/prompt.js";
+import { systemPrompt, renderPrompt, DEFAULT_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT_EN } from "../../src/agent/prompt.js";
 import { ALL_TOOLS, TOOL_MAP, MEMORY_FILE } from "../../src/tools/index.js";
 import * as brain from "../../src/brain/index.js";
 import type { Tool, ToolResult } from "../../src/types.js";
@@ -905,14 +905,17 @@ export const DEFAULT_BRAIN_NOTE =
 // 构造系统提示词：优先本平台专属覆盖(creds[pid].systemPrompt)，再全局(settings.systemPrompt)，都没有=默认模板；渲染 {model}/{cwd}
 function buildSysPrompt(cwd: string, model: string, providerId?: string): string {
   const st = loadSettings();
+  const lang = st?.app?.lang === "en" ? "en" : "zh"; // 界面语言→系统提示词走哪套默认模板
   const override = providerId ? st?.creds?.[providerId]?.systemPrompt : undefined;
   const custom = typeof override === "string" ? override : st?.systemPrompt;
-  let base = typeof custom === "string" ? renderPrompt(custom, cwd, model) : systemPrompt(cwd, model);
+  let base = typeof custom === "string" ? renderPrompt(custom, cwd, model) : systemPrompt(cwd, model, lang);
   // 记忆：始终告知可用 remember 工具，并附上已记住的内容(跨会话)
   const mem = loadMemory().trim();
   base +=
-    `\n\n## 长期记忆\n用户说“记住…/以后…/我喜欢…”或出现值得长期保留的信息(偏好、称呼、事实、项目背景)时，调用 remember 工具写入；它会在之后每次对话自动加载。`;
-  if (mem) base += `\n\n已记住（需主动遵守/参考）：\n${mem}`;
+    lang === "en"
+      ? `\n\n## Long-term memory\nWhen the user says "remember…/from now on…/I prefer…", or shares info worth keeping long-term (preferences, how to address them, facts, project background), call the remember tool; it auto-loads into every future conversation.`
+      : `\n\n## 长期记忆\n用户说“记住…/以后…/我喜欢…”或出现值得长期保留的信息(偏好、称呼、事实、项目背景)时，调用 remember 工具写入；它会在之后每次对话自动加载。`;
+  if (mem) base += lang === "en" ? `\n\nRemembered (follow/refer to actively):\n${mem}` : `\n\n已记住（需主动遵守/参考）：\n${mem}`;
   // 本地知识网络（Brain）：概念化的项目/部署知识，按需 recall；提示词可在设置里覆盖。
   // 关掉「脑网络」或非会员：不注入说明、不追加概念目录(brain_* 工具也在别处一并停掉)。
   if (brainAvailable(st)) {
@@ -928,7 +931,9 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
   base += typeof st?.secretsPrompt === "string" ? st.secretsPrompt : secrets.SECRETS_SYSTEM_NOTE;
   // 与用户交互：需要用户拍板时必须弹选择框(强引导，否则模型习惯用文字罗列)
   base +=
-    `\n\n## 与用户交互（务必遵守）\n每当你要让用户在几个明确选项里做选择、确认或拍板——例如“走方案A还是B”“删哪个文件”“要不要继续”“选哪个分支”——你**必须调用 ask_user 工具**弹出可点击选择框，**禁止**在正文里用“方案A/方案B”“1. …2. …”这类文字罗列选项让用户打字。单选/多选/一次多问都支持。只有当答案是自由文本(不是从选项里挑)时，才在正文直接问。这条优先于你平时“用文字提问”的习惯。`;
+    lang === "en"
+      ? `\n\n## Interacting with the user (must follow)\nWhenever you need the user to choose, confirm, or decide among a few concrete options — e.g. "approach A or B", "which file to delete", "continue or not", "which branch" — you **must call the ask_user tool** to show clickable choices. **Do not** list options in prose like "Option A / Option B" or "1. … 2. …" and make the user type. Single-select, multi-select, and multiple questions at once are supported. Only ask in prose when the answer is free text (not picked from options). This overrides your usual habit of asking in prose.`
+      : `\n\n## 与用户交互（务必遵守）\n每当你要让用户在几个明确选项里做选择、确认或拍板——例如“走方案A还是B”“删哪个文件”“要不要继续”“选哪个分支”——你**必须调用 ask_user 工具**弹出可点击选择框，**禁止**在正文里用“方案A/方案B”“1. …2. …”这类文字罗列选项让用户打字。单选/多选/一次多问都支持。只有当答案是自由文本(不是从选项里挑)时，才在正文直接问。这条优先于你平时“用文字提问”的习惯。`;
   return base;
 }
 
@@ -2089,7 +2094,7 @@ ipcMain.handle("settings:get", () => ({
   settings: loadSettings(),
   backend: backendLabel,
   model: modelLabel,
-  defaultPrompt: DEFAULT_SYSTEM_PROMPT, // 供设置页显示"未自定义时的默认提示词"
+  defaultPrompt: loadSettings()?.app?.lang === "en" ? DEFAULT_SYSTEM_PROMPT_EN : DEFAULT_SYSTEM_PROMPT, // 供设置页显示"未自定义时的默认提示词"(跟随界面语言)
   defaultBrainPrompt: DEFAULT_BRAIN_NOTE, // 脑网络说明默认(知识网络设置页显示/恢复默认)
   defaultSecretsPrompt: secrets.SECRETS_SYSTEM_NOTE, // 密钥说明默认(密钥设置页显示/恢复默认)
 }));

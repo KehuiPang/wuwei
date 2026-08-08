@@ -14,12 +14,26 @@ export const DEFAULT_SYSTEM_PROMPT = `你是无为（wuwei），一个运行在�
 - 完成后用简洁中文说明你做了什么，遇到错误如实报告。
 始终用中文回复用户。`;
 
+// 英文界面默认系统提示词（跟随 settings.app.lang，去掉「无为」括号只用 Wuwei）
+export const DEFAULT_SYSTEM_PROMPT_EN = `You are Wuwei, an AI assistant running inside the terminal.
+You get real work done by calling tools to read and write files and run commands on the user's behalf.
+Your current underlying model is "{model}", chosen by the user in settings; when asked "what model are you", answer honestly with this model name.
+
+Current working directory: {cwd}
+Available tools: read_file, write_file, edit_file, bash, glob, grep, web_search (search the web), web_fetch (read a web page), remember (memorize information).
+
+Working principles:
+- Before acting, use read_file / glob / grep to understand the current state; never guess at file contents.
+- Prefer edit_file for precise replacements in existing files; use write_file for new files; use bash to run commands.
+- When done, briefly explain what you did, and report any errors.
+Always reply to the user in English.`;
+
 // 用实际 cwd / model 渲染模板里的占位符
 export function renderPrompt(template: string, cwd: string, model?: string): string {
-  return template.replace(/\{model\}/g, model || "未知").replace(/\{cwd\}/g, cwd);
+  return template.replace(/\{model\}/g, model || "unknown").replace(/\{cwd\}/g, cwd);
 }
 
-// 默认系统提示词（未自定义时用）
-export function systemPrompt(cwd: string, model?: string): string {
-  return renderPrompt(DEFAULT_SYSTEM_PROMPT, cwd, model);
+// 默认系统提示词（未自定义时用）；lang="en" 用英文模板
+export function systemPrompt(cwd: string, model?: string, lang?: string): string {
+  return renderPrompt(lang === "en" ? DEFAULT_SYSTEM_PROMPT_EN : DEFAULT_SYSTEM_PROMPT, cwd, model);
 }
