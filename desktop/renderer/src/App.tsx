@@ -1953,6 +1953,7 @@ export function App() {
   const [appVer, setAppVer] = useState("");
   const [updateReady, setUpdateReady] = useState<{ version: string; notes: string } | null>(null);
   const [updateMsg, setUpdateMsg] = useState(""); // 「检查中/已是最新/发现新版下载中…」等提示
+  const [hasUpdate, setHasUpdate] = useState(false); // 有新版可用(小红点标志)：发现新版即 true
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -2351,8 +2352,9 @@ export function App() {
   useEffect(() => {
     window.wuwei.getAppVersion().then(setAppVer).catch(() => {});
     const off = window.wuwei.onEvent((ch, p: any) => {
-      // 自动下载不打扰用户；下载好了才弹「升级」提示
-      if (ch === "evt:update-downloaded") setUpdateReady({ version: p?.version || "", notes: p?.notes || "" });
+      // 自动下载不打扰用户，只在「更新」项标小红点；下载好了才弹「升级」提示
+      if (ch === "evt:update-available") setHasUpdate(true);
+      else if (ch === "evt:update-downloaded") { setHasUpdate(true); setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); }
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2368,7 +2370,7 @@ export function App() {
     setShowAcctMenu(false); // 关菜单，结果用居中弹窗显示
     setUpdateMsg(lang === "en" ? "Checking for updates…" : "正在检查更新…");
     const r = await window.wuwei.checkUpdate();
-    if (r.available) setUpdateMsg(lang === "en" ? `New version v${r.version} found — downloading in the background. You'll be prompted to update when it's ready.` : `发现新版本 v${r.version}，正在后台下载，下载完成会提示你升级。`);
+    if (r.available) { setHasUpdate(true); setUpdateMsg(lang === "en" ? `New version v${r.version} found — downloading in the background. You'll be prompted to update when it's ready.` : `发现新版本 v${r.version}，正在后台下载，下载完成会提示你升级。`); }
     else setUpdateMsg(r.error ? (lang === "en" ? "Can't check updates right now (dev build or no update source)." : "暂时无法检查更新（开发版或未配置更新源）。") : (lang === "en" ? `You're on the latest version (v${appVer}).` : `已是最新版本（v${appVer}）。`));
   }
 
@@ -3526,17 +3528,19 @@ export function App() {
                                 </svg>
                                 {t("menu.contactSupport", "联系客服")}
                               </button>
-                              {/* 帮助 · 检查更新：显示当前版本号，点击查新版(有则后台下载，好了弹升级提示) */}
-                              <button className="acct-it" onClick={() => (updateReady ? setUpdateReady(updateReady) : checkUpdateNow())}>
+                              {/* 帮助 · 检查更新：平时只显「更新」，有新版才标小红点；点击弹窗看结果/版本信息 */}
+                              <button className="acct-it" onClick={() => (updateReady ? (setShowAcctMenu(false), setUpdateReady(updateReady)) : checkUpdateNow())}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                   <circle cx="12" cy="12" r="9" />
                                   <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 2.5" />
                                   <circle cx="12" cy="16.5" r="0.5" fill="currentColor" />
                                 </svg>
                                 <span style={{ flex: 1, textAlign: "left", whiteSpace: "nowrap" }}>{lang === "en" ? "Updates" : "更新"}</span>
-                                <span style={{ fontSize: 11, opacity: 0.55, whiteSpace: "nowrap", flex: "0 0 auto" }}>
-                                  {updateReady ? `v${updateReady.version}↑` : (appVer ? `v${appVer}` : "")}
-                                </span>
+                                {hasUpdate && (
+                                  <span style={{ flex: "0 0 auto", fontSize: 10, fontWeight: 700, color: "#fff", background: "#E5484D", borderRadius: 999, padding: "1px 6px", whiteSpace: "nowrap" }}>
+                                    {lang === "en" ? "new" : "新"}
+                                  </span>
+                                )}
                               </button>
                               <button
                                 className="acct-it danger"
