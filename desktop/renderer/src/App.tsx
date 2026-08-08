@@ -762,27 +762,27 @@ function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack
   );
 }
 // 脑网络功能介绍弹窗（会员专享）：欢迎页案例卡 / 非会员点灰置脑网络菜单时弹出。
-function BrainIntroModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrade: () => void }) {
+function BrainIntroModal({ onClose, onUpgrade, t }: { onClose: () => void; onUpgrade: () => void; t: T }) {
   const feats: [React.ReactNode, string, string][] = [
     [
       <><path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" /><path d="M12 7v12" /></>,
-      "持续学习 · 长期记忆",
-      "模拟人脑，把聊天里有价值的概念与经验自动沉淀进脑网络",
+      t("pay.brain.f1t", "持续学习 · 长期记忆"),
+      t("pay.brain.f1s", "模拟人脑，把聊天里有价值的概念与经验自动沉淀进脑网络"),
     ],
     [
       <><path d="M9 12h6" /><path d="M8 8a4 4 0 0 0 0 8h1" /><path d="M16 8a4 4 0 0 1 0 8h-1" /></>,
-      "跨对话自动调用",
-      "下次自动调用你的经验与记忆，不必重复交代",
+      t("pay.brain.f2t", "跨对话自动调用"),
+      t("pay.brain.f2s", "下次自动调用你的经验与记忆，不必重复交代"),
     ],
     [
       <><path d="M3 17l6-6 4 4 8-8" /><path d="M17 7h4v4" /></>,
-      "越用越懂你",
-      "用得越久，脑网络越丰富，无为越理解你",
+      t("pay.brain.f3t", "越用越懂你"),
+      t("pay.brain.f3s", "用得越久，脑网络越丰富，无为越理解你"),
     ],
     [
       <><path d="M6.5 8a3.5 3.5 0 1 0 0 7c2.5 0 3-2 5.5-3.5S17 8 19.5 8a3.5 3.5 0 1 1 0 7c-2.5 0-3-2-5.5-3.5S9 8 6.5 8Z" /></>,
-      "突破上下文限制",
-      "记忆不受单次对话长度限制，越用你的脑网络越有价值",
+      t("pay.brain.f4t", "突破上下文限制"),
+      t("pay.brain.f4s", "记忆不受单次对话长度限制，越用你的脑网络越有价值"),
     ],
   ];
   return (
@@ -798,8 +798,8 @@ function BrainIntroModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrad
               <circle cx="11" cy="15" r="1" fill="#C05F3C" stroke="none" />
             </svg>
           </div>
-          <h2>脑网络 · 无为的长期记忆</h2>
-          <p>像人脑一样持续学习你的对话，把有价值的经验沉淀下来，跨对话自动调用——用得越久，无为越懂你。</p>
+          <h2>{t("pay.brain.title", "脑网络 · 无为的长期记忆")}</h2>
+          <p>{t("pay.brain.sub", "像人脑一样持续学习你的对话，把有价值的经验沉淀下来，跨对话自动调用——用得越久，无为越懂你。")}</p>
         </div>
         <div style={{ padding: "4px 30px 20px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 18 }}>
@@ -816,13 +816,13 @@ function BrainIntroModal({ onClose, onUpgrade }: { onClose: () => void; onUpgrad
             ))}
           </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 600, color: "#A97F2E", background: "rgba(201,162,75,.12)", padding: "4px 12px", borderRadius: 20, marginBottom: 14 }}>
-            <PaySpark size={12} /> 会员专享功能
+            <PaySpark size={12} /> {t("pay.brain.membersOnly", "会员专享功能")}
           </div>
           <button
             onClick={onUpgrade}
             style={{ width: "100%", padding: "12px", borderRadius: 12, border: "none", background: "linear-gradient(135deg,#c9a24b,#a97f2e)", color: "#fff", fontSize: 14.5, fontWeight: 700, cursor: "pointer", boxShadow: "0 10px 22px -8px rgba(169,127,46,.6)" }}
           >
-            开通 Pro 解锁脑网络
+            {t("pay.brain.cta", "开通 Pro 解锁脑网络")}
           </button>
         </div>
       </div>
@@ -4695,6 +4695,7 @@ export function App() {
       {/* 脑网络功能介绍：欢迎页案例 / 非会员点灰置菜单弹出；点开通跳升级 Pro */}
       {showBrainIntro && (
         <BrainIntroModal
+          t={t}
           onClose={() => setShowBrainIntro(false)}
           onUpgrade={() => {
             setShowBrainIntro(false);
