@@ -2018,8 +2018,8 @@ export function App() {
       push({
         type: "notice",
         text: ok
-          ? "✓ Codex 授权成功，已切到 Codex 订阅，可以直接对话了。"
-          : "Codex 授权未完成（取消/超时/端口 1455 被占）。若本机在跑 codex CLI 请先关掉再试。",
+          ? (lang === "en" ? "✓ Codex authorized — switched to the Codex subscription, ready to chat." : "✓ Codex 授权成功，已切到 Codex 订阅，可以直接对话了。")
+          : (lang === "en" ? "Codex authorization didn't complete (cancelled/timeout/port 1455 in use). If codex CLI is running locally, close it and retry." : "Codex 授权未完成（取消/超时/端口 1455 被占）。若本机在跑 codex CLI 请先关掉再试。"),
       });
     } finally {
       setCodexBusy(false);
@@ -2174,12 +2174,12 @@ export function App() {
 
   // 连通状态检测：更新状态灯（红/黄/绿）
   async function runConnCheck() {
-    setConn({ status: "checking", reason: "检测连通状态…" });
+    setConn({ status: "checking", reason: lang === "en" ? "Checking connection…" : "检测连通状态…" });
     try {
       const r = await window.wuwei.checkConn();
       setConn(r);
     } catch {
-      setConn({ status: "yellow", reason: "检测失败，请重试。" });
+      setConn({ status: "yellow", reason: lang === "en" ? "Check failed, please retry." : "检测失败，请重试。" });
     }
   }
 
@@ -2204,24 +2204,24 @@ export function App() {
       const res = await window.wuwei.testKey(key);
       if (res.ok) {
         await saveApiKeyToSettings(key);
-        push({ type: "notice", text: "✓ API Key 已验证通过并设置完成，可以直接使用了。" });
+        push({ type: "notice", text: lang === "en" ? "✓ API Key verified and set — ready to use." : "✓ API Key 已验证通过并设置完成，可以直接使用了。" });
         setNeedAuth(false);
         setAuthDismissed(false);
         setApiKeyStep("idle");
         setApiKeyInput("");
-        setConn({ status: "green", reason: "已连通，可随时使用。" });
+        setConn({ status: "green", reason: lang === "en" ? "Connected, ready anytime." : "已连通，可随时使用。" });
         return true;
       }
       if (keyRejected(res.reason)) {
         // 真·鉴权失败：Key 无效，不保存
-        if (!silent) push({ type: "notice", text: "✗ 这个 Key 无效（鉴权失败）：" + res.reason });
+        if (!silent) push({ type: "notice", text: (lang === "en" ? "✗ This key is invalid (auth failed): " : "✗ 这个 Key 无效（鉴权失败）：") + res.reason });
         return false;
       }
       // Key 有效但请求未通过(余额/额度/账单等)：照样保存，给提醒；灯转黄
       await saveApiKeyToSettings(key);
       push({
         type: "notice",
-        text: "⚠ Key 已保存（本身有效），但请求未通过，多为账户余额/额度问题，非 Key 错误：" + res.reason,
+        text: (lang === "en" ? "⚠ Key saved (valid), but the request didn't go through — usually an account balance/quota issue, not a key error: " : "⚠ Key 已保存（本身有效），但请求未通过，多为账户余额/额度问题，非 Key 错误：") + res.reason,
       });
       setNeedAuth(false);
       setAuthDismissed(false);
@@ -2259,7 +2259,7 @@ export function App() {
       baseUrl: undefined,
       creds,
     });
-    push({ type: "notice", text: "✓ Claude 订阅已授权，请重新发送刚才的消息。" });
+    push({ type: "notice", text: lang === "en" ? "✓ Claude subscription authorized — please resend your last message." : "✓ Claude 订阅已授权，请重新发送刚才的消息。" });
     setNeedAuth(false); // 授权完成，收起授权条
     setAuthDismissed(false);
     setOauthStep("idle");
@@ -2272,7 +2272,7 @@ export function App() {
     try {
       const tok = await window.wuwei.claudeLogin();
       if (tok) await saveClaudeToken(tok);
-      else push({ type: "notice", text: "授权未完成（已取消/超时），可重试。" });
+      else push({ type: "notice", text: lang === "en" ? "Authorization didn't complete (cancelled/timeout), you can retry." : "授权未完成（已取消/超时），可重试。" });
     } finally {
       setAuthBusy(false);
     }
@@ -2285,7 +2285,7 @@ export function App() {
     setOauthStep("awaiting-code");
     push({
       type: "notice",
-      text: "已在浏览器打开授权页：登录并点“同意”后，复制页面显示的授权码，回来点「完成授权」（会自动读剪贴板）。",
+      text: lang === "en" ? "Opened the authorization page in your browser: sign in and click \"Approve\", copy the code shown, come back and click \"Complete authorization\" (clipboard auto-read)." : "已在浏览器打开授权页：登录并点“同意”后，复制页面显示的授权码，回来点「完成授权」（会自动读剪贴板）。",
     });
   }
 
@@ -2297,12 +2297,12 @@ export function App() {
       let code = codeInput.trim();
       if (!code) code = (await window.wuwei.readClipboard()).trim();
       if (!code) {
-        push({ type: "notice", text: "没读到授权码：请先在浏览器复制授权码，或粘贴进输入框再点完成。" });
+        push({ type: "notice", text: lang === "en" ? "No code found: copy the authorization code in the browser first, or paste it into the box, then click complete." : "没读到授权码：请先在浏览器复制授权码，或粘贴进输入框再点完成。" });
         return;
       }
       const tok = await window.wuwei.claudeOauthExchange(code);
       if (tok) await saveClaudeToken(tok);
-      else push({ type: "notice", text: "授权码无效或已过期，请重新点「用浏览器登录」再试一次。" });
+      else push({ type: "notice", text: lang === "en" ? "The code is invalid or expired — click \"Sign in via browser\" and try again." : "授权码无效或已过期，请重新点「用浏览器登录」再试一次。" });
     } finally {
       setAuthBusy(false);
     }
@@ -2405,7 +2405,7 @@ export function App() {
           const askSid = payload.sid || currentIdRef.current;
           setAsks((m) => ({ ...m, [askSid]: { id: payload.id, questions: payload.questions || [] } }));
           if (askSid !== currentIdRef.current) {
-            const title = sessionsRef.current.find((s) => s.id === askSid)?.title || "其它会话";
+            const title = sessionsRef.current.find((s) => s.id === askSid)?.title || (lang === "en" ? "Another chat" : "其它会话");
             setAskToasts((t) => [...t.filter((x) => x.sid !== askSid), { askId: payload.id, sid: askSid, title }]);
             // 自动消失：按设置的开关与秒数(关掉则常驻，直到点开/✕忽略)
             if (askToastAutoRef.current) {
@@ -2457,17 +2457,17 @@ export function App() {
           break;
         case "evt:compact":
           if (payload.sid !== currentIdRef.current) break;
-          push({ type: "notice", text: `上下文已压缩：${payload.before} → ${payload.after} 条消息` });
+          push({ type: "notice", text: lang === "en" ? `Context compacted: ${payload.before} → ${payload.after} messages` : `上下文已压缩：${payload.before} → ${payload.after} 条消息` });
           break;
         case "evt:done":
           if (payload.sid === currentIdRef.current) thinkStartRef.current = null;
           setNeedAuth(false); // 成功完成一轮=鉴权已通，收起授权条
-          setConn({ status: "green", reason: "已连通，可随时使用。" }); // 成功=绿灯
+          setConn({ status: "green", reason: lang === "en" ? "Connected, ready anytime." : "已连通，可随时使用。" }); // 成功=绿灯
           break;
         case "evt:stopped":
           if (payload.sid !== currentIdRef.current) break;
           thinkStartRef.current = null;
-          push({ type: "notice", text: "已停止" });
+          push({ type: "notice", text: lang === "en" ? "Stopped" : "已停止" });
           break;
         case "evt:error": {
           if (payload.sid && payload.sid !== currentIdRef.current) break;
@@ -2543,14 +2543,14 @@ export function App() {
   }, [showUsage, curProviderId]);
   const doConsumeReset = async (creditId: string) => {
     setResetConfirm(null);
-    setResetMsg("重置中…");
+    setResetMsg(lang === "en" ? "Resetting…" : "重置中…");
     const r = await window.wuwei.codexConsumeReset(creditId);
     if (r.ok) {
-      setResetMsg("✅ 已重置！发一条消息后额度会刷新。");
+      setResetMsg(lang === "en" ? "✅ Reset! Quota refreshes after you send a message." : "✅ 已重置！发一条消息后额度会刷新。");
       const rr = await window.wuwei.codexResetCredits();
       if (rr.ok) setCodexResets({ availableCount: rr.availableCount ?? 0, credits: rr.credits ?? [] });
     } else {
-      setResetMsg("重置失败：" + (r.error || ""));
+      setResetMsg((lang === "en" ? "Reset failed: " : "重置失败：") + (r.error || ""));
     }
   };
 
@@ -2711,7 +2711,7 @@ export function App() {
       return;
     }
     if (curPreset?.hosted && wuwei && wuwei.coin.balance <= 0) {
-      void refreshWuweiForShortage("无为币余额不足：请充值后再使用无为托管模型。");
+      void refreshWuweiForShortage(lang === "en" ? "Out of credits: top up to keep using Wuwei hosted models." : "无为币余额不足：请充值后再使用无为托管模型。");
       return;
     }
     setSuggestion(""); // 发送后清掉旧的下一步建议(回复完会重新生成)
@@ -2826,7 +2826,7 @@ export function App() {
     RECENT_BUCKETS.indexOf(b) >= 0 ? RECENT_BUCKETS.indexOf(b) : 100; // 具体月/年桶排后面，用桶内最新时间兜底排序
   // 会话所属分组(按当前模式)
   const groupOf = (s: SessionMeta): string =>
-    groupMode === "date" ? dateBucket(s.updatedAt) : groupMode === "project" ? s.project || "未归类" : s.group || "";
+    groupMode === "date" ? dateBucket(s.updatedAt) : groupMode === "project" ? s.project || (lang === "en" ? "Uncategorized" : "未归类") : s.group || "";
 
   // 拖拽会话到某会话上→插入并写 order；手动模式下跨组=移动分组
   function dropOnSession(e: React.DragEvent, target: SessionMeta, list: SessionMeta[]) {
@@ -3789,7 +3789,7 @@ export function App() {
                 } else {
                   push({
                     type: "notice",
-                    text: "这条已开始处理，无法撤回；可按 Esc 停止后再撤回编辑。",
+                    text: lang === "en" ? "This message is already being processed and can't be retracted; press Esc to stop, then undo to edit." : "这条已开始处理，无法撤回；可按 Esc 停止后再撤回编辑。",
                   });
                 }
               } else {
@@ -4881,7 +4881,7 @@ export function App() {
                 expire: fmtDate(addMonths(new Date(), 1)), // 月付：+1 个月
                 giftCoins: o.plan.coins,
                 signin: o.plan.signin,
-                perks: PRO_FEATS.map(([tt]) => tt), // 各档同样的会员权益
+                perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt), // 各档同样的会员权益
                 saved: o.plan.saved || undefined,
                 order: genOrder(),
               });
@@ -6168,7 +6168,7 @@ function renderDiff(item: Extract<Item, { type: "tool" }>) {
 
 function clip(text: string, lines = 12): string {
   const arr = text.split("\n");
-  return arr.length > lines ? arr.slice(0, lines).join("\n") + "\n…（已截断）" : text;
+  return arr.length > lines ? arr.slice(0, lines).join("\n") + (getLang() === "en" ? "\n…(truncated)" : "\n…（已截断）") : text;
 }
 
 type Kind = "codex" | "anthropic-oauth" | "anthropic-apikey" | "openai";
