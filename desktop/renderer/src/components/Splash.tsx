@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getLang, makeT } from "../i18n";
 
 /**
  * 无为 · 开屏启动动画（整屏遮罩）
@@ -16,11 +17,12 @@ import React, { useEffect, useState } from "react";
  */
 
 const SPLASH_KEY = "wuwei_splash_shown";
-const HOLD_MS = 2400; // 动画定格保持后开始淡出
+const HOLD_MS = 5500; // 动画定格保持后开始淡出（描边2.8s+朱点+文字+底线总计约5.4s）
 const HOLD_MS_REDUCED = 500; // 降级：几乎直接进主界面
 const FADE_MS = 560; // 淡出时长（与 CSS transition 对齐）
 
 export function Splash() {
+  const t = makeT(getLang());
   // 首次挂载即决定：本次启动没播过才播（避免 HMR / 重渲染复播）
   const [phase, setPhase] = useState<"play" | "fade" | "done">(() => {
     try {
@@ -54,7 +56,7 @@ export function Splash() {
     <div
       className={"wsplash" + (phase === "fade" ? " wsplash--out" : "")}
       role="img"
-      aria-label="无为一念之门圆相 · 启动动画"
+      aria-label={t("splash.aria")}
     >
       <style>{SPLASH_CSS}</style>
       <section className="wsplash-lockup">
@@ -68,8 +70,8 @@ export function Splash() {
         </svg>
 
         <div className="wsplash-word">
-          <h1 className="wsplash-brand">无为</h1>
-          <p className="wsplash-slogan">一念既出，万事自成。</p>
+          <h1 className="wsplash-brand">{t("splash.brand")}</h1>
+          <p className="wsplash-slogan">{t("splash.slogan")}</p>
         </div>
         <div className="wsplash-line" aria-hidden="true" />
       </section>
@@ -127,7 +129,8 @@ const SPLASH_CSS = `
   filter: drop-shadow(0 22px 44px rgba(0, 0, 0, 0.26));
 }
 
-/* 官方主标几何：82r 圆弧 + 收笔一点朱，整体 -8° 微倾 */
+/* 官方主标几何：82r 圆弧 + 收笔一点朱，整体 -8° 微倾
+ * 书法运笔版：起笔触纸(0.3s渐入) → 慢描2.8s(蓄势→运笔→顿笔) → 收笔点朱 */
 .wsplash-enso {
   fill: none;
   stroke: #F4F6F8;
@@ -135,7 +138,10 @@ const SPLASH_CSS = `
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
-  animation: wsplash-draw 1.28s cubic-bezier(0.32, 0.02, 0.12, 1) 0.15s forwards;
+  opacity: 0;
+  animation:
+    wsplash-touch 0.3s ease-out 0.2s forwards,
+    wsplash-draw 2.8s cubic-bezier(0.18, 0.04, 0.28, 1) 0.2s forwards;
 }
 
 .wsplash-spark {
@@ -144,7 +150,7 @@ const SPLASH_CSS = `
   transform: scale(0.2);
   transform-origin: 195.48px 150.04px;
   transform-box: view-box;
-  animation: wsplash-spark 0.62s cubic-bezier(0.2, 0.9, 0.2, 1) 1.28s forwards;
+  animation: wsplash-spark 0.6s cubic-bezier(0.2, 0.9, 0.2, 1) 2.85s forwards;
 }
 
 .wsplash-word { display: grid; justify-items: center; gap: 12px; }
@@ -158,7 +164,7 @@ const SPLASH_CSS = `
   line-height: 1;
   opacity: 0;
   transform: translateY(12px);
-  animation: wsplash-reveal 0.82s ease-out 1.18s forwards;
+  animation: wsplash-reveal 0.82s ease-out 3.2s forwards;
 }
 
 .wsplash-slogan {
@@ -169,7 +175,7 @@ const SPLASH_CSS = `
   line-height: 1.6;
   opacity: 0;
   transform: translateY(10px);
-  animation: wsplash-reveal 0.9s ease-out 1.38s forwards;
+  animation: wsplash-reveal 0.9s ease-out 3.78s forwards;
 }
 .wsplash-slogan::before,
 .wsplash-slogan::after {
@@ -187,12 +193,18 @@ const SPLASH_CSS = `
   background: linear-gradient(90deg, transparent, rgba(111, 159, 173, 0.45), transparent);
   opacity: 0;
   transform: scaleX(0.4);
-  animation: wsplash-quiet 0.8s ease-out 1.7s forwards;
+  animation: wsplash-quiet 0.8s ease-out 4.5s forwards;
 }
 
+@keyframes wsplash-touch {
+  0%   { opacity: 0; }
+  100% { opacity: 0.35; }
+}
 @keyframes wsplash-draw {
-  0%   { stroke-dashoffset: 1; opacity: 0.32; }
-  22%  { opacity: 1; }
+  0%   { stroke-dashoffset: 1; opacity: 0.35; }
+  8%   { stroke-dashoffset: 0.92; opacity: 1; }
+  55%  { stroke-dashoffset: 0.4; }
+  85%  { stroke-dashoffset: 0.08; }
   100% { stroke-dashoffset: 0; opacity: 1; }
 }
 @keyframes wsplash-spark {
