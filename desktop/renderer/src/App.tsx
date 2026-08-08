@@ -543,7 +543,7 @@ const WECHAT_PAY_ENABLED = false;
 // 客服微信号（二维码 WECHAT_CS_QR 从 ./wechatCsQr 引入，默认显示大成微信码）。
 const WECHAT_CS_ID = "dacheng8803";
 // 联系客服弹窗（共享）：支付遇到问题 / 账号菜单都可打开。扫码或搜号加客服微信，加不上可点「直接留言」进留言表单。
-function ContactSupportModal({ onClose, onLeaveMessage }: { onClose: () => void; onLeaveMessage: () => void }) {
+function ContactSupportModal({ onClose, onLeaveMessage, t }: { onClose: () => void; onLeaveMessage: () => void; t: T }) {
   const [copied, setCopied] = useState(false);
   const copyId = () => {
     void navigator.clipboard
@@ -560,11 +560,11 @@ function ContactSupportModal({ onClose, onLeaveMessage }: { onClose: () => void;
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 4 }}>
           <PayEnso size={44} />
-          <h2>联系客服</h2>
+          <h2>{t("pay.support.title", "联系客服")}</h2>
         </div>
         <div style={{ padding: "0 30px 28px" }}>
         <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 14px" }}>
-          遇到问题？扫码或搜索微信号，添加客服「大成」
+          {t("pay.support.hint", "遇到问题？扫码或搜索微信号，添加客服「大成」")}
         </p>
         <div
           style={{
@@ -581,9 +581,9 @@ function ContactSupportModal({ onClose, onLeaveMessage }: { onClose: () => void;
           }}
         >
           {WECHAT_CS_QR ? (
-            <img src={WECHAT_CS_QR} alt="客服微信二维码" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+            <img src={WECHAT_CS_QR} alt={t("pay.support.qrAlt", "客服微信二维码")} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           ) : (
-            <span style={{ fontSize: 12, color: "#8A93A0" }}>客服微信二维码</span>
+            <span style={{ fontSize: 12, color: "#8A93A0" }}>{t("pay.support.qrAlt", "客服微信二维码")}</span>
           )}
         </div>
         <div
@@ -598,21 +598,21 @@ function ContactSupportModal({ onClose, onLeaveMessage }: { onClose: () => void;
           }}
         >
           <span style={{ fontSize: 13, color: "var(--text)" }}>
-            微信号 <b style={{ letterSpacing: 0.5 }}>{WECHAT_CS_ID}</b>
+            {t("pay.support.wechatId", "微信号")} <b style={{ letterSpacing: 0.5 }}>{WECHAT_CS_ID}</b>
           </span>
           <button
             onClick={copyId}
             style={{ border: "none", background: "var(--spark)", color: "#fff", fontSize: 12, borderRadius: 7, padding: "4px 10px", cursor: "pointer" }}
           >
-            {copied ? "已复制" : "复制"}
+            {copied ? t("pay.support.copied", "已复制") : t("pay.support.copy", "复制")}
           </button>
         </div>
         <p style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
-          加不上微信？
+          {t("pay.support.cantAddPre", "加不上微信？")}
           <span onClick={onLeaveMessage} style={{ color: "var(--spark)", cursor: "pointer", fontWeight: 600 }}>
-            直接留言
+            {t("pay.support.leaveLink", "直接留言")}
           </span>
-          ，客服会尽快回复你。
+          {t("pay.support.cantAddPost", "，客服会尽快回复你。")}
         </p>
         </div>
       </div>
@@ -621,7 +621,7 @@ function ContactSupportModal({ onClose, onLeaveMessage }: { onClose: () => void;
 }
 
 // 留言表单：加不上微信时走这里。留言内容 + 可粘贴图片 + 联系方式 → 提交到后端（wuwei-site 留言管理可见）。
-function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: () => void }) {
+function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack: () => void; t: T }) {
   const [msg, setMsg] = useState("");
   const [contact, setContact] = useState("");
   const [images, setImages] = useState<string[]>([]); // data URL 缩略
@@ -642,7 +642,7 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
     }
   };
   const submit = async () => {
-    if (!msg.trim()) return setErr("请先填写留言内容");
+    if (!msg.trim()) return setErr(t("pay.msg.needContent", "请先填写留言内容"));
     setPhase("sending");
     setErr("");
     try {
@@ -650,11 +650,11 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
       if (r?.ok) setPhase("done");
       else {
         setPhase("edit");
-        setErr(r?.error || `提交失败，请稍后重试，或直接加客服微信 ${WECHAT_CS_ID}`);
+        setErr(r?.error || t("pay.msg.submitFail", "提交失败，请稍后重试，或直接加客服微信 {id}").replace("{id}", WECHAT_CS_ID));
       }
     } catch {
       setPhase("edit");
-      setErr(`提交失败，请稍后重试，或直接加客服微信 ${WECHAT_CS_ID}`);
+      setErr(t("pay.msg.submitFail", "提交失败，请稍后重试，或直接加客服微信 {id}").replace("{id}", WECHAT_CS_ID));
     }
   };
   const inputStyle: React.CSSProperties = {
@@ -675,20 +675,20 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 4 }}>
           <PayEnso size={40} />
-          <h2>留言反馈</h2>
+          <h2>{t("pay.msg.title", "留言反馈")}</h2>
         </div>
         <div style={{ padding: "0 30px 28px" }}>
           {phase === "done" ? (
             <div style={{ textAlign: "center", padding: "18px 0 6px" }}>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>✓ 留言已提交</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>{t("pay.msg.doneTitle", "✓ 留言已提交")}</div>
               <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.7, marginBottom: 18 }}>
-                我们已收到你的留言，客服会尽快通过你留的联系方式回复你。
+                {t("pay.msg.doneDesc", "我们已收到你的留言，客服会尽快通过你留的联系方式回复你。")}
               </div>
               <button
                 onClick={onClose}
                 style={{ width: "100%", padding: "10px", borderRadius: 10, border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
               >
-                完成
+                {t("pay.msg.done", "完成")}
               </button>
             </div>
           ) : (
@@ -697,7 +697,7 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}
                 onPaste={onPaste}
-                placeholder="描述你遇到的问题（可直接粘贴截图）…"
+                placeholder={t("pay.msg.placeholder", "描述你遇到的问题（可直接粘贴截图）…")}
                 rows={4}
                 style={{ ...inputStyle, resize: "vertical", minHeight: 90, marginBottom: 10, lineHeight: 1.6 }}
               />
@@ -709,7 +709,7 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
                         src={src}
                         alt=""
                         onClick={() => setPreview(src)}
-                        title="点击查看大图"
+                        title={t("pay.msg.viewLarge", "点击查看大图")}
                         style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "zoom-in" }}
                       />
                       <button
@@ -722,11 +722,11 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>可在上方文本框内粘贴图片，最多 4 张</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 12 }}>{t("pay.msg.imgHint", "可在上方文本框内粘贴图片，最多 4 张")}</div>
               <input
                 value={contact}
                 onChange={(e) => setContact(e.target.value)}
-                placeholder="联系方式（微信 / 手机 / 邮箱，方便客服回复）"
+                placeholder={t("pay.msg.contactPlaceholder", "联系方式（微信 / 手机 / 邮箱，方便客服回复）")}
                 style={{ ...inputStyle, marginBottom: 10 }}
               />
               {err && <div style={{ fontSize: 12, color: "#C0392B", marginBottom: 10, lineHeight: 1.5 }}>{err}</div>}
@@ -735,14 +735,14 @@ function LeaveMessageModal({ onClose, onBack }: { onClose: () => void; onBack: (
                   onClick={onBack}
                   style={{ flex: "0 0 auto", padding: "10px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "none", color: "var(--text-dim)", fontSize: 13, cursor: "pointer" }}
                 >
-                  返回
+                  {t("pay.msg.back", "返回")}
                 </button>
                 <button
                   onClick={submit}
                   disabled={phase === "sending"}
                   style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, cursor: phase === "sending" ? "default" : "pointer", opacity: phase === "sending" ? 0.7 : 1 }}
                 >
-                  {phase === "sending" ? "提交中…" : "提交留言"}
+                  {phase === "sending" ? t("pay.msg.sending", "提交中…") : t("pay.msg.submit", "提交留言")}
                 </button>
               </div>
             </>
@@ -4705,6 +4705,7 @@ export function App() {
       {/* 联系客服弹窗：支付遇到问题 / 账号菜单「联系客服」都可打开 */}
       {showSupport && (
         <ContactSupportModal
+          t={t}
           onClose={() => setShowSupport(false)}
           onLeaveMessage={() => {
             setShowSupport(false);
@@ -4715,6 +4716,7 @@ export function App() {
       {/* 留言表单：客服弹窗点「直接留言」进入；返回则回到客服弹窗 */}
       {showLeaveMsg && (
         <LeaveMessageModal
+          t={t}
           onClose={() => setShowLeaveMsg(false)}
           onBack={() => {
             setShowLeaveMsg(false);
