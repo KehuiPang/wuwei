@@ -3309,9 +3309,10 @@ export function App() {
                       (() => {
                         const tier = wuwei.membership?.tier ?? "free";
                         const isPro = tier !== "free";
-                        const tierLabel = lang === "en"
-                          ? (tier === "pro_year" ? "Pro yearly" : tier === "pro_month" ? "Pro monthly" : "Free")
-                          : (tier === "pro_year" ? "Pro 年付" : tier === "pro_month" ? "Pro 月付" : "免费版");
+                        // 徽标/会员条：主标只显 Pro / Free，档位(月付/年付)作小灰字，避免英文过长挤掉昵称
+                        const tierMain = tier === "free" ? (lang === "en" ? "Free" : "免费版") : "Pro";
+                        const tierQual = tier === "pro_year" ? (lang === "en" ? "yearly" : "年付") : tier === "pro_month" ? (lang === "en" ? "monthly" : "月付") : "";
+                        const tierLabel = tierMain + (tierQual ? " " + tierQual : "");
                         const exp = wuwei.membership?.expireAt;
                         const expStr = exp ? new Date(exp).toISOString().slice(0, 10) : "";
                         const bal = wuwei.coin.balance;
@@ -3335,7 +3336,8 @@ export function App() {
                                   <span className="acct-name">{wuwei.user.name || wuwei.user.email || "无为用户"}</span>
                                   <span className={"acct-tier " + (isPro ? "pro" : "free")}>
                                     {isPro && <Spark />}
-                                    {tierLabel}
+                                    {tierMain}
+                                    {tierQual && <span className="acct-tier-q">{tierQual}</span>}
                                   </span>
                                 </div>
                                 {wuwei.user.email && <div className="acct-mail">{wuwei.user.email}</div>}
@@ -3386,12 +3388,12 @@ export function App() {
                               <div className="acct-memb on">
                                 <div>
                                   <div className="acct-memb-ttl">
-                                    <Spark /> {tierLabel}{lang === "en" ? "" : "会员"}
+                                    <Spark /> {tierMain}{tierQual && <span className="acct-tier-q">{tierQual}</span>}
                                   </div>
                                   <div className="acct-memb-sub">
                                     {lang === "en"
-                                      ? (expStr ? `Expires ${expStr} · 10% off renewal` : "10% off renewal")
-                                      : (expStr ? expStr + " 到期 · 续费享 9 折" : "续费享 9 折")}
+                                      ? (expStr ? `Expires ${expStr} · 10% off` : "10% off renewal")
+                                      : (expStr ? expStr + " 到期 · 续费 9 折" : "续费享 9 折")}
                                   </div>
                                 </div>
                                 <button className="acct-renew" onClick={openPlan}>

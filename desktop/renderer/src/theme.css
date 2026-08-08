@@ -398,6 +398,9 @@ body {
   gap: 3px;
   flex: 0 0 auto;
 }
+/* tier 徽标里的档位小灰字（monthly/yearly/月付/年付），比主标小、半透明 */
+.acct-tier-q { font-size: 8.5px; font-weight: 600; opacity: 0.72; margin-left: 3px; letter-spacing: 0.2px; }
+.acct-memb-ttl .acct-tier-q { opacity: 0.7; }
 .acct-tier.free { background: var(--bg-soft); color: var(--text-muted); border: 1px solid var(--border); }
 .acct-tier.pro {
   background: linear-gradient(135deg, #c9a24b, #a97f2e);
