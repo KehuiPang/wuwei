@@ -1971,6 +1971,7 @@ export function App() {
   // 自动更新：版本号 + 检查态 + 新版就绪(已下载好，点即装)
   const [appVer, setAppVer] = useState("");
   const [updateReady, setUpdateReady] = useState<{ version: string; notes: string } | null>(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false); // 升级弹窗开关：药丸/菜单点击才开，下载好不再自动弹
   const [updateMsg, setUpdateMsg] = useState(""); // 「检查中/已是最新/发现新版下载中…」等提示
   const [hasUpdate, setHasUpdate] = useState(false); // 有新版可用(小红点标志)：发现新版即 true
   // 左下角「重启更新」药丸：新版下载好后常驻显示，点主体即装、点叉关闭；关掉的版本记 localStorage，同版本不再弹、更新的版本会重新出现
@@ -3350,47 +3351,46 @@ export function App() {
           const name =
             account.nickname || account.email || account.label || (account.loggedIn ? (lang === "en" ? "Signed in" : "已登录") : (lang === "en" ? "Not signed in" : "未登录"));
           return (
-            <div className="sidebar-foot">
-              {/* 「重启更新」药丸：仿 Claude Code，新版已下载好即常驻显示在账号上方；点主体=立即安装重启，点右侧叉=关闭(该版本不再提示) */}
+            <>
+              {/* 更新药丸：新版下载好即独立悬浮在账号分隔线之上（不属于账号边框）；点整卡=弹升级窗(不直接重启)，点右上角叉=关闭该版本不再提示 */}
               {updateReady && updateReady.version !== updateChipHidden && (
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    width: "100%",
-                    padding: "6px 8px",
-                    marginBottom: 6,
-                    borderRadius: 8,
-                    background: "rgba(192,95,60,0.12)",
-                    border: "1px solid rgba(192,95,60,0.55)",
-                  }}
-                >
-                  <button
-                    onClick={() => window.wuwei.installUpdate()}
-                    title={lang === "en" ? `Restart to install v${updateReady.version}` : `重启以安装新版本 v${updateReady.version}`}
-                    style={{ display: "flex", alignItems: "center", gap: 7, flex: 1, minWidth: 0, background: "none", border: "none", color: "#F4F6F8", cursor: "pointer", fontSize: 13, textAlign: "left", padding: 0 }}
+                <div style={{ padding: "0 10px", marginTop: 12, marginBottom: 10, position: "relative", zIndex: 1, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+                  <div
+                    className="update-chip"
+                    role="button"
+                    onClick={() => setShowUpdateModal(true)}
+                    title={lang === "en" ? `New version v${updateReady.version} available` : `发现新版本 v${updateReady.version}`}
                   >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C05F3C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "0 0 auto" }}>
-                      <path d="M21 12a9 9 0 1 1-3.5-7.1" />
-                      <path d="M21 4v5h-5" />
-                    </svg>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {lang === "en" ? "Relaunch to update" : "重启以更新"}
+                    <span className="update-chip__icon">
+                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M12 16.5V8" />
+                        <path d="M8.5 11.5 12 8l3.5 3.5" />
+                      </svg>
                     </span>
-                  </button>
-                  <button
-                    onClick={() => { const v = updateReady.version; setUpdateChipHidden(v); try { localStorage.setItem("wuwei_dismissed_update_chip", v); } catch {} }}
-                    title={lang === "en" ? "Dismiss" : "关闭"}
-                    aria-label={lang === "en" ? "Dismiss" : "关闭"}
-                    style={{ flex: "0 0 auto", display: "flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, background: "none", border: "none", color: "#9AA4AE", cursor: "pointer", padding: 0 }}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-                      <path d="M6 6l12 12M18 6L6 18" />
-                    </svg>
-                  </button>
+                    <span className="update-chip__text">
+                      <span className="update-chip__title">{lang === "en" ? "New version" : "发现新版本"}</span>
+                      <span className="update-chip__ver">v{updateReady.version}</span>
+                    </span>
+                    <span className="update-chip__arrow">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M9 6l6 6-6 6" />
+                      </svg>
+                    </span>
+                    <button
+                      className="update-chip__x"
+                      onClick={(e) => { e.stopPropagation(); const v = updateReady.version; setUpdateChipHidden(v); try { localStorage.setItem("wuwei_dismissed_update_chip", v); } catch {} }}
+                      title={lang === "en" ? "Dismiss" : "关闭"}
+                      aria-label={lang === "en" ? "Dismiss" : "关闭"}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               )}
+            <div className="sidebar-foot">
               {/* 订阅版入口（C2 占位）：默认隐藏，仅当后端 flags 含 "subscription" 才出现。
                   后台可按用户名/机器指纹对指定客户端单独放开——判定全在后端，客户端只渲染。 */}
               {showSubscription && (
@@ -3590,7 +3590,7 @@ export function App() {
                                 {t("menu.contactSupport", "联系客服")}
                               </button>
                               {/* 帮助 · 检查更新：平时只显「更新」，有新版才标小红点；点击弹窗看结果/版本信息 */}
-                              <button className="acct-it" onClick={() => (updateReady ? (setShowAcctMenu(false), setUpdateReady(updateReady)) : checkUpdateNow())}>
+                              <button className="acct-it" onClick={() => (updateReady ? (setShowAcctMenu(false), setShowUpdateModal(true)) : checkUpdateNow())}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                   <circle cx="12" cy="12" r="9" />
                                   <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 2.5" />
@@ -3742,6 +3742,7 @@ export function App() {
                 </>
               )}
             </div>
+            </>
           );
         })()}
         <div className="resizer" onMouseDown={startResize} />
@@ -4951,16 +4952,16 @@ export function App() {
           </div>
         </div>
       )}
-      {/* 新版已下载好：提示用户一键升级重启（含改进说明） */}
-      {updateReady && (
-        <div className="perm-overlay" onClick={() => setUpdateReady(null)}>
+      {/* 新版已下载好：点药丸/菜单才弹此窗，提示一键升级重启（含改进说明）。「稍后」只关弹窗，药丸保留 */}
+      {showUpdateModal && updateReady && (
+        <div className="perm-overlay" onClick={() => setShowUpdateModal(false)}>
           <div className="add-st-dialog" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <h3 style={{ marginTop: 0 }}>{lang === "en" ? `New version v${updateReady.version} is ready` : `新版本 v${updateReady.version} 已就绪`}</h3>
             <div className="s-note" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6, maxHeight: 240, overflow: "auto" }}>
               {updateReady.notes || (lang === "en" ? "Improvements and fixes. Update now to restart into the new version." : "包含改进与修复。点击升级将立即重启到新版本。")}
             </div>
             <div className="btns" style={{ marginTop: 16 }}>
-              <button onClick={() => setUpdateReady(null)}>{lang === "en" ? "Later" : "稍后"}</button>
+              <button onClick={() => setShowUpdateModal(false)}>{lang === "en" ? "Later" : "稍后"}</button>
               <button className="allow" onClick={() => window.wuwei.installUpdate()}>{lang === "en" ? "Update & restart" : "升级并重启"}</button>
             </div>
           </div>
