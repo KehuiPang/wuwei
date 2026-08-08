@@ -4237,7 +4237,7 @@ export function App() {
                 <>
                   <div className="mq-overlay" onClick={() => setShowProviderMenu(false)} />
                   <div className="mq-menu mq-menu-prov">
-                    <div className="mq-head">切换平台</div>
+                    <div className="mq-head">{lang === "en" ? "Switch provider" : "切换平台"}</div>
                     {providerList.map((p) => (
                       <button
                         key={p.id}
@@ -4276,8 +4276,8 @@ export function App() {
                       {hasMoreModels && (
                         <span style={{ display: "inline-flex", gap: 2, flex: "0 0 auto" }}>
                           {[
-                            { k: false, t: "常用" },
-                            { k: true, t: "全部" },
+                            { k: false, t: lang === "en" ? "Common" : "常用" },
+                            { k: true, t: lang === "en" ? "All" : "全部" },
                           ].map((o) => (
                             <button
                               key={o.t}
@@ -4302,7 +4302,7 @@ export function App() {
                         </span>
                       )}
                     </div>
-                    {shownModels.length === 0 && <div className="mq-empty">无预设模型，去设置里填</div>}
+                    {shownModels.length === 0 && <div className="mq-empty">{lang === "en" ? "No preset models — add one in Settings" : "无预设模型，去设置里填"}</div>}
                     {shownModels.map((m) => (
                       <button
                         key={m}
@@ -5011,10 +5011,10 @@ export function App() {
                 const src = imgMenu.src;
                 setImgMenu(null);
                 const ok = await copyImageToClipboard(src);
-                if (!ok) push({ type: "notice", text: "复制图片失败（可改用「保存图片」）" });
+                if (!ok) push({ type: "notice", text: lang === "en" ? "Failed to copy image (try \"Save image\" instead)" : "复制图片失败（可改用「保存图片」）" });
               }}
             >
-              复制图片
+              {lang === "en" ? "Copy image" : "复制图片"}
             </button>
             <button
               onClick={() => {
@@ -5022,7 +5022,7 @@ export function App() {
                 setImgMenu(null);
               }}
             >
-              保存图片…
+              {lang === "en" ? "Save image…" : "保存图片…"}
             </button>
             <button
               onClick={() => {
@@ -5030,7 +5030,7 @@ export function App() {
                 setImgMenu(null);
               }}
             >
-              查看大图
+              {lang === "en" ? "View full size" : "查看大图"}
             </button>
           </div>
         </div>
@@ -5657,7 +5657,7 @@ function AskModal({
         <div className="ask-qhead">
           {q.header && <span className="ask-tag">{q.header}</span>}
           <span className="ask-title">{q.question}</span>
-          {q.multiSelect && <span className="ask-multi">可多选</span>}
+          {q.multiSelect && <span className="ask-multi">{getLang() === "en" ? "Multi-select" : "可多选"}</span>}
         </div>
         <div className="ask-opts">
           {q.options.map((o, oi) => {
@@ -5733,7 +5733,7 @@ function AskModal({
       </div>
       <div className="ask-foot">
         <button type="button" onClick={onCancel}>
-          取消
+          {getLang() === "en" ? "Cancel" : "取消"}
         </button>
         {qs.length > 1 && (
           <span className="ask-step">
@@ -5743,12 +5743,12 @@ function AskModal({
         <span className="ask-foot-spacer" />
         {step > 0 && (
           <button type="button" onClick={() => setStep((v) => v - 1)}>
-            上一步
+            {getLang() === "en" ? "Back" : "上一步"}
           </button>
         )}
         {showPrimary && (
           <button type="button" className="allow" disabled={!curAnswered} onClick={() => advance()}>
-            {isLast ? "提交" : "下一步"}
+            {isLast ? (getLang() === "en" ? "Submit" : "提交") : (getLang() === "en" ? "Next" : "下一步")}
           </button>
         )}
       </div>
@@ -5761,7 +5761,7 @@ function CopyBtn({ text }: { text: string }) {
   return (
     <button
       className={"tf-icon" + (done ? " ok" : "")}
-      title={done ? "已复制" : "复制"}
+      title={done ? (getLang() === "en" ? "Copied" : "已复制") : (getLang() === "en" ? "Copy" : "复制")}
       onClick={() => {
         navigator.clipboard.writeText(text);
         setDone(true);
@@ -5817,7 +5817,7 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
   return (
     <div className="code-wrap">
       <button className={"code-copy" + (done ? " ok" : "")} onClick={copy} title={makeT(getLang())("code.copy", "复制代码")}>
-        {done ? "✓ 已复制" : "复制"}
+        {done ? (getLang() === "en" ? "✓ Copied" : "✓ 已复制") : (getLang() === "en" ? "Copy" : "复制")}
       </button>
       <pre ref={ref}>{children}</pre>
     </div>
