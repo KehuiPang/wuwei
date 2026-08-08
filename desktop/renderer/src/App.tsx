@@ -3946,7 +3946,7 @@ export function App() {
                 // Claude 订阅：一键 OAuth
                 oauthStep === "awaiting-code" ? (
                   <>
-                    <span>🔑 浏览器同意后，复制页面上的授权码 →（留空则自动读剪贴板）：</span>
+                    <span>{lang === "en" ? "🔑 After approving in the browser, paste the code here → (leave blank to auto-read clipboard):" : "🔑 浏览器同意后，复制页面上的授权码 →（留空则自动读剪贴板）："}</span>
                     <div className="err-auth-actions">
                       <input
                         className="code-input"
@@ -3955,24 +3955,24 @@ export function App() {
                         placeholder={t("authbar.pasteCodePh", "粘贴授权码（可留空自动读剪贴板）")}
                       />
                       <button className="allow" onClick={completeBrowserAuth} disabled={authBusy}>
-                        {authBusy ? "校验中…" : "完成授权"}
+                        {authBusy ? (lang === "en" ? "Verifying…" : "校验中…") : (lang === "en" ? "Complete authorization" : "完成授权")}
                       </button>
                       <button onClick={() => setOauthStep("idle")} disabled={authBusy}>
-                        返回
+                        {lang === "en" ? "Back" : "返回"}
                       </button>
                     </div>
                   </>
                 ) : (
                   <>
-                    <span>🔑 Claude 订阅需要授权才能使用，可一键登录授权：</span>
+                    <span>{lang === "en" ? "🔑 Claude subscription needs authorization. Sign in with one click:" : "🔑 Claude 订阅需要授权才能使用，可一键登录授权："}</span>
                     <div className="err-auth-actions">
                       <button className="allow" onClick={authorizeBrowser} disabled={authBusy}>
-                        用浏览器登录（推荐·复用已登录账号）
+                        {lang === "en" ? "Sign in via browser (recommended · reuse logged-in account)" : "用浏览器登录（推荐·复用已登录账号）"}
                       </button>
                       <button onClick={authorizeWindow} disabled={authBusy}>
-                        {authBusy ? "授权中…" : "应用内登录"}
+                        {authBusy ? (lang === "en" ? "Authorizing…" : "授权中…") : (lang === "en" ? "Sign in in-app" : "应用内登录")}
                       </button>
-                      <button onClick={() => setShowSettings(true)}>去设置填 Key</button>
+                      <button onClick={() => setShowSettings(true)}>{lang === "en" ? "Set key in Settings" : "去设置填 Key"}</button>
                     </div>
                   </>
                 )
@@ -3980,11 +3980,11 @@ export function App() {
                 // Codex 订阅：应用内一键 ChatGPT 授权(无需本机 codex CLI)
                 <>
                   <span>
-                    🔑 Codex 订阅需要 ChatGPT 登录。点下方<b>一键授权</b>，会开系统浏览器登录 ChatGPT（本机无需装 codex）。
+                    {lang === "en" ? <>🔑 Codex subscription needs ChatGPT login. Click <b>One-click authorize</b> below to open your system browser and sign in to ChatGPT (no local codex needed).</> : <>🔑 Codex 订阅需要 ChatGPT 登录。点下方<b>一键授权</b>，会开系统浏览器登录 ChatGPT（本机无需装 codex）。</>}
                   </span>
                   <div className="err-auth-actions">
                     <button className="allow" onClick={doCodexLogin} disabled={codexBusy}>
-                      {codexBusy ? "授权中…（浏览器完成登录）" : "一键授权（ChatGPT 登录）"}
+                      {codexBusy ? (lang === "en" ? "Authorizing… (finish login in browser)" : "授权中…（浏览器完成登录）") : (lang === "en" ? "One-click authorize (ChatGPT login)" : "一键授权（ChatGPT 登录）")}
                     </button>
                   </div>
                 </>
@@ -3992,8 +3992,7 @@ export function App() {
                 // 已打开官网，等复制 key：自动检测剪贴板 + 可手动粘贴
                 <>
                   <span>
-                    🔑 已打开获取页面。<b>复制 API Key 后会自动检测并设置</b>
-                    ，也可粘贴到下方点完成：
+                    {lang === "en" ? <>🔑 Opened the sign-up page. <b>Copy your API Key and it's auto-detected and set</b>, or paste it below and click done:</> : <>🔑 已打开获取页面。<b>复制 API Key 后会自动检测并设置</b>，也可粘贴到下方点完成：</>}
                   </span>
                   <div className="err-auth-actions">
                     <input
@@ -4004,10 +4003,10 @@ export function App() {
                       disabled={apiKeyBusy}
                     />
                     <button className="allow" onClick={() => tryApiKey(apiKeyInput)} disabled={apiKeyBusy}>
-                      {apiKeyBusy ? "检测中…" : "完成设置"}
+                      {apiKeyBusy ? (lang === "en" ? "Detecting…" : "检测中…") : (lang === "en" ? "Finish setup" : "完成设置")}
                     </button>
                     <button onClick={() => setApiKeyStep("idle")} disabled={apiKeyBusy}>
-                      返回
+                      {lang === "en" ? "Back" : "返回"}
                     </button>
                   </div>
                 </>
@@ -4020,14 +4019,14 @@ export function App() {
                   <div className="err-auth-actions">
                     {curPreset?.keyUrl ? (
                       <button className="allow" onClick={startApiKeyFlow}>
-                        去获取 {curPreset.label} 的 API Key ↗
+                        {lang === "en" ? `Get an API Key for ${pLabel(curPreset, lang)} ↗` : `去获取 ${curPreset.label} 的 API Key ↗`}
                       </button>
                     ) : (
                       <button className="allow" onClick={() => setApiKeyStep("awaiting")}>
-                        粘贴 API Key
+                        {lang === "en" ? "Paste API Key" : "粘贴 API Key"}
                       </button>
                     )}
-                    <button onClick={() => setShowSettings(true)}>去设置填 Key</button>
+                    <button onClick={() => setShowSettings(true)}>{lang === "en" ? "Set key in Settings" : "去设置填 Key"}</button>
                   </div>
                 </>
               )}
@@ -4040,8 +4039,8 @@ export function App() {
             items[items.length - 1].type === "notice" &&
             (items[items.length - 1] as { type: "notice"; text: string }).text.startsWith("出错") && (
               <div className="err-fix">
-                <span>上一条消息出错了（可能卡住后续发送）</span>
-                <button onClick={() => window.wuwei.undoLast()}>删除这条并继续</button>
+                <span>{lang === "en" ? "The last message errored (may block further sends)" : "上一条消息出错了（可能卡住后续发送）"}</span>
+                <button onClick={() => window.wuwei.undoLast()}>{lang === "en" ? "Delete it and continue" : "删除这条并继续"}</button>
               </div>
             )}
           {pendingImages.length > 0 && (
@@ -7220,7 +7219,7 @@ function ConceptGraph({
               </div>
               {infoNode.summary && <div style={{ marginBottom: 4 }}>{infoNode.summary}</div>}
               {infoNode.aliases?.length > 0 && (
-                <div style={{ color: "var(--text-2, #888)", marginBottom: 4 }}>别名：{infoNode.aliases.join("、")}</div>
+                <div style={{ color: "var(--text-2, #888)", marginBottom: 4 }}>{makeT(getLang())("brain.info.aliases", "别名")}{getLang() === "en" ? ": " : "："}{infoNode.aliases.join(getLang() === "en" ? ", " : "、")}</div>
               )}
               {Object.keys(infoNode.attrs || {}).length > 0 && (
                 <div style={{ marginBottom: 4 }}>
@@ -7233,11 +7232,11 @@ function ConceptGraph({
                 </div>
               )}
               <div style={{ color: "var(--text-2, #888)", fontSize: 11 }}>
-                权重 {infoNode.weight} · 命中 {infoNode.hits}
-                {infoNode.updatedAt ? ` · 更新 ${fmtTime(infoNode.updatedAt)}` : ""}
+                {getLang() === "en" ? `Weight ${infoNode.weight} · Hits ${infoNode.hits}` : `权重 ${infoNode.weight} · 命中 ${infoNode.hits}`}
+                {infoNode.updatedAt ? (getLang() === "en" ? ` · Updated ${fmtTime(infoNode.updatedAt)}` : ` · 更新 ${fmtTime(infoNode.updatedAt)}`) : ""}
               </div>
               {pinInfo?.kind === "node" && !hover && (
-                <div style={{ color: "var(--text-2, #aaa)", fontSize: 11, marginTop: 4 }}>拖动可挪位并钉住 · 双击解除固定</div>
+                <div style={{ color: "var(--text-2, #aaa)", fontSize: 11, marginTop: 4 }}>{getLang() === "en" ? "Drag to reposition & pin · double-click to unpin" : "拖动可挪位并钉住 · 双击解除固定"}</div>
               )}
             </>
           )}
@@ -7248,9 +7247,9 @@ function ConceptGraph({
                 <span style={{ color: "var(--accent, #e0533d)" }}> ──{infoEdge.relation}→ </span>
                 {byId.get(infoEdge.to)?.name || infoEdge.to}
               </div>
-              <div style={{ color: "var(--text-2, #888)", marginBottom: 4 }}>关系：{infoEdge.relation}</div>
+              <div style={{ color: "var(--text-2, #888)", marginBottom: 4 }}>{getLang() === "en" ? "Relation: " : "关系："}{infoEdge.relation}</div>
               <div style={{ color: "var(--text-2, #888)", fontSize: 11 }}>
-                权重 {infoEdge.weight} · 命中 {infoEdge.hits}
+                {getLang() === "en" ? `Weight ${infoEdge.weight} · Hits ${infoEdge.hits}` : `权重 ${infoEdge.weight} · 命中 ${infoEdge.hits}`}
               </div>
             </>
           )}
@@ -9208,7 +9207,7 @@ function SettingsModal({
                             id: "",
                             name: "",
                             aliases: [],
-                            type: "概念",
+                            type: lang === "en" ? "Concept" : "概念",
                             summary: "",
                             attrs: {},
                             weight: 1,
@@ -10305,7 +10304,7 @@ function SettingsModal({
           <pre className="tools-json tool-detail-schema">
             {JSON.stringify(toolSel.inputSchema, null, 2)}
           </pre>
-          <div className="btns">
+          <div className="btns" style={{ marginTop: 16 }}>
             <button className="allow" onClick={() => setToolSel(null)}>
               {t("set.tools.close")}
             </button>
