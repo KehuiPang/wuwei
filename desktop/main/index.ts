@@ -1073,7 +1073,7 @@ const browserOpenTool: Tool = {
   async run(input): Promise<ToolResult> {
     try {
       const url = String(input.url || "");
-      if (!/^https?:\/\//i.test(url)) return { content: "URL 需以 http/https 开头", isError: true };
+      if (!/^https?:\/\//i.test(url)) return { content: tt("URL 需以 http/https 开头", "URL must start with http/https"), isError: true };
       const wc = getBrowserView().webContents;
       requestShowBrowser(); // 让前端弹出浏览器面板，用户可实时看
       try {
@@ -1083,10 +1083,10 @@ const browserOpenTool: Tool = {
         if (!wc.getURL() || wc.getURL() === "about:blank") throw e;
       }
       return {
-        content: `已打开：${wc.getTitle()}（${wc.getURL()}）。可用 browser_read 读正文、browser_click 点击。`,
+        content: tt(`已打开：${wc.getTitle()}（${wc.getURL()}）。可用 browser_read 读正文、browser_click 点击。`, `Opened: ${wc.getTitle()} (${wc.getURL()}). Use browser_read for text, browser_click to click.`),
       };
     } catch (e: any) {
-      return { content: `打开失败: ${e.message}`, isError: true };
+      return { content: tt(`打开失败: ${e.message}`, `Open failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -1100,9 +1100,9 @@ const browserReadTool: Tool = {
       const text = String((await browserExec("document.body ? document.body.innerText : ''")) || "");
       const max = 12000;
       const t = text.trim();
-      return { content: (t.length > max ? t.slice(0, max) + `\n…(已截断，共 ${t.length} 字符)` : t) || "(页面无文本)" };
+      return { content: (t.length > max ? t.slice(0, max) + tt(`\n…(已截断，共 ${t.length} 字符)`, `\n…(truncated, ${t.length} chars total)`) : t) || tt("(页面无文本)", "(no page text)") };
     } catch (e: any) {
-      return { content: `读取失败: ${e.message}（可能还没 browser_open）`, isError: true };
+      return { content: tt(`读取失败: ${e.message}（可能还没 browser_open）`, `Read failed: ${e.message} (maybe browser_open wasn't called yet)`), isError: true };
     }
   },
 };
@@ -1121,9 +1121,9 @@ const browserClickTool: Tool = {
       const r = await browserExec(
         `(()=>{const el=document.querySelector(${JSON.stringify(sel)});if(!el)return 'NOT_FOUND';el.scrollIntoView();el.click();return 'OK';})()`,
       );
-      return r === "OK" ? { content: `已点击 ${sel}` } : { content: `未找到元素 ${sel}`, isError: true };
+      return r === "OK" ? { content: tt(`已点击 ${sel}`, `Clicked ${sel}`) } : { content: tt(`未找到元素 ${sel}`, `Element not found: ${sel}`), isError: true };
     } catch (e: any) {
-      return { content: `点击失败: ${e.message}`, isError: true };
+      return { content: tt(`点击失败: ${e.message}`, `Click failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -1173,7 +1173,7 @@ const askUserTool: Tool = {
   },
   async run(input, ctx): Promise<ToolResult> {
     const questions = Array.isArray((input as any).questions) ? (input as any).questions : [];
-    if (!questions.length) return { content: "ask_user 需要至少一个带 options 的问题", isError: true };
+    if (!questions.length) return { content: tt("ask_user 需要至少一个带 options 的问题", "ask_user needs at least one question with options"), isError: true };
     const id = ++askSeq;
     // 绑定到「执行本工具的会话」——用 ctx.sessionId(每个 Agent 自带)，不是全局 turnSid。
     // 多会话并发时 turnSid 会被最后派发的会话覆盖，导致弹窗/通知指向错的会话。
@@ -1183,15 +1183,15 @@ const askUserTool: Tool = {
       pendingAskSid.set(id, askSid);
       send("evt:ask-user", { sid: askSid, id, questions });
     });
-    if (!answers || answers.cancelled) return { content: "用户取消了选择(未作答)。" };
+    if (!answers || answers.cancelled) return { content: tt("用户取消了选择(未作答)。", "User cancelled the selection (no answer).") };
     const list: { selected?: string[]; text?: string }[] = answers.list || [];
     const lines = questions.map((q: any, i: number) => {
       const a = list[i] || {};
       const parts = [...(a.selected || [])];
       if (a.text) parts.push(a.text); // 用户在「其它」里填的自由文本
-      return `${i + 1}. ${q.question} → ${parts.length ? parts.join("、") : "(未选)"}`;
+      return `${i + 1}. ${q.question} → ${parts.length ? parts.join(tt("、", ", ")) : tt("(未选)", "(no selection)")}`;
     });
-    return { content: "用户的选择：\n" + lines.join("\n") };
+    return { content: tt("用户的选择：\n", "User's selections:\n") + lines.join("\n") };
   },
 };
 
@@ -1228,6 +1228,10 @@ function wrapSecret(t: Tool): Tool {
 let isProCached = false;
 function brainAvailable(st: ReturnType<typeof loadSettings>): boolean {
   return brainEnabled(st) && isProCached;
+}
+// 主进程界面文案双语：按 WUWEI_LANG(设置时写入)出中/英，供返回给渲染层的 reason/message/text 等用。
+function tt(zh: string, en: string): string {
+  return process.env.WUWEI_LANG === "en" ? en : zh;
 }
 // 工具描述/参数说明的英文版（发给模型那份；界面显示侧另有渲染端 TOOL_DESC_EN）。
 // WUWEI_LANG=en 时把内置工具的中文描述替换为英文，让英文用户的模型上下文也全英文。
@@ -1737,7 +1741,7 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
   text = secrets.redact(text).text; // 兜底：已入库密钥出现在消息里→占位符替换，永不出网到模型
   const agent = getAgent(useId);
   if (!agent) {
-    send("evt:error", { sid: useId, message: "未初始化：缺少模型凭证。请确认 ~/.codex/auth.json 或设置 API key 后重启。" });
+    send("evt:error", { sid: useId, message: tt("未初始化：缺少模型凭证。请确认 ~/.codex/auth.json 或设置 API key 后重启。", "Not initialized: missing model credentials. Check ~/.codex/auth.json or set an API key, then restart.") });
     return;
   }
   if (runs.has(useId)) return; // 该会话已在跑，忽略重复提交
@@ -1899,7 +1903,7 @@ function codexAuthHeaders(): Record<string, string> | null {
 }
 ipcMain.handle("codex:reset-credits", async () => {
   const h = codexAuthHeaders();
-  if (!h) return { ok: false, error: "无 Codex 登录(~/.codex/auth.json)" };
+  if (!h) return { ok: false, error: tt("无 Codex 登录(~/.codex/auth.json)", "No Codex login (~/.codex/auth.json)") };
   try {
     const res = await fetch("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits", { headers: h });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
@@ -2192,7 +2196,7 @@ ipcMain.on("settings:set", (_e, s: Settings) => {
   try {
     applySettings(s);
   } catch (e: any) {
-    send("evt:error", "切换后端失败：" + e.message);
+    send("evt:error", tt("切换后端失败：", "Failed to switch backend: ") + e.message);
   }
 });
 
@@ -2380,12 +2384,12 @@ ipcMain.on("brain:stop-concepts", () => {
   conceptCancel = true;
 });
 ipcMain.handle("brain:extract-concepts", (_e, opts: { all?: boolean }) => {
-  if (conceptState.running) return { started: false, reason: "已在运行" };
-  if (!provider) return { started: false, reason: "未配置模型" };
+  if (conceptState.running) return { started: false, reason: tt("已在运行", "Already running") };
+  if (!provider) return { started: false, reason: tt("未配置模型", "No model configured") };
   // 防并发:抽概念时每存一个概念要给它算向量,走的是索引重建正霸占的同一个 worker,
   // 同时跑会互相饿死→龟速。索引没建完先拦住,提示用户等索引跑完再抽。
   if (docBuildState.building)
-    return { started: false, reason: "索引正在构建，请等它跑完再抽概念（两者共用向量模型，同时跑会互相拖慢）" };
+    return { started: false, reason: tt("索引正在构建，请等它跑完再抽概念（两者共用向量模型，同时跑会互相拖慢）", "Index is building — wait for it to finish before extracting concepts (they share the embedding model and slow each other down).") };
   void runConceptExtraction(!!opts?.all); // 后台跑,不阻塞;进度走 evt:brain-concepts
   return { started: true };
 });
@@ -2497,7 +2501,7 @@ ipcMain.on("mcp:set", (_e, text: string) => {
     mkdirSync(dirname(MCP_CONFIG_PATH), { recursive: true });
     writeFileSync(MCP_CONFIG_PATH, text, "utf8");
   } catch (e: any) {
-    send("evt:error", "写入 MCP 配置失败：" + e.message);
+    send("evt:error", tt("写入 MCP 配置失败：", "Failed to write MCP config: ") + e.message);
     return;
   }
   void connectMcp(() => {
@@ -2551,7 +2555,7 @@ ipcMain.handle("secrets:reveal", async (_e, pw: string) => {
       const p = execFile("/usr/bin/dscl", [".", "-authonly", user, String(pw ?? "")], (err) => resolve(!err));
       p.on("error", () => resolve(false));
     });
-    if (!ok) return { ok: false, error: "密码不正确" };
+    if (!ok) return { ok: false, error: tt("密码不正确", "Incorrect password") };
     return { ok: true, items: secrets.revealAll() };
   } catch (e: any) {
     return { ok: false, error: e.message };
@@ -2931,7 +2935,7 @@ ipcMain.handle(
   "conn:test-key",
   async (_e, key: string, override?: { provider?: string; baseUrl?: string; model?: string }) => {
   const k = (key || "").trim();
-  if (!k) return { ok: false, reason: "空 key" };
+  if (!k) return { ok: false, reason: tt("空 key", "Empty key") };
   try {
     const cfg = loadConfig();
     const tcfg: any = { ...cfg, apiKey: k, authMode: "api-key", oauthToken: "" };
@@ -2947,7 +2951,7 @@ ipcMain.handle(
       signal: ac.signal,
     });
     clearTimeout(timer);
-    return { ok: true, reason: "验证通过" };
+    return { ok: true, reason: tt("验证通过", "Verified") };
   } catch (e: any) {
     return { ok: false, reason: (e?.message ? String(e.message) : String(e)).slice(0, 600) };
   }
@@ -2973,12 +2977,12 @@ function hasCredential(cfg: ReturnType<typeof loadConfig>): boolean {
 ipcMain.handle("conn:check", async () => {
   const cfg = loadConfig();
   if (!hasCredential(cfg)) {
-    return { status: "red", reason: "当前平台未配置凭证 / 未授权，无法使用。" };
+    return { status: "red", reason: tt("当前平台未配置凭证 / 未授权，无法使用。", "This provider has no credentials / isn't authorized — can't be used.") };
   }
   // 托管平台：ping 前必须先注入新鲜的无为 token 并重建 provider，
   // 否则用的是空/旧 token（token 只在发消息前注入），网关会回 401 invalid_token 而误判「未连通」。
   if (isHostedProvider(curProviderId())) await ensureHostedProviderReady();
-  if (!provider) return { status: "red", reason: "未初始化，请检查设置。" };
+  if (!provider) return { status: "red", reason: tt("未初始化，请检查设置。", "Not initialized — please check settings.") };
   try {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), 25000);
@@ -2998,10 +3002,10 @@ ipcMain.handle("conn:check", async () => {
     );
     clearTimeout(timer);
     void emitAccount(); // 检测通过后刷新账户/余额(DeepSeek 等计费平台余额也随检测更新)
-    return { status: "green", reason: `已连通 · ${backendLabel} / ${modelLabel}，可随时使用。` };
+    return { status: "green", reason: tt(`已连通 · ${backendLabel} / ${modelLabel}，可随时使用。`, `Connected · ${backendLabel} / ${modelLabel}, ready to use.`) };
   } catch (e: any) {
     const msg = e?.message ? String(e.message) : String(e);
-    return { status: "yellow", reason: "已配置但请求报错：" + msg.slice(0, 600) };
+    return { status: "yellow", reason: tt("已配置但请求报错：", "Configured but the request errored: ") + msg.slice(0, 600) };
   }
 });
 
