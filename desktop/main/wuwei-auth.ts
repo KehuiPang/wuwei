@@ -21,7 +21,7 @@ export interface WuweiSession {
 
 export interface WuweiMe {
   user: { id: string; email: string | null; name: string | null; avatar: string | null };
-  coin: { balance: number };
+  coin: { balance: number; lastSignin?: string | null }; // lastSignin: 最近签到日 UTC YYYY-MM-DD，客户端判「今日已签」
   // 会员身份（后端补：tier=免费/Pro月付/Pro年付 + 到期日 + 档位显示名 + 本周额度）。缺=降级免费版+升级引导。
   membership?: {
     tier: "free" | "pro_month" | "pro_year";

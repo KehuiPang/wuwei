@@ -1932,7 +1932,7 @@ export function App() {
   // 无为账号（B2：全新正交账号态，≠模型商账号，独立身份区。最终顶栏样式待小美定稿换皮）
   const [wuwei, setWuwei] = useState<{
     user: { id: string; email: string | null; name: string | null; avatar: string | null };
-    coin: { balance: number };
+    coin: { balance: number; lastSignin?: string | null };
     membership?: {
       tier: "free" | "pro_month" | "pro_year";
       expireAt?: string | number;
@@ -2351,18 +2351,25 @@ export function App() {
   useEffect(() => {
     window.wuwei.getAppVersion().then(setAppVer).catch(() => {});
     const off = window.wuwei.onEvent((ch, p: any) => {
-      if (ch === "evt:update-available") setUpdateMsg(lang === "en" ? `Downloading v${p?.version}…` : `发现新版 v${p?.version}，下载中…`);
-      else if (ch === "evt:update-downloaded") { setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); setUpdateMsg(""); }
+      // 自动下载不打扰用户；下载好了才弹「升级」提示
+      if (ch === "evt:update-downloaded") setUpdateReady({ version: p?.version || "", notes: p?.notes || "" });
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 今日已签到判定：拿到账号数据后，若最近签到日=今天(UTC，与后端签到日一致)则按钮直接显「已签到」且禁用，不用点了才知道。
+  useEffect(() => {
+    const last = wuwei?.coin.lastSignin;
+    if (last && last === new Date().toISOString().slice(0, 10)) setCheckinDone(true);
+  }, [wuwei?.coin.lastSignin]);
+
   async function checkUpdateNow() {
-    setUpdateMsg(lang === "en" ? "Checking…" : "检查更新中…");
+    setShowAcctMenu(false); // 关菜单，结果用居中弹窗显示
+    setUpdateMsg(lang === "en" ? "Checking for updates…" : "正在检查更新…");
     const r = await window.wuwei.checkUpdate();
-    if (r.available) setUpdateMsg(lang === "en" ? `New v${r.version} found, downloading…` : `发现新版 v${r.version}，下载中…`);
-    else setUpdateMsg(r.error ? (lang === "en" ? "Update check unavailable (dev build?)" : "暂无法检查更新（可能是开发版）") : (lang === "en" ? "You're on the latest version" : "已是最新版本"));
+    if (r.available) setUpdateMsg(lang === "en" ? `New version v${r.version} found — downloading in the background. You'll be prompted to update when it's ready.` : `发现新版本 v${r.version}，正在后台下载，下载完成会提示你升级。`);
+    else setUpdateMsg(r.error ? (lang === "en" ? "Can't check updates right now (dev build or no update source)." : "暂时无法检查更新（开发版或未配置更新源）。") : (lang === "en" ? `You're on the latest version (v${appVer}).` : `已是最新版本（v${appVer}）。`));
   }
 
   // 启动拉公告：active 且未读过该 version → 弹窗（标题/正文随界面语言）。读过或后台没发则不弹。
@@ -3526,9 +3533,9 @@ export function App() {
                                   <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 2.5" />
                                   <circle cx="12" cy="16.5" r="0.5" fill="currentColor" />
                                 </svg>
-                                <span style={{ flex: 1, textAlign: "left" }}>{lang === "en" ? "Check for updates" : "检查更新"}</span>
-                                <span style={{ fontSize: 11, opacity: 0.55, whiteSpace: "nowrap" }}>
-                                  {updateReady ? (lang === "en" ? `v${updateReady.version} ready` : `v${updateReady.version} 可升级`) : (updateMsg || (appVer ? `v${appVer}` : ""))}
+                                <span style={{ flex: 1, textAlign: "left", whiteSpace: "nowrap" }}>{lang === "en" ? "Updates" : "更新"}</span>
+                                <span style={{ fontSize: 11, opacity: 0.55, whiteSpace: "nowrap", flex: "0 0 auto" }}>
+                                  {updateReady ? `v${updateReady.version}↑` : (appVer ? `v${appVer}` : "")}
                                 </span>
                               </button>
                               <button
@@ -4004,9 +4011,9 @@ export function App() {
                               <em>{tok.inT.toLocaleString()}</em>
                             </span>
                           )}
-                          <span>
+                          <span style={{ fontWeight: 600 }}>
                             <b>{lang === "en" ? "New output" : "新增输出"}</b>
-                            <em>{tok.outT.toLocaleString()}</em>
+                            <em style={{ color: "var(--accent, #C05F3C)", fontWeight: 700 }}>{tok.outT.toLocaleString()}</em>
                           </span>
                         </span>
                       </span>
@@ -4867,6 +4874,17 @@ export function App() {
           }}
           onSuccess={onWuweiLoggedIn}
         />
+      )}
+      {/* 检查更新结果：居中弹窗提示（检查中/已最新/发现新版下载中） */}
+      {updateMsg && (
+        <div className="perm-overlay" onClick={() => setUpdateMsg("")}>
+          <div className="add-st-dialog" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ padding: "6px 2px 2px", fontSize: 14, lineHeight: 1.6 }}>{updateMsg}</div>
+            <div className="btns" style={{ marginTop: 14, justifyContent: "flex-end" }}>
+              <button className="allow" onClick={() => setUpdateMsg("")}>{lang === "en" ? "OK" : "知道了"}</button>
+            </div>
+          </div>
+        </div>
       )}
       {/* 新版已下载好：提示用户一键升级重启（含改进说明） */}
       {updateReady && (
