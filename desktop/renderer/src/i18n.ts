@@ -594,6 +594,8 @@ const DICT_EN: Record<string, string> = {
   "authbar.platformNeedKey": "🔑 The current provider “{name}” needs an API key to work.",
   "authbar.getKeyFor": "Get an API key for {name} ↗",
   "authbar.pasteKey": "Paste API key",
+  "authbar.pasteCodePh": "Paste the authorization code (leave blank to auto-read the clipboard)",
+  "authbar.keyDetectPh": "Auto-detects after you copy the key; or paste it here",
   "errfix.msg": "The previous message errored (it may block later sends)",
   "errfix.undo": "Delete it and continue",
   "suggest.title": "Click or press Tab to accept",

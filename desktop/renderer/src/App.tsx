@@ -299,7 +299,7 @@ function PaySpark({ size = 14 }: { size?: number }) {
 }
 function PayCloseX({ onClick }: { onClick: () => void }) {
   return (
-    <button className="pay-x" aria-label="关闭" onClick={onClick}>
+    <button className="pay-x" aria-label={makeT(getLang())("msg.close", "关闭")} onClick={onClick}>
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
         <path d="M4 4l8 8M12 4l-8 8" />
       </svg>
@@ -3944,7 +3944,7 @@ export function App() {
                         className="code-input"
                         value={codeInput}
                         onChange={(e) => setCodeInput(e.target.value)}
-                        placeholder="粘贴授权码（可留空自动读剪贴板）"
+                        placeholder={t("authbar.pasteCodePh", "粘贴授权码（可留空自动读剪贴板）")}
                       />
                       <button className="allow" onClick={completeBrowserAuth} disabled={authBusy}>
                         {authBusy ? "校验中…" : "完成授权"}
@@ -3992,7 +3992,7 @@ export function App() {
                       className="code-input"
                       value={apiKeyInput}
                       onChange={(e) => setApiKeyInput(e.target.value)}
-                      placeholder="复制 Key 后自动检测；或粘贴到此"
+                      placeholder={t("authbar.keyDetectPh", "复制 Key 后自动检测；或粘贴到此")}
                       disabled={apiKeyBusy}
                     />
                     <button className="allow" onClick={() => tryApiKey(apiKeyInput)} disabled={apiKeyBusy}>
