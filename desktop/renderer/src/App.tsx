@@ -4906,9 +4906,11 @@ export function App() {
       {secretPrompt && (
         <div className="perm-overlay" onClick={() => setSecretPrompt(null)}>
           <div className="add-st-dialog sec-prompt" onClick={(e) => e.stopPropagation()}>
-            <h3>🔒 检测到疑似密钥</h3>
+            <h3>{lang === "en" ? "🔒 Possible secret detected" : "🔒 检测到疑似密钥"}</h3>
             <p className="s-note">
-              发现下面的敏感信息。勾选要存入本地密钥管理器的项——存入后会加密保存,并在发给 AI 前用占位符替换,之后每次自动识别。
+              {lang === "en"
+                ? "Found the sensitive info below. Check the items to store in the local secret manager — they're encrypted and replaced with placeholders before being sent to the AI, then auto-recognized each time after."
+                : "发现下面的敏感信息。勾选要存入本地密钥管理器的项——存入后会加密保存,并在发给 AI 前用占位符替换,之后每次自动识别。"}
             </p>
             <div className="sec-cand-list">
               {secretPrompt.candidates.map((c, i) =>
@@ -4916,10 +4918,10 @@ export function App() {
                   // 值已在保险箱、但这次描述不同→让用户三选一
                   <div key={i} className="sec-cand sec-cand-dup">
                     <div className="sec-cand-dup-top">
-                      <span className="sec-cand-kind dup">已存在</span>
+                      <span className="sec-cand-kind dup">{lang === "en" ? "Exists" : "已存在"}</span>
                       <span className="sec-cand-val">{c.masked}</span>
                       <span className="sec-cand-meta">
-                        旧备注：{c.existing.note || "（无）"} → 新：<b>{c.note}</b>
+                        {lang === "en" ? "Old note: " : "旧备注："}{c.existing.note || (lang === "en" ? "(none)" : "（无）")} → {lang === "en" ? "new: " : "新："}<b>{c.note}</b>
                       </span>
                     </div>
                     <div className="sec-seg">
@@ -4934,7 +4936,7 @@ export function App() {
                             setSecretPrompt({ ...secretPrompt, dupChoice });
                           }}
                         >
-                          {opt === "new" ? "存为新的一条" : opt === "overwrite" ? "覆盖备注" : "不存"}
+                          {opt === "new" ? (lang === "en" ? "Save as new" : "存为新的一条") : opt === "overwrite" ? (lang === "en" ? "Overwrite note" : "覆盖备注") : (lang === "en" ? "Don't save" : "不存")}
                         </button>
                       ))}
                     </div>
@@ -4961,10 +4963,10 @@ export function App() {
               )}
             </div>
             <div className="btns">
-              <button onClick={() => setSecretPrompt(null)}>取消发送</button>
-              <button onClick={() => confirmSecretPrompt(false)}>不存,直接发</button>
+              <button onClick={() => setSecretPrompt(null)}>{lang === "en" ? "Cancel send" : "取消发送"}</button>
+              <button onClick={() => confirmSecretPrompt(false)}>{lang === "en" ? "Send without saving" : "不存,直接发"}</button>
               <button className="allow" onClick={() => confirmSecretPrompt(true)}>
-                存入并替换后发送
+                {lang === "en" ? "Save, replace & send" : "存入并替换后发送"}
               </button>
             </div>
           </div>
@@ -5533,27 +5535,30 @@ function ResumeBox({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
   const many = sessions.length > 1;
+  const en = getLang() === "en";
   return (
     <div
       className="ask resume-ask"
       style={box ? { left: box.left, width: box.width, bottom: box.bottom } : { visibility: "hidden" }}
     >
       <div className="ask-qhead">
-        <span className="ask-tag">⚠ 任务被中断</span>
+        <span className="ask-tag">{en ? "⚠ Task interrupted" : "⚠ 任务被中断"}</span>
         <span className="ask-title">
-          {many ? `上次退出时有 ${sessions.length} 个任务正在运行，要让 AI 接着继续吗？` : "上次这个任务运行时被中断，要让 AI 接着继续吗？"}
+          {many
+            ? (en ? `${sessions.length} tasks were running when you last quit — let the AI continue?` : `上次退出时有 ${sessions.length} 个任务正在运行，要让 AI 接着继续吗？`)
+            : (en ? "This task was interrupted last time it ran — let the AI continue?" : "上次这个任务运行时被中断，要让 AI 接着继续吗？")}
         </span>
       </div>
       <div className="resume-rows">
         {sessions.map((s) => (
           <div key={s.id} className="resume-row">
-            <span className="resume-title" title={s.title}>💬 {s.title || "新对话"}</span>
+            <span className="resume-title" title={s.title}>💬 {s.title || (en ? "New chat" : "新对话")}</span>
             <span className="resume-btns">
               <button type="button" className="allow" onClick={() => onResume(s.id)}>
-                继续
+                {en ? "Continue" : "继续"}
               </button>
               <button type="button" onClick={() => onDismiss(s.id)}>
-                忽略
+                {en ? "Ignore" : "忽略"}
               </button>
             </span>
           </div>
@@ -5562,7 +5567,7 @@ function ResumeBox({
       {many && (
         <div className="resume-foot">
           <button type="button" onClick={onDismissAll}>
-            全部忽略
+            {en ? "Ignore all" : "全部忽略"}
           </button>
         </div>
       )}
