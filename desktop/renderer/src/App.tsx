@@ -3296,7 +3296,12 @@ export function App() {
                   <span style={{ color: "#C05F3C" }}>✨</span> {lang === "en" ? "Subscription" : "订阅版"}
                 </button>
               )}
-              <button className="acct-btn" onClick={() => setShowAcctMenu((v) => !v)}>
+              <button className="acct-btn" onClick={() => setShowAcctMenu((v) => {
+                const next = !v;
+                // 打开菜单时顺手拉一次最新账号/余额/会员/周额度（后台改了这里也能立刻看到）
+                if (next && wuwei) window.wuwei.wuweiMe().then((m) => { if (m) setWuwei(m); }).catch(() => {});
+                return next;
+              })}>
                 <div className={"acct-av" + (wuwei ? "" : " off")}>
                   {wuwei?.user.avatar ? (
                     <img src={wuwei.user.avatar} alt="" />
