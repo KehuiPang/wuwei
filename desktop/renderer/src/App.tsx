@@ -8352,12 +8352,12 @@ function SettingsModal({
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.g.compactionHint")}
               </div>
-              <div className="app-set-group">会话提醒</div>
+              <div className="app-set-group">{t("set.g.remindGroup", "会话提醒")}</div>
               <div className="app-set-row" style={{ cursor: "default" }}>
                 <div className="app-set-text">
-                  <div className="app-set-label">提醒自动消失</div>
+                  <div className="app-set-label">{t("set.g.autoDismiss", "提醒自动消失")}</div>
                   <div className="app-set-hint">
-                    别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。改动点「保存」后生效。
+                    {t("set.g.autoDismissHint", "别的会话「在等你选择」时右上角的提醒：开启则倒计时后自动消失；关闭则常驻，直到你点开处理或手动 ✕ 忽略。改动点「保存」后生效。")}
                   </div>
                 </div>
                 <input
@@ -8370,7 +8370,7 @@ function SettingsModal({
               {toastAutoDraft && (
                 <div className="app-set-row" style={{ cursor: "default", gap: "10px", marginBottom: "16px" }}>
                   <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>
-                    消失倒计时
+                    {t("set.g.countdown", "消失倒计时")}
                   </div>
                   <input
                     type="range"
@@ -8382,16 +8382,16 @@ function SettingsModal({
                     style={{ flex: 1 }}
                   />
                   <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
-                    {toastSecDraft} 秒
+                    {t("set.g.seconds", "{n} 秒").replace("{n}", String(toastSecDraft))}
                   </div>
                 </div>
               )}
-              <div className="app-set-group">任务恢复</div>
+              <div className="app-set-group">{t("set.g.taskResumeGroup", "任务恢复")}</div>
               <div className="app-set-row" style={{ cursor: "default", marginBottom: "16px" }}>
                 <div className="app-set-text">
-                  <div className="app-set-label">检测中断的任务并提示恢复</div>
+                  <div className="app-set-label">{t("set.g.taskResume", "检测中断的任务并提示恢复")}</div>
                   <div className="app-set-hint">
-                    打开时若发现被强制关闭、或明显干到一半就退出的任务，在输入框上方提示是否让 AI 接着继续。关闭则不再提示。
+                    {t("set.g.taskResumeHint", "打开时若发现被强制关闭、或明显干到一半就退出的任务，在输入框上方提示是否让 AI 接着继续。关闭则不再提示。")}
                   </div>
                 </div>
                 <input
@@ -8543,18 +8543,18 @@ function SettingsModal({
 
               {/* 模型列表管理：手动加/删该平台的模型(自定义加的可删，预设自带的不可删) */}
               <div className="model-list-mgr">
-                <div className="mlm-head">该平台模型列表</div>
+                <div className="mlm-head">{t("set.m.modelList", "该平台模型列表")}</div>
                 <div className="mlm-chips">
-                  {modelOptions.length === 0 && <span className="mlm-empty">还没有模型，下面加一个</span>}
+                  {modelOptions.length === 0 && <span className="mlm-empty">{t("set.m.noModels", "还没有模型，下面加一个")}</span>}
                   {modelOptions.map((m) => {
                     const isCustom = (creds[pid]?.customModels || []).includes(m);
                     return (
                       <span key={m} className={"mlm-chip" + (m === model ? " on" : "")}>
-                        <button type="button" className="mlm-pick" title="选用该模型" onClick={() => { setModel(m); setCustomModel(false); }}>
+                        <button type="button" className="mlm-pick" title={t("set.m.pickTitle", "选用该模型")} onClick={() => { setModel(m); setCustomModel(false); }}>
                           {m}
                         </button>
                         {isCustom && (
-                          <button type="button" className="mlm-del" title="从列表删除" onClick={() => delCustomModel(m)}>
+                          <button type="button" className="mlm-del" title={t("set.m.delTitle", "从列表删除")} onClick={() => delCustomModel(m)}>
                             ✕
                           </button>
                         )}
@@ -8569,10 +8569,10 @@ function SettingsModal({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") { e.preventDefault(); addCustomModel(newModelName); setNewModelName(""); }
                     }}
-                    placeholder="加模型名，如 qwen2.5-vl-72b-instruct"
+                    placeholder={t("set.m.addModelPlaceholder", "加模型名，如 qwen2.5-vl-72b-instruct")}
                   />
                   <button type="button" onClick={() => { addCustomModel(newModelName); setNewModelName(""); }}>
-                    ＋ 添加
+                    ＋ {t("set.m.add", "添加")}
                   </button>
                 </div>
               </div>
@@ -8580,7 +8580,7 @@ function SettingsModal({
               {/* 该模型能力开关(按【模型】各存各的，切模型即时切换；保存后生效) */}
               <div className="model-caps">
                 <div className="model-caps-head">
-                  能力开关 · 针对模型 <b>{model || "（未选）"}</b>
+                  {t("set.m.capsFor", "能力开关 · 针对模型")} <b>{model || t("set.m.noneSel", "（未选）")}</b>
                 </div>
                 <label className="cap-row" title="关掉后请求不带 tools 参数——自建 vLLM/llama-server 未开工具支持时(一带 tools 就报错)请关掉；关掉后该模型只能纯对话、不能调工具/跑 agent">
                   <input
@@ -8590,8 +8590,8 @@ function SettingsModal({
                     onChange={(e) => setModelCap({ noTools: !e.target.checked })}
                   />
                   <span className="cap-text">
-                    <b>工具调用 / Agent</b>
-                    <em>关掉=请求不带 tools 参数（自建端点不支持工具调用时关掉，否则报错；关掉后只能纯对话）</em>
+                    <b>{t("set.m.toolcall", "工具调用 / Agent")}</b>
+                    <em>{t("set.m.toolcallHint", "关掉=请求不带 tools 参数（自建端点不支持工具调用时关掉，否则报错；关掉后只能纯对话）")}</em>
                   </span>
                 </label>
                 <label className="cap-row" title="模型名含 vl/vision/omni 等会自动按多模态处理；名字不含但确实能看图的模型，在这里手动开启">
@@ -8602,8 +8602,8 @@ function SettingsModal({
                     onChange={(e) => setModelCap({ vision: e.target.checked })}
                   />
                   <span className="cap-text">
-                    <b>看图 / 视觉</b>
-                    <em>强制按多模态处理并发送真图片；纯文本模型别开（会 400）。名字含 vl/vision 的已自动识别</em>
+                    <b>{t("set.m.vision", "看图 / 视觉")}</b>
+                    <em>{t("set.m.visionHint", "强制按多模态处理并发送真图片；纯文本模型别开（会 400）。名字含 vl/vision 的已自动识别")}</em>
                   </span>
                 </label>
               </div>
