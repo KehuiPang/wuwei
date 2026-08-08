@@ -5136,10 +5136,11 @@ function runningTools(items: Item[]): Extract<Item, { type: "tool" }>[] {
 // 实时状态短语：随执行内容动态变——并行多工具/单工具/思考/生成
 function liveStatus(items: Item[], chars: number, elapsed: number): string {
   const running = runningTools(items);
-  if (running.length > 1) return `正在并行执行 ${running.length} 个操作`;
-  if (running.length === 1) return "正在" + toolMeta(running[0]).label;
-  if (chars === 0) return elapsed > 20 ? "深度思考中" : "思考中";
-  return "生成回复";
+  const en = getLang() === "en";
+  if (running.length > 1) return en ? `Running ${running.length} operations in parallel` : `正在并行执行 ${running.length} 个操作`;
+  if (running.length === 1) return (en ? "" : "正在") + toolMeta(running[0]).label;
+  if (chars === 0) return en ? (elapsed > 20 ? "Thinking deeply" : "Thinking") : (elapsed > 20 ? "深度思考中" : "思考中");
+  return en ? "Generating reply" : "生成回复";
 }
 
 function ThinkingBar({
@@ -5171,7 +5172,7 @@ function ThinkingBar({
       <span className="tspark">✳</span>
       <span className="tstatus">{status}…</span>
       <span className="tmeta">
-        {time} · {tokLabel} tokens · {running > 0 ? `${running} 个任务执行中` : "执行中"}
+        {time} · {tokLabel} tokens · {running > 0 ? (getLang() === "en" ? `${running} task(s) running` : `${running} 个任务执行中`) : (getLang() === "en" ? "Working" : "执行中")}
       </span>
     </div>
   );
@@ -5182,15 +5183,17 @@ function fmtReset(sec?: number): string {
   const d = Math.floor(sec / 86400);
   const h = Math.floor((sec % 86400) / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  if (d > 0) return `${d}天${h}小时后重置`;
-  if (h > 0) return `${h}小时${m}分后重置`;
-  return `${m}分后重置`;
+  const en = getLang() === "en";
+  if (d > 0) return en ? `resets in ${d}d ${h}h` : `${d}天${h}小时后重置`;
+  if (h > 0) return en ? `resets in ${h}h ${m}m` : `${h}小时${m}分后重置`;
+  return en ? `resets in ${m}m` : `${m}分后重置`;
 }
 
 // 额度窗口时长 → 友好标签：≥48h 用「N天限额」，否则「X小时限额」(数据来自订阅接口返回的窗口时长)
 function windowLabel(min?: number, fallback = 300): string {
   const h = Math.round((min ?? fallback) / 60);
-  return h >= 48 ? `${Math.round(h / 24)}天限额` : `${h}小时限额`;
+  const en = getLang() === "en";
+  return h >= 48 ? (en ? `${Math.round(h / 24)}-day limit` : `${Math.round(h / 24)}天限额`) : (en ? `${h}-hour limit` : `${h}小时限额`);
 }
 
 function LimitRow({ label, used, resetSec }: { label: string; used: number; resetSec?: number }) {
@@ -5199,7 +5202,7 @@ function LimitRow({ label, used, resetSec }: { label: string; used: number; rese
       <div className="u-row">
         <span>{label}</span>
         <span>
-          已用 {used}%
+          {getLang() === "en" ? `${used}% used` : `已用 ${used}%`}
           {resetSec ? <span className="reset"> · {fmtReset(resetSec)}</span> : null}
         </span>
       </div>
