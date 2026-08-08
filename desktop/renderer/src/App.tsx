@@ -3330,7 +3330,7 @@ export function App() {
                         // 本周额度（订阅感：隐藏具体币数，只显剩余百分比 + 重置时间）
                         const wq = wuwei.membership?.weeklyQuota;
                         const wqActive = !!wq?.active;
-                        const wqPct = Math.max(0, Math.min(100, wq?.remainingPct ?? 0));
+                        const wqUsedPct = Math.max(0, Math.min(100, 100 - (wq?.remainingPct ?? 100))); // 已用百分比(用多少涨多少)
                         const wqReset = wq?.resetsAt ? new Date(wq.resetsAt) : null;
                         const wqResetStr = wqReset
                           ? (lang === "en"
@@ -3424,14 +3424,14 @@ export function App() {
                                   </button>
                                 </div>
                                 {wqActive && (
-                                  // 本周额度进度条：只显剩余百分比 + 重置日，不暴露具体币数（订阅感）
+                                  // 本周额度进度条：显「已用百分比」(用多少涨多少) + 重置日，不暴露具体币数（订阅感）
                                   <div>
                                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--acct-memb-sub, #9a7b3c)", marginBottom: 4 }}>
-                                      <span>{lang === "en" ? `${wqPct}% left this week` : `本周剩余 ${wqPct}%`}</span>
+                                      <span>{lang === "en" ? `${wqUsedPct}% used this week` : `本周已用 ${wqUsedPct}%`}</span>
                                       {wqResetStr && <span>{lang === "en" ? `Resets ${wqResetStr}` : `${wqResetStr} 重置`}</span>}
                                     </div>
                                     <div style={{ height: 6, borderRadius: 999, background: "rgba(169,127,46,0.18)", overflow: "hidden" }}>
-                                      <div style={{ width: `${wqPct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#C9A24B,#A97F2E)", transition: "width .3s ease" }} />
+                                      <div style={{ width: `${wqUsedPct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg,#C9A24B,#A97F2E)", transition: "width .3s ease" }} />
                                     </div>
                                   </div>
                                 )}
@@ -4605,33 +4605,37 @@ export function App() {
               // 无为托管：显示无为币余额（未登录则引导登录）
               wuwei ? (
                 <>
-                  <div className="u-row">
-                    <span>{t("usage.coinBal", "无为币余额")}</span>
-                    <span>{t("usage.coinAmount", "{n} 无为币").replace("{n}", wuwei.coin.balance.toLocaleString())}</span>
-                  </div>
-                  {wuwei.membership?.weeklyQuota?.active && (() => {
-                    // 订阅版本周额度：隐藏具体币数，显剩余百分比 + 重置日 + 进度条
+                  {wuwei.membership?.weeklyQuota?.active ? (() => {
+                    // 订阅版：隐藏无为币余额，只显本周「已用百分比」进度条(用多少涨多少) + 重置日
                     const wq = wuwei.membership!.weeklyQuota!;
-                    const pct = Math.max(0, Math.min(100, wq.remainingPct));
+                    const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
                     const rd = wq.resetsAt ? new Date(wq.resetsAt) : null;
                     const rs = rd ? (lang === "en" ? rd.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `${rd.getMonth() + 1}月${rd.getDate()}日`) : "";
                     return (
                       <div style={{ margin: "2px 0 4px" }}>
                         <div className="u-row" style={{ marginBottom: 4 }}>
                           <span>{lang === "en" ? "This week" : "本周额度"}</span>
-                          <span>{lang === "en" ? `${pct}% left${rs ? ` · resets ${rs}` : ""}` : `剩余 ${pct}%${rs ? ` · ${rs} 重置` : ""}`}</span>
+                          <span>{lang === "en" ? `${usedPct}% used${rs ? ` · resets ${rs}` : ""}` : `已用 ${usedPct}%${rs ? ` · ${rs} 重置` : ""}`}</span>
                         </div>
-                        <div className="u-bar"><div className="u-fill" style={{ width: pct + "%" }} /></div>
+                        <div className="u-bar"><div className="u-fill" style={{ width: usedPct + "%" }} /></div>
                       </div>
                     );
-                  })()}
+                  })() : (
+                    <div className="u-row">
+                      <span>{t("usage.coinBal", "无为币余额")}</span>
+                      <span>{t("usage.coinAmount", "{n} 无为币").replace("{n}", wuwei.coin.balance.toLocaleString())}</span>
+                    </div>
+                  )}
                   <div className="u-row">
                     <span>{t("usage.sessTokens", "本会话 tokens")}</span>
                     <span>
                       ↑{usage.totalInput.toLocaleString()} ↓{usage.totalOutput.toLocaleString()}
                     </span>
                   </div>
-                  <div className="u-note">{t("usage.hostedNote", "无为托管按 token×单价扣无为币（余额随对话刷新）。")}</div>
+                  {/* 订阅版隐藏「按token扣无为币」说明——不让订阅用户感知币数 */}
+                  {!wuwei.membership?.weeklyQuota?.active && (
+                    <div className="u-note">{t("usage.hostedNote", "无为托管按 token×单价扣无为币（余额随对话刷新）。")}</div>
+                  )}
                 </>
               ) : (
                 <div
