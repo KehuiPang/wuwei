@@ -3334,10 +3334,10 @@ export function App() {
                               <div className="acct-id-txt">
                                 <div className="acct-nm">
                                   <span className="acct-name">{wuwei.user.name || wuwei.user.email || "无为用户"}</span>
+                                  {/* 顶部 chip 只显 Pro/Free 主标；月付/年付档位交给下方会员卡，避免同一行重复又过长 */}
                                   <span className={"acct-tier " + (isPro ? "pro" : "free")}>
                                     {isPro && <Spark />}
                                     {tierMain}
-                                    {tierQual && <span className="acct-tier-q">{tierQual}</span>}
                                   </span>
                                 </div>
                                 {wuwei.user.email && <div className="acct-mail">{wuwei.user.email}</div>}
