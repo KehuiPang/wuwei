@@ -4598,6 +4598,7 @@ export function App() {
 
       {showBrowser && (
         <BrowserPanel
+          t={t}
           info={browserInfo}
           mode={browserMode}
           detached={browserDetached}
@@ -5175,6 +5176,7 @@ function relTime(ts: number, now: number): string {
 
 // 内置浏览器面板：与聊天同层的一列(半屏)/独占(全屏)/或弹成独立窗口。页面区是原生 WebContentsView，按此区域 bounds 贴合。
 function BrowserPanel({
+  t,
   info,
   mode,
   detached,
@@ -5185,6 +5187,7 @@ function BrowserPanel({
   onReattach,
   onClose,
 }: {
+  t: T;
   info: { url?: string; title?: string; loading?: boolean; canGoBack?: boolean; canGoForward?: boolean };
   mode: "split" | "full";
   detached: boolean;
@@ -5239,20 +5242,20 @@ function BrowserPanel({
   if (detached) return null;
   return (
     <div className={"browser-panel " + mode} style={mode === "split" ? { flexBasis: width } : undefined}>
-      {mode === "split" && <div className="bp-resizer" onMouseDown={startResize} title="拖动调整宽度" />}
+      {mode === "split" && <div className="bp-resizer" onMouseDown={startResize} title={t("browser.resize", "拖动调整宽度")} />}
       <div className="bp-bar">
-        <button className="bp-nav" disabled={!info.canGoBack} onClick={() => window.wuwei.browserNav("back")} title="后退">
+        <button className="bp-nav" disabled={!info.canGoBack} onClick={() => window.wuwei.browserNav("back")} title={t("browser.back", "后退")}>
           ‹
         </button>
         <button
           className="bp-nav"
           disabled={!info.canGoForward}
           onClick={() => window.wuwei.browserNav("forward")}
-          title="前进"
+          title={t("browser.forward", "前进")}
         >
           ›
         </button>
-        <button className="bp-nav" onClick={() => window.wuwei.browserNav("reload")} title="刷新">
+        <button className="bp-nav" onClick={() => window.wuwei.browserNav("reload")} title={t("browser.reload", "刷新")}>
           ⟳
         </button>
         <input
@@ -5262,19 +5265,19 @@ function BrowserPanel({
           onKeyDown={(e) => {
             if (e.key === "Enter") window.wuwei.browserNav("open", urlEdit);
           }}
-          placeholder="输入网址回车打开"
+          placeholder={t("browser.urlPlaceholder", "输入网址回车打开")}
         />
         {info.loading && <span className="bp-loading">…</span>}
-        <button className={"bp-mode" + (mode === "split" ? " on" : "")} onClick={() => onMode("split")} title="半屏(与聊天并排)">
+        <button className={"bp-mode" + (mode === "split" ? " on" : "")} onClick={() => onMode("split")} title={t("browser.split", "半屏(与聊天并排)")}>
           ◫
         </button>
-        <button className={"bp-mode" + (mode === "full" ? " on" : "")} onClick={() => onMode("full")} title="全屏浏览器">
+        <button className={"bp-mode" + (mode === "full" ? " on" : "")} onClick={() => onMode("full")} title={t("browser.full", "全屏浏览器")}>
           ▢
         </button>
-        <button className="bp-mode" onClick={onDetach} title="弹成独立窗口(可拖动)">
+        <button className="bp-mode" onClick={onDetach} title={t("browser.detach", "弹成独立窗口(可拖动)")}>
           ⇱
         </button>
-        <button className="bp-close" onClick={onClose} title="关闭浏览器面板">
+        <button className="bp-close" onClick={onClose} title={t("browser.close", "关闭浏览器面板")}>
           ✕
         </button>
       </div>
@@ -6703,6 +6706,10 @@ const TOOL_DESC_EN: Record<string, string> = {
   browser_click: "Click an element matching a CSS selector on the built-in browser's current page (buttons/links etc). Follow with browser_read to see changes.",
 };
 const toolDesc = (name: string, fallback: string, lang: Lang) => (lang === "en" && TOOL_DESC_EN[name]) || fallback;
+// 记忆默认种子头 # 记忆 / # Memory 跟随界面语言互换（只换开头那一行 H1，用户后加的内容不动）
+function swapMemHeader(text: string, lang: Lang): string {
+  return lang === "en" ? text.replace(/^# 记忆(\s|$)/, "# Memory$1") : text.replace(/^# Memory(\s|$)/, "# 记忆$1");
+}
 const TOOL_SOURCE_EN: Record<string, string> = { "内置工具": "Built-in tools", "浏览器": "Browser" };
 const TOOL_PARAM_EN: Record<string, Record<string, string>> = {
   read_file: { path: "File path (relative or absolute)", offset: "Start line (1-based), optional", limit: "Lines to read, default 2000" },
@@ -7585,8 +7592,12 @@ function SettingsModal({
     };
   }
 
+  // 语言切换时，记忆里的默认种子头 # 记忆/# Memory 跟着换（用户内容不动）
   useEffect(() => {
-    window.wuwei.getMemory().then((m) => setMemory(m || ""));
+    setMemory((cur) => swapMemHeader(cur, lang));
+  }, [lang]);
+  useEffect(() => {
+    window.wuwei.getMemory().then((m) => setMemory(swapMemHeader(m || "", lang)));
     window.wuwei.getMcp().then((r) => {
       const mig = migrateMcpDefaults(r?.config || "");
       setMcpConfig(mig.text);
