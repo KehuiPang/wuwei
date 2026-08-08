@@ -6665,6 +6665,85 @@ const MCP_CATALOG: CatalogItem[] = [
   },
 ];
 
+// MCP 目录英文覆盖（仅 EN 用；缺省回退中文）。key=name；fields key = env 名或 `arg{下标}`。
+const MCP_EN: Record<string, { label?: string; desc?: string; fields?: Record<string, { label?: string; hint?: string }> }> = {
+  filesystem: { label: "Filesystem", desc: "Read/write & search files in allowed dirs", fields: { arg2: { label: "Accessible directory", hint: "Directory the AI can read/write; defaults to Desktop — keep it or point to your project dir" } } },
+  puppeteer: { label: "Puppeteer browser", desc: "Headless browser control/screenshots, works out of the box" },
+  memory: { label: "Knowledge-graph memory", desc: "Persistent knowledge-graph memory, works out of the box" },
+  "sequential-thinking": { label: "Sequential thinking", desc: "Structured multi-step reasoning, works out of the box" },
+  github: { desc: "Repo / issue / PR operations", fields: { GITHUB_PERSONAL_ACCESS_TOKEN: { hint: "Generate at github.com/settings/tokens with repo scope" } } },
+  "brave-search": { label: "Brave Search", desc: "Web search", fields: { BRAVE_API_KEY: { hint: "Free at brave.com/search/api" } } },
+  postgres: { desc: "Query Postgres (read-only)", fields: { arg2: { label: "Connection string", hint: "postgresql://user:password@host:5432/dbname" } } },
+  slack: { desc: "Read/write Slack messages", fields: { SLACK_BOT_TOKEN: { hint: "Starts with xoxb-" }, SLACK_TEAM_ID: { hint: "Starts with T" } } },
+};
+const mcpLabel = (c: CatalogItem, lang: Lang) => (lang === "en" && MCP_EN[c.name]?.label) || c.label;
+const mcpDesc = (c: CatalogItem, lang: Lang) => (lang === "en" && MCP_EN[c.name]?.desc) || c.desc;
+const mcpFieldEn = (name: string, key: string, kind: "label" | "hint", fallback: string, lang: Lang) =>
+  (lang === "en" && MCP_EN[name]?.fields?.[key]?.[kind]) || fallback;
+
+// 内置工具描述的英文（仅设置页 Tools 标签显示用；模型侧描述仍走 src/tools 原文）。按工具名。
+const TOOL_DESC_EN: Record<string, string> = {
+  read_file: "Read a text file's content with line numbers. For viewing code/files.",
+  write_file: "Write/overwrite a file (creates it and parent dirs if missing).",
+  edit_file: "Make an exact string replacement in a file. old_string must appear exactly once, or it errors.",
+  bash: "Run a shell command in the working dir (bash on macOS/Linux; Windows defaults to WSL bash). Returns stdout+stderr and exit code.",
+  glob: "Find files by glob pattern (e.g. '**/*.ts'), returns matching paths.",
+  grep: "Search file contents by regex/string, returns matching lines (file:line:content).",
+  remember: "Save a long-term memory (preferences, facts, project background); auto-loaded in future chats.",
+  web_search: "Search the web — returns titles/links/snippets of relevant pages. For latest info, research, and docs.",
+  web_fetch: "Fetch a web page and return its main text content.",
+  ask_user: "Pop up clickable options for the user to choose/confirm, instead of asking in prose.",
+  brain_recall: "Recall relevant concepts and relations from the local Brain (knowledge graph).",
+  brain_learn: "Add a concept / knowledge node to the local Brain.",
+  brain_link: "Create a relation between two concepts in the Brain.",
+  brain_forget: "Remove a concept or relation from the Brain.",
+  brain_read_doc: "Read the full source of a document indexed in the Brain.",
+  browser_open: "Open a web page URL in the built-in browser (can run JS; better than web_fetch for dynamic/interactive pages). After opening, use browser_read for text and browser_click to click elements.",
+  browser_read: "Read the visible text of the built-in browser's current page (open one first with browser_open).",
+  browser_click: "Click an element matching a CSS selector on the built-in browser's current page (buttons/links etc). Follow with browser_read to see changes.",
+};
+const toolDesc = (name: string, fallback: string, lang: Lang) => (lang === "en" && TOOL_DESC_EN[name]) || fallback;
+const TOOL_SOURCE_EN: Record<string, string> = { "内置工具": "Built-in tools", "浏览器": "Browser" };
+const TOOL_PARAM_EN: Record<string, Record<string, string>> = {
+  read_file: { path: "File path (relative or absolute)", offset: "Start line (1-based), optional", limit: "Lines to read, default 2000" },
+  write_file: { path: "File path (relative or absolute)", content: "Full content to write" },
+  edit_file: { path: "File path", old_string: "Exact text to replace (must be unique in the file)", new_string: "Replacement text" },
+  bash: { command: "Shell command to run", cwd: "Working directory, optional", timeout: "Timeout in ms, optional" },
+  glob: { pattern: "Glob pattern, e.g. **/*.ts", path: "Directory to search, optional" },
+  grep: { pattern: "Regex/string to search for", path: "File or directory, optional", glob: "Filter files by glob, optional" },
+  web_search: { query: "Search query" },
+  web_fetch: { url: "Web page URL to fetch" },
+  remember: { text: "The information to remember long-term" },
+  browser_open: { url: "Web page URL to open" },
+  browser_click: { selector: "CSS selector of the element to click" },
+  brain_recall: { query: "What to recall from the Brain" },
+  brain_learn: { name: "Concept name", content: "Concept content/knowledge" },
+  brain_link: { from: "Source concept", to: "Target concept", relation: "Relation type" },
+  brain_forget: { name: "Concept or relation to remove" },
+  brain_read_doc: { id: "Document id indexed in the Brain" },
+};
+type ToolGroupRaw = { source: string; kind: "builtin" | "browser" | "mcp"; tools: { name: string; description: string; readOnly: boolean; inputSchema: any }[] };
+// 把 getTools 返回的分组按语言彻底本地化：source 名、工具描述、inputSchema 参数说明（List/JSON 视图共用）。
+function localizeToolGroups(groups: ToolGroupRaw[], lang: Lang): ToolGroupRaw[] {
+  if (lang !== "en") return groups;
+  return groups.map((g) => ({
+    ...g,
+    source: TOOL_SOURCE_EN[g.source] ?? g.source,
+    tools: g.tools.map((tl) => {
+      const pmap = TOOL_PARAM_EN[tl.name];
+      let schema = tl.inputSchema;
+      if (pmap && schema?.properties && typeof schema.properties === "object") {
+        const props: any = {};
+        for (const [k, v] of Object.entries(schema.properties as Record<string, any>)) {
+          props[k] = pmap[k] ? { ...v, description: pmap[k] } : v;
+        }
+        schema = { ...schema, properties: props };
+      }
+      return { ...tl, description: TOOL_DESC_EN[tl.name] ?? tl.description, inputSchema: schema };
+    }),
+  }));
+}
+
 // 迁移：把已装服务器里的旧 <占位> 自动补成目录里的默认值(如 sqlite 的 <db路径>→~/wuwei.db)，让老配置也开箱可用
 function migrateMcpDefaults(text: string): { text: string; changed: boolean } {
   const servers = parseMcpServers(text);
@@ -7321,10 +7400,10 @@ function SettingsModal({
   useEffect(() => {
     if (tab !== "tools") return;
     window.wuwei.getTools().then((r) => {
-      setToolGroups(r.groups);
+      setToolGroups(localizeToolGroups(r.groups, lang));
       setToolTotal(r.total);
     });
-  }, [tab]);
+  }, [tab, lang]);
   // 切到「脑网络」页时拉一次图谱 + 文档库统计，并监听建索引/概念抽取进度。
   // 关键：主进程是进度真相源——重开设置时先查一次当前状态回填，避免"关了再开状态就没了"。
   useEffect(() => {
@@ -7557,12 +7636,12 @@ function SettingsModal({
     const fields: { label: string; hint: string; kind: "arg" | "env"; idx?: number; key?: string }[] = [];
     if (cat?.config) {
       for (const f of cat.config) {
-        if ("arg" in f) fields.push({ label: f.label, hint: f.hint, kind: "arg", idx: f.arg });
-        else fields.push({ label: f.label, hint: f.hint, kind: "env", key: f.env });
+        if ("arg" in f) fields.push({ label: mcpFieldEn(name, "arg" + f.arg, "label", f.label, lang), hint: mcpFieldEn(name, "arg" + f.arg, "hint", f.hint, lang), kind: "arg", idx: f.arg });
+        else fields.push({ label: mcpFieldEn(name, f.env, "label", f.label, lang), hint: mcpFieldEn(name, f.env, "hint", f.hint, lang), kind: "env", key: f.env });
       }
     } else {
       args.forEach((a, i) => {
-        if (a.includes("<")) fields.push({ label: "参数 " + (i + 1), hint: "", kind: "arg", idx: i });
+        if (a.includes("<")) fields.push({ label: (lang === "en" ? "Arg " : "参数 ") + (i + 1), hint: "", kind: "arg", idx: i });
       });
       Object.entries(envMap).forEach(([k, v]) => {
         if (String(v).includes("<")) fields.push({ label: k, hint: "", kind: "env", key: k });
@@ -9559,9 +9638,9 @@ function SettingsModal({
                         <div key={c.name} className="mcp-cat">
                           <div className="mcp-cat-info">
                             <span className="mcp-cat-label">
-                              {c.label} <code>{c.name}</code>
+                              {mcpLabel(c, lang)} <code>{c.name}</code>
                             </span>
-                            <span className="mcp-cat-desc">{c.desc}</span>
+                            <span className="mcp-cat-desc">{mcpDesc(c, lang)}</span>
                           </div>
                           <button type="button" className="mcp-btn" disabled={installed} onClick={() => mcpInstall(c)}>
                             {installed ? t("set.mcp.installed") : t("set.mcp.install")}
@@ -9766,7 +9845,7 @@ function SettingsModal({
                               {tool.name}
                               {tool.readOnly && <span className="tool-ro">{t("set.tools.readOnly")}</span>}
                             </span>
-                            <span className="tool-desc">{tool.description}</span>
+                            <span className="tool-desc">{toolDesc(tool.name, tool.description, lang)}</span>
                           </button>
                         ))}
                       </div>
@@ -10139,7 +10218,7 @@ function SettingsModal({
             {toolSel.name}
             {toolSel.readOnly && <span className="tool-ro">{t("set.tools.readOnly")}</span>}
           </h3>
-          <p className="s-note tool-detail-desc">{toolSel.description}</p>
+          <p className="s-note tool-detail-desc">{toolDesc(toolSel.name, toolSel.description, lang)}</p>
           <div className="tool-detail-label">{t("set.tools.detailSchema")}</div>
           <pre className="tools-json tool-detail-schema">
             {JSON.stringify(toolSel.inputSchema, null, 2)}
