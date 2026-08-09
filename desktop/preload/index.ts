@@ -224,7 +224,7 @@ const api = {
   // 当前应用版本号（帮助菜单显示）
   getAppVersion: () => ipcRenderer.invoke("app:version") as Promise<string>,
   // 手动检查更新：返回是否有新版 + 版本号（未打包/无更新源时 available:false）
-  checkUpdate: () => ipcRenderer.invoke("updater:check") as Promise<{ available: boolean; version?: string; notes?: string; error?: string }>,
+  checkUpdate: () => ipcRenderer.invoke("updater:check") as Promise<{ available: boolean; downloaded?: boolean; version?: string; notes?: string; error?: string }>,
   // 立即安装已下载好的更新并重启
   installUpdate: () => ipcRenderer.send("updater:install"),
   // 扫码支付：下单拿二维码串 + 轮询订单状态

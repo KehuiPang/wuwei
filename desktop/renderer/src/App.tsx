@@ -2394,7 +2394,18 @@ export function App() {
     setShowAcctMenu(false); // 关菜单，结果用居中弹窗显示
     setUpdateMsg(lang === "en" ? "Checking for updates…" : "正在检查更新…");
     const r = await window.wuwei.checkUpdate();
-    if (r.available) { setHasUpdate(true); setUpdateMsg(lang === "en" ? `New version v${r.version} found — downloading in the background. You'll be prompted to update when it's ready.` : `发现新版本 v${r.version}，正在后台下载，下载完成会提示你升级。`); }
+    if (r.available) {
+      setHasUpdate(true);
+      if (r.downloaded) {
+        // 已下载好：直接弹「升级并重启」，不再停留在「下载中」
+        setUpdateReady({ version: r.version || "", notes: r.notes || "" });
+        setDlProgress(null);
+        setUpdateMsg("");
+        setShowUpdateModal(true);
+      } else {
+        setUpdateMsg(lang === "en" ? `New version v${r.version} found — downloading in the background. You'll be prompted to update when it's ready.` : `发现新版本 v${r.version}，正在后台下载，下载完成会提示你升级。`);
+      }
+    }
     else setUpdateMsg(r.error ? (lang === "en" ? "Can't check updates right now (dev build or no update source)." : "暂时无法检查更新（开发版或未配置更新源）。") : (lang === "en" ? `You're on the latest version (v${appVer}).` : `已是最新版本（v${appVer}）。`));
   }
 

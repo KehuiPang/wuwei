@@ -2853,24 +2853,45 @@ function setupUpdater(): void {
     });
   });
   autoUpdater.on("update-downloaded", (info) => {
+    log("updater", "update-downloaded 事件", info.version);
     send("evt:update-downloaded", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
   });
   autoUpdater.on("error", (e) => log("updater", "更新出错", String(e?.message || e)));
-  // 启动后延迟自动查一次（静默；有新版会走 autoDownload → update-downloaded 提醒）
-  setTimeout(() => { autoUpdater.checkForUpdates().catch((e) => log("updater", "启动检查失败", String(e?.message || e))); }, 8000);
+  // 启动后延迟自动查一次（静默；有新版即等待下载完成后主动推「就绪」，不依赖原生 update-downloaded 事件）
+  setTimeout(() => { void checkAndPrepareUpdate(); }, 8000);
 }
-// 手动检查更新：返回是否有新版。dev/无源 → available:false + error。
-ipcMain.handle("updater:check", async () => {
+
+// 检查更新 + 等待下载完成（已缓存则立即完成）后主动推「就绪」。返回 {available, downloaded, version, notes}。
+// 关键：不再单纯依赖 update-downloaded 事件——缓存已存在时它可能不重新触发，导致界面永远等不到「升级重启」。
+async function checkAndPrepareUpdate(): Promise<{ available: boolean; downloaded?: boolean; version?: string; notes?: string; error?: string }> {
   try {
     const r = await autoUpdater.checkForUpdates();
     const info = r?.updateInfo;
     if (!info) return { available: false };
     const available = info.version !== app.getVersion();
-    return { available, version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" };
+    const notes = typeof info.releaseNotes === "string" ? info.releaseNotes : "";
+    if (!available) return { available: false, version: info.version };
+    log("updater", "发现新版", info.version);
+    // r.downloadPromise：autoDownload 触发的下载；已缓存则立即 resolve
+    if (r.downloadPromise) {
+      try {
+        await r.downloadPromise;
+        log("updater", "下载完成(就绪)", info.version);
+        send("evt:update-downloaded", { version: info.version, notes });
+        return { available: true, downloaded: true, version: info.version, notes };
+      } catch (e: any) {
+        log("updater", "下载失败", String(e?.message || e));
+        return { available: true, downloaded: false, version: info.version, notes };
+      }
+    }
+    return { available: true, downloaded: false, version: info.version, notes };
   } catch (e: any) {
     return { available: false, error: String(e?.message || e) };
   }
-});
+}
+
+// 手动检查更新：会等待下载完成再返回（downloaded=true 时界面直接弹「升级重启」）。dev/无源 → available:false + error。
+ipcMain.handle("updater:check", async () => checkAndPrepareUpdate());
 // 立即安装已下载的更新并重启
 ipcMain.on("updater:install", () => {
   try { autoUpdater.quitAndInstall(); } catch (e: any) { log("updater", "安装失败", String(e?.message || e)); }
