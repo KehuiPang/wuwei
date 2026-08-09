@@ -332,6 +332,7 @@ const EN_SKU: Record<string, string> = {
   pack_s: "pack_s_en",
   pack_m: "pack_m_en",
   pack_l: "pack_l_en",
+  pack_100: "pack_test_en", // $1 测试档（海外 Paddle）
 };
 // sku：下单时传给后端，服务端据此查金额/币量（价格以后端为准，绝不信任客户端）。价/币量已对齐 wuwei-site coin_catalog。
 type CoinPack = { sku: string; coins: number; bonus: number; price: number; priceUsd: number; desc: string; descEn: string; badge?: string; badgeEn?: string; badgeType?: "rec" | "val" };
@@ -341,8 +342,8 @@ const COIN_PACKS: CoinPack[] = [
   { sku: "pack_m", coins: 3000, bonus: 0, price: 69, priceUsd: 12.99, desc: "常用档", descEn: "Popular", badge: "推荐", badgeEn: "Recommended", badgeType: "rec" },
   { sku: "pack_l", coins: 9000, bonus: 0, price: 199, priceUsd: 39.99, desc: "高频 / 团队", descEn: "Heavy / team", badge: "最超值", badgeEn: "Best value", badgeType: "val" },
 ];
-// ¥1 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示；海外无对应 Paddle 档，EN 不显示。
-const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, priceUsd: 0, desc: "测试专用 · 小额验证", descEn: "Test · small verification", badge: "测试", badgeEn: "Test", badgeType: "val" };
+// 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示。CN ¥1 / EN $1（海外走 Paddle pack_test_en）。
+const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, priceUsd: 1, desc: "测试专用 · 小额验证", descEn: "Test · small verification", badge: "测试", badgeEn: "Test", badgeType: "val" };
 // 月付阶梯（价/币量/签到 对齐库 coin_catalog）：CN plan_pro/5x/50x = ¥29/99/899；EN pro/plus/max = $6.99/19.99/199。
 type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
@@ -5090,7 +5091,7 @@ export function App() {
         <CoinPackModal
           t={t}
           lang={lang}
-          packs={wuwei?.flags?.includes("coinpack_test") && lang !== "en" ? [TEST_COIN_PACK, ...COIN_PACKS] : COIN_PACKS}
+          packs={wuwei?.flags?.includes("coinpack_test") ? [TEST_COIN_PACK, ...COIN_PACKS] : COIN_PACKS}
           onClose={() => setCoinPackOpen(false)}
           onCheckout={(pack) => {
             setCoinPackOpen(false);
