@@ -2843,6 +2843,15 @@ function setupUpdater(): void {
   autoUpdater.on("update-available", (info) => {
     send("evt:update-available", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
   });
+  // 下载进度：转发给界面显示进度条（percent 0-100 + 速度/已下/总量）
+  autoUpdater.on("download-progress", (p) => {
+    send("evt:update-progress", {
+      percent: Math.max(0, Math.min(100, p?.percent ?? 0)),
+      transferred: p?.transferred ?? 0,
+      total: p?.total ?? 0,
+      bytesPerSecond: p?.bytesPerSecond ?? 0,
+    });
+  });
   autoUpdater.on("update-downloaded", (info) => {
     send("evt:update-downloaded", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
   });

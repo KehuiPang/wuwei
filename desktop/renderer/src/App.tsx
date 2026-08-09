@@ -1976,6 +1976,7 @@ export function App() {
   const [hasUpdate, setHasUpdate] = useState(false); // 有新版可用(小红点标志)：发现新版即 true
   // 左下角「重启更新」药丸：新版下载好后常驻显示，点主体即装、点叉关闭；关掉的版本记 localStorage，同版本不再弹、更新的版本会重新出现
   const [updateChipHidden, setUpdateChipHidden] = useState<string>(() => { try { return localStorage.getItem("wuwei_dismissed_update_chip") || ""; } catch { return ""; } });
+  const [dlProgress, setDlProgress] = useState<{ percent: number; bytesPerSecond: number } | null>(null); // 更新下载进度(0-100)，下载完清空
   async function refreshWuweiForShortage(message: string) {
     setCoinShortage({ message });
     try {
@@ -2376,7 +2377,8 @@ export function App() {
     const off = window.wuwei.onEvent((ch, p: any) => {
       // 自动下载不打扰用户，只在「更新」项标小红点；下载好了才弹「升级」提示
       if (ch === "evt:update-available") setHasUpdate(true);
-      else if (ch === "evt:update-downloaded") { setHasUpdate(true); setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); }
+      else if (ch === "evt:update-progress") setDlProgress({ percent: Math.round(p?.percent ?? 0), bytesPerSecond: p?.bytesPerSecond ?? 0 });
+      else if (ch === "evt:update-downloaded") { setHasUpdate(true); setDlProgress(null); setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); }
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3352,6 +3354,20 @@ export function App() {
             account.nickname || account.email || account.label || (account.loggedIn ? (lang === "en" ? "Signed in" : "已登录") : (lang === "en" ? "Not signed in" : "未登录"));
           return (
             <>
+              {/* 下载进度：正在下载新版时显示实时百分比进度条（下载完成后由「发现新版本」药丸接替） */}
+              {dlProgress && !updateReady && (
+                <div style={{ padding: "0 10px", marginTop: 12, marginBottom: 4, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+                  <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>
+                      <span>{lang === "en" ? "Downloading update…" : "正在下载更新…"}</span>
+                      <span>{dlProgress.percent}%</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 999, background: "var(--bg-raised)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${dlProgress.percent}%`, background: "var(--accent)", transition: "width .2s" }} />
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* 更新药丸：新版下载好即独立悬浮在账号分隔线之上（不属于账号边框）；点整卡=弹升级窗(不直接重启)，点右上角叉=关闭该版本不再提示 */}
               {updateReady && updateReady.version !== updateChipHidden && (
                 <div style={{ padding: "0 10px", marginTop: 12, marginBottom: 10, position: "relative", zIndex: 1, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
