@@ -4962,6 +4962,17 @@ export function App() {
         <div className="perm-overlay" onClick={() => setUpdateMsg("")}>
           <div className="add-st-dialog" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
             <div style={{ padding: "6px 2px 2px", fontSize: 14, lineHeight: 1.6 }}>{updateMsg}</div>
+            {dlProgress && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>
+                  <span>{lang === "en" ? "Downloading…" : "下载中…"}</span>
+                  <span>{dlProgress.percent}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 999, background: "var(--bg-raised)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${dlProgress.percent}%`, background: "var(--accent)", transition: "width .2s" }} />
+                </div>
+              </div>
+            )}
             <div className="btns" style={{ marginTop: 14, justifyContent: "flex-end" }}>
               <button className="allow" onClick={() => setUpdateMsg("")}>{lang === "en" ? "OK" : "知道了"}</button>
             </div>
