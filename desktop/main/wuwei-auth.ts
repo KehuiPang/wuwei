@@ -35,6 +35,28 @@ export interface WuweiMe {
   flags?: string[];
 }
 
+// AI 提供商目录（/api/catalog，脱敏）：后台可配的平台顺序/显隐/模型。客户端拿它当默认序 + 模型源，拉不到则回退硬编码 PRESETS。
+export interface CatalogModelDto {
+  id: string;
+  label: string;
+  free: boolean;
+}
+export interface CatalogProviderDto {
+  id: string;
+  label: string;
+  labelEn: string | null;
+  kind: string;
+  baseUrl: string;
+  keyUrl: string;
+  keyHint: string;
+  note: string;
+  noteEn: string;
+  hosted: boolean;
+  custom: boolean;
+  sort: number;
+  models: CatalogModelDto[];
+}
+
 // 本地 /cb 页面：把 URL fragment 里的 token 转成对本地的 query 请求（浏览器不把 # 发给 server）
 const HASH_BRIDGE_HTML = `<!doctype html><meta charset="utf-8"><title>无为登录</title>
 <body style="font-family:system-ui;background:#16191E;color:#F4F6F8;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
@@ -245,6 +267,21 @@ export async function wuweiFetchMe(accessToken: string): Promise<WuweiMe | "unau
     return (await res.json()) as WuweiMe;
   } catch (e) {
     log("wuweiAuth", "fetchMe 异常", String(e));
+    return null;
+  }
+}
+
+/** 拉 AI 提供商目录（脱敏）。带上 token(可选，用于登录态+每用户显隐) + 设备指纹。失败返回 null → 客户端回退硬编码。 */
+export async function wuweiFetchCatalog(accessToken?: string | null): Promise<CatalogProviderDto[] | null> {
+  try {
+    const headers: Record<string, string> = { "X-Device-Id": getDeviceId() };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const res = await fetch(`${SITE}/api/catalog`, { headers });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { providers?: CatalogProviderDto[] };
+    return Array.isArray(j.providers) ? j.providers : null;
+  } catch (e) {
+    log("wuweiAuth", "fetchCatalog 异常", String(e));
     return null;
   }
 }

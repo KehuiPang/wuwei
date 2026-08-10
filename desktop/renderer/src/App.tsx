@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { WuweiMe } from "../../main/wuwei-auth.js";
+import type { WuweiMe, CatalogProviderDto } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
 import { WECHAT_CS_QR } from "./wechatCsQr.js";
@@ -1810,6 +1810,7 @@ export function App() {
   const [showAllModels, setShowAllModels] = useState(false); // 切换模型下拉：false=常用(预设旗舰) true=全部(含实时拉取)
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [providerOrder, setProviderOrder] = useState<string[]>([]); // 平台自定义顺序
+  const [catalog, setCatalog] = useState<CatalogProviderDto[] | null>(null); // 后台 AI 提供商目录(默认序/显隐/模型)，null=回退硬编码 PRESETS
   const [hiddenProviders, setHiddenProviders] = useState<string[]>([]); // 隐藏的平台
   const [removedProviders, setRemovedProviders] = useState<string[]>([]); // 已删除的平台
   const [providerOverrides, setProviderOverrides] = useState<Record<string, { label?: string; baseUrl?: string }>>({}); // 平台改名/改端点
@@ -2175,17 +2176,29 @@ export function App() {
     });
     document.documentElement.setAttribute("data-platform", window.wuwei.platform);
   }, [showSettings]);
+  // 后台「AI 提供商」目录：默认序 / 显隐 / 模型（含免费）由后台可配。带登录 token 拉(应用每用户显隐)。
+  // 拉不到(离线/老后端)→ catalog=null → 全量回退硬编码 PRESETS + PROVIDER_ORDER，保证永远能用。
+  useEffect(() => {
+    window.wuwei.wuweiCatalog?.().then((c) => setCatalog(c && c.length ? c : null)).catch(() => setCatalog(null));
+  }, [wuwei?.user?.id]);
+
   // 内置平台 + 用户自定义供应商：先应用用户的删除/改名/改端点覆盖，再按托管登录+后台可见性过滤，
   // 最后按用户自定义顺序排、隐藏项不进切换菜单
   const backendHidden = wuwei?.providers?.hidden ?? []; // 后台下发的隐藏供应商(全局+按用户)
+  // 把后台目录并入内置预设：已知平台沿用本地元数据(kind/baseUrl/note)、仅用 catalog 覆盖模型列表；
+  // 后台新增的平台则整条按 catalog 构造。免费模型 id 收集给下拉打「免费」标。catalog=null 时原样返回。
+  const freeModelIds = new Set<string>();
+  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId);
+  const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerList = arrangePresets(
     // 托管平台需登录可见；后台隐藏的一律不显示(供应商上下架由后台控制)
-    applyProviderEdits([...PRESETS, ...stations.map(stationToPreset)], providerOverrides, removedProviders).filter(
+    applyProviderEdits([...mergedPresets, ...stations.map(stationToPreset)], providerOverrides, removedProviders).filter(
       (p) => (!p.hosted || !!wuwei) && !backendHidden.includes(p.id),
     ),
     providerOrder,
     hiddenProviders,
     false,
+    catalogOrder,
   );
   const curPreset = providerList.find((p) => p.id === curProviderId);
   // 动态实时模型(从平台 /models 拉)并入预设，去重；预设在前(保证旗舰置顶)，实时补充新模型；
@@ -4496,7 +4509,24 @@ export function App() {
                         className={"mq-item" + (m === meta.model ? " on" : "")}
                         onClick={() => quickModel(m)}
                       >
-                        <span>{m}</span>
+                        <span>
+                          {m}
+                          {freeModelIds.has(m) && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                padding: "1px 5px",
+                                borderRadius: 4,
+                                background: "#1f9d55",
+                                color: "#fff",
+                                verticalAlign: "middle",
+                              }}
+                            >
+                              {lang === "en" ? "Free" : "免费"}
+                            </span>
+                          )}
+                        </span>
                         {m === meta.model && <span className="mq-check">✓</span>}
                       </button>
                     ))}
@@ -6846,19 +6876,25 @@ const pKeyHint = (p: Preset, lang: Lang) => (lang === "en" && PRESET_EN[p.id]?.k
 const pNote = (p: Preset, lang: Lang) => (lang === "en" ? PRESET_EN[p.id]?.note ?? p.note : p.note);
 
 // 菜单/下拉里的展示顺序(不改 PRESETS 定义本身，PRESETS[0]=codex 仍作默认)
+// 默认平台顺序（无为托管整块置顶；后台 /api/catalog 会下发覆盖此默认序，用户本地拖动的顺序仍最优先）。
+// 此常量是离线兜底：拉不到 catalog 时用它排。与后台迁移 ai_provider.sort 保持一致。
 const PROVIDER_ORDER = [
-  "codex",
+  "wuwei-claude",
+  "wuwei-gpt",
+  "wuwei-deepseek",
+  "wuwei-kimi",
+  "wuwei-zhipu",
   "claude-oauth",
+  "codex",
+  "kimi-sub",
+  "deepseek",
+  "zhipu",
   "anthropic",
   "openrouter",
   "openai",
-  "zhipu",
-  "deepseek",
-  "minimax",
-  "doubao",
   "qwen",
-  "kimi",
-  "kimi-sub",
+  "doubao",
+  "minimax",
   "hunyuan",
   "grok",
   "custom",
@@ -6867,14 +6903,62 @@ const PROVIDER_ORDER = [
 // 依据用户自定义顺序(order)+隐藏集(hidden)对预设列表排序/过滤。
 // order 里没有的(新平台/新中转站)按内置 PROVIDER_ORDER 默认序、再按原始相对序补到末尾——保证永不漏显示。
 // includeHidden=true 时保留隐藏项(设置里的平台管理列表用)，false 时过滤掉(切换菜单/正常展示用)。
+// 把后台目录并入内置预设：
+//  - catalog=null(离线/老后端) → 原样返回 base，全量回退硬编码，行为不变；
+//  - 已知 id(在 base 里) → 保留本地 kind/baseUrl/keyUrl/note 等元数据，仅当 catalog 给了模型时覆盖 models；
+//  - 未知 id(后台新增平台) → 整条按 catalog 字段构造 OpenAI 兼容 Preset；
+//  - catalog 未含的内置平台视为"后台已隐藏"不返回，但强制保留 keepId(当前选中)避免用户被甩飞；
+//  - 顺带收集免费模型 id 到 freeSet（给模型下拉打「免费」标）。
+function mergeCatalogIntoPresets(
+  base: Preset[],
+  catalog: CatalogProviderDto[] | null,
+  freeSet: Set<string>,
+  keepId?: string,
+): Preset[] {
+  if (!catalog || catalog.length === 0) return base;
+  const byId = new Map(base.map((p) => [p.id, p]));
+  const out: Preset[] = [];
+  const seen = new Set<string>();
+  for (const c of catalog) {
+    for (const m of c.models) if (m.free) freeSet.add(m.id);
+    const models = c.models.map((m) => m.id);
+    const local = byId.get(c.id);
+    if (local) {
+      out.push(models.length ? { ...local, models } : local);
+    } else {
+      out.push({
+        id: c.id,
+        label: c.label,
+        kind: (c.kind as Kind) || "openai",
+        baseUrl: c.baseUrl,
+        keyUrl: c.keyUrl,
+        keyHint: c.keyHint,
+        models,
+        note: c.note,
+        fixedBaseUrl: c.hosted || !!c.baseUrl,
+        custom: c.custom,
+        hosted: c.hosted,
+      });
+    }
+    seen.add(c.id);
+  }
+  // 强制保留当前选中平台（即便后台把它隐藏了），避免正在用的平台从下拉里消失导致无法发送
+  if (keepId && !seen.has(keepId)) {
+    const cur = byId.get(keepId);
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
 function arrangePresets(
   all: Preset[],
   order: string[] | undefined,
   hidden: string[] | undefined,
   includeHidden: boolean,
+  defaultOrder?: string[], // 后台 catalog 下发的默认序；缺省用内置 PROVIDER_ORDER。用户 order 永远最优先。
 ): Preset[] {
   const userRank = new Map((order || []).map((id, i) => [id, i]));
-  const defRank = new Map(PROVIDER_ORDER.map((id, i) => [id, i]));
+  const defRank = new Map((defaultOrder && defaultOrder.length ? defaultOrder : PROVIDER_ORDER).map((id, i) => [id, i]));
   const rankOf = (id: string) => {
     if (userRank.has(id)) return userRank.get(id)!; // 用户排过的：最优先
     if (defRank.has(id)) return 1000 + defRank.get(id)!; // 内置但用户没排过：接在后面按默认序

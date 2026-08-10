@@ -1,5 +1,5 @@
 // 渲染进程可见的 window.wuwei 类型（来自 preload）
-import type { WuweiMe } from "../../main/wuwei-auth.js";
+import type { WuweiMe, CatalogProviderDto } from "../../main/wuwei-auth.js";
 
 export interface BrainNodeLite {
   id: string;
@@ -128,6 +128,7 @@ export interface WuweiApi {
   codexLogin(): Promise<boolean>;
   wuweiLogin(): Promise<WuweiMe | null>;
   wuweiMe(): Promise<WuweiMe | null>;
+  wuweiCatalog(): Promise<CatalogProviderDto[] | null>;
   wuweiLogout(): Promise<boolean>;
   wuweiDeviceId(): Promise<string>;
   rememberGet(): Promise<{ last?: string; accounts: { email: string; password: string }[] }>;

@@ -115,6 +115,7 @@ import {
   wuweiLogin,
   wuweiRefresh,
   wuweiFetchMe,
+  wuweiFetchCatalog,
   wuweiPasswordLogin,
   wuweiSendCode,
   wuweiCodeLogin,
@@ -2804,6 +2805,11 @@ ipcMain.handle("account:wuwei-logout", () => {
   clearWuweiSession();
   applyProFromMe(null); // 退出 → 会员态清空 → 脑网络停用
   return true;
+});
+// AI 提供商目录（脱敏）：带上当前会话 token(可选) 拉后台可配的平台顺序/显隐/模型。失败返回 null → 渲染层回退硬编码 PRESETS。
+ipcMain.handle("account:wuwei-catalog", async () => {
+  const sess = await getFreshWuweiSession().catch(() => null);
+  return wuweiFetchCatalog(sess?.accessToken ?? null);
 });
 // 记住登录：多账号加密存储，供登录框自动填充 + 账号下拉历史。
 ipcMain.handle("login:remember-get", () => loadRemember());
