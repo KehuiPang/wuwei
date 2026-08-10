@@ -1698,6 +1698,12 @@ app.on("before-quit", () => {
 function isHostedProvider(pid?: string): boolean {
   return !!pid && pid.startsWith("wuwei-");
 }
+// anon(免登录免费体验)平台：未登录也可见/可用，走网关匿名分支。内置 wuwei-free；
+// 后台若新增其它 anon 平台，会在拉 catalog 时补进此集合（见 account:wuwei-catalog）。
+const anonProviderIds = new Set<string>(["wuwei-free"]);
+function isAnonProvider(pid?: string): boolean {
+  return !!pid && anonProviderIds.has(pid);
+}
 // 无为会话统一取新：所有要用 token 的地方都走这里。
 // 为什么要收口：Supabase 的 refresh_token 是「一次性轮换」——用一次就换新的、旧的立刻作废。
 // 过去 injectWuwei / wuwei-me / pay:create / pay:status 各自独立 refresh，一旦并发（如启动拉 me 时点了充值），
@@ -1719,15 +1725,17 @@ async function getFreshWuweiSession(): Promise<WuweiSession | null> {
   }
   return refreshInflight;
 }
-// 托管平台每轮开跑前：把新鲜的无为 access_token 注入为网关的 apiKey(快过期先续期)，重建 provider。
+// 托管平台每轮开跑前：把网关的 apiKey 注入并重建 provider。
+//  - 已登录：apiKey = 新鲜的无为 access_token(快过期先续期) → 按 token 扣无为币。
+//  - 未登录：apiKey = anon-<设备id> → 匿名试用分支(仅 anon 平台的 free 模型可用，网关按设备/IP 每日护栏)。
 async function ensureHostedProviderReady(): Promise<void> {
   const st = loadSettings();
   if (!st || !isHostedProvider(st.providerId)) return;
-  const sess = await getFreshWuweiSession();
-  if (!sess) return; // 未登录/续期失败：发送门槛已拦，这里兜底不注入
   applyEnvFromSettings(st); // 平台 baseUrl(网关)等按设置
-  process.env.WUWEI_API_KEY = sess.accessToken; // 网关的"key"=用户无为 token(只 env、不落 config)
-  process.env.MINICC_API_KEY = sess.accessToken; // 兼容：config.ts 仍读旧名，过渡期内双写
+  const sess = await getFreshWuweiSession();
+  const key = sess ? sess.accessToken : `anon-${getDeviceId()}`; // 未登录 → 匿名试用 token
+  process.env.WUWEI_API_KEY = key; // 网关的"key"(只 env、不落 config)
+  process.env.MINICC_API_KEY = key; // 兼容：config.ts 仍读旧名，过渡期内双写
   provider = makeProvider(loadConfig());
   for (const a of agents.values()) a.setProvider(provider);
 }
@@ -2809,7 +2817,14 @@ ipcMain.handle("account:wuwei-logout", () => {
 // AI 提供商目录（脱敏）：带上当前会话 token(可选) 拉后台可配的平台顺序/显隐/模型。失败返回 null → 渲染层回退硬编码 PRESETS。
 ipcMain.handle("account:wuwei-catalog", async () => {
   const sess = await getFreshWuweiSession().catch(() => null);
-  return wuweiFetchCatalog(sess?.accessToken ?? null);
+  const cat = await wuweiFetchCatalog(sess?.accessToken ?? null);
+  // 记下后台标为 anon(免登录)的平台，供 hasCredential/发送前注入识别；内置 wuwei-free 恒在集合里。
+  if (cat) {
+    anonProviderIds.clear();
+    anonProviderIds.add("wuwei-free");
+    for (const p of cat) if (p.anon) anonProviderIds.add(p.id);
+  }
+  return cat;
 });
 // 记住登录：多账号加密存储，供登录框自动填充 + 账号下拉历史。
 ipcMain.handle("login:remember-get", () => loadRemember());
@@ -3065,7 +3080,8 @@ function hasCredential(cfg: ReturnType<typeof loadConfig>): boolean {
     return cfg.authMode === "oauth" ? !!cfg.oauthToken : !!cfg.apiKey;
   // 无为托管平台：key 不落 config、只在发送前注入 env，故这里以"已登录无为"为准。
   // 登录了即有凭证(判绿由后续真实 ping 决定；网关不通会转黄，而非红)。
-  if (isHostedProvider(curProviderId())) return !!loadWuweiSession();
+  // 例外：anon(免登录)平台始终有凭证——未登录用 anon-<设备id> 走匿名试用。
+  if (isHostedProvider(curProviderId())) return isAnonProvider(curProviderId()) || !!loadWuweiSession();
   // openai 兼容：有真实 key 即可；本地端点(localhost)无需 key。
   // 托管平台(通义千问/DeepSeek 等)虽有固定 baseUrl，但没 key 一样不可用→判红。
   const hasKey = !!cfg.apiKey && cfg.apiKey !== "not-needed";
@@ -3079,6 +3095,11 @@ ipcMain.handle("conn:check", async () => {
   const cfg = loadConfig();
   if (!hasCredential(cfg)) {
     return { status: "red", reason: tt("当前平台未配置凭证 / 未授权，无法使用。", "This provider has no credentials / isn't authorized — can't be used.") };
+  }
+  // 匿名试用平台(未登录)：真实 ping 会走网关匿名分支、白白消耗当日免费次数。
+  // 故未登录时不 ping，直接判绿——凭证恒在(anon-<设备id>)，真连通性发消息时自会体现。
+  if (isAnonProvider(curProviderId()) && !loadWuweiSession()) {
+    return { status: "green", reason: tt("免费体验就绪（无需登录）。", "Free trial ready (no login needed).") };
   }
   // 托管平台：ping 前必须先注入新鲜的无为 token 并重建 provider，
   // 否则用的是空/旧 token（token 只在发消息前注入），网关会回 401 invalid_token 而误判「未连通」。

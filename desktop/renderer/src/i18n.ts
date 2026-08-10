@@ -479,6 +479,8 @@ const DICT_EN: Record<string, string> = {
   "usage.sessTokens": "Session tokens",
   "usage.hostedNote": "Hosted: credits charged per token × unit price (balance refreshes as you chat).",
   "usage.loginToView": "Sign in to view · Sign in",
+  "usage.freeTrial": "Free trial · limited uses per day",
+  "usage.loginUnlock": "Sign in to unlock more →",
   "usage.acctBal": "Account balance",
   "usage.yuanAmount": "¥{n}",
   "usage.sessConsumed": "Spent this session",

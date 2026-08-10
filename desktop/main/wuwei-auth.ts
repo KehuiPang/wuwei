@@ -53,6 +53,7 @@ export interface CatalogProviderDto {
   noteEn: string;
   hosted: boolean;
   custom: boolean;
+  anon: boolean; // 未登录也可见（匿名试用免费模型）
   sort: number;
   models: CatalogModelDto[];
 }

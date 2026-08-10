@@ -2191,9 +2191,9 @@ export function App() {
   const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerList = arrangePresets(
-    // 托管平台需登录可见；后台隐藏的一律不显示(供应商上下架由后台控制)
+    // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
     applyProviderEdits([...mergedPresets, ...stations.map(stationToPreset)], providerOverrides, removedProviders).filter(
-      (p) => (!p.hosted || !!wuwei) && !backendHidden.includes(p.id),
+      (p) => (!p.hosted || !!wuwei || p.anon) && !backendHidden.includes(p.id),
     ),
     providerOrder,
     hiddenProviders,
@@ -2817,7 +2817,8 @@ export function App() {
     }
     // 未登录发任何消息 → 先弹居中的登录激励卡(免费顶级模型 + 注册得 100 无为币)，
     // 用户点「登录」再切到登录表单，比一上来就甩登录框干净、转化更好。
-    if (!wuwei) {
+    // 例外：选中的是 anon(免登录免费体验)平台 → 直接放行，让未登录用户零摩擦试用。
+    if (!wuwei && !curPreset?.anon) {
       setShowLoginIntro(true);
       return;
     }
@@ -4818,6 +4819,19 @@ export function App() {
                     <div className="u-note">{t("usage.hostedNote", "无为托管按 token×单价扣无为币（余额随对话刷新）。")}</div>
                   )}
                 </>
+              ) : curPreset?.anon ? (
+                // 免登录免费体验：不显余额，给零摩擦提示 + 登录解锁引导
+                <div
+                  className="u-row"
+                  style={{ color: "#C05F3C", cursor: "pointer", alignItems: "center" }}
+                  onClick={() => {
+                    setLoginResume(false);
+                    setShowLoginForm(true);
+                  }}
+                >
+                  <span>{t("usage.freeTrial", "免费体验中 · 每日有限次数")}</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{t("usage.loginUnlock", "登录解锁更多 →")}</span>
+                </div>
               ) : (
                 <div
                   className="u-row"
@@ -6466,6 +6480,7 @@ interface Preset {
   fixedBaseUrl: boolean;
   custom?: boolean; // 用户自定义中转站(可删除)
   hosted?: boolean; // 无为托管平台(走网关、按 token 扣无为币)；仅灰度放开的用户可见
+  anon?: boolean; // 未登录也可见/可用(匿名试用免费模型；hosted 平台但免登录，靠设备/IP 每日护栏)
 }
 
 // 用户自定义中转站
@@ -6505,6 +6520,20 @@ function applyProviderEdits(
 
 // 私有版：保留 Codex/Claude 两种订阅后端，其余为各平台 API Key 预设（模型 id 均取自官网 2026-07）
 const PRESETS: Preset[] = [
+  {
+    // 免费体验：无需登录、无需 Key，直接试用智谱免费模型（GLM-*-Flash）。走网关匿名分支，靠设备/IP 每日护栏防滥用。
+    id: "wuwei-free",
+    label: "免费体验（无需登录）",
+    kind: "openai",
+    baseUrl: "https://wuweiai.io/api/gateway/v1",
+    keyUrl: "",
+    keyHint: "",
+    models: ["glm-4.7-flash", "glm-4-flash", "glm-z1-flash", "glm-4v-flash"],
+    note: "免费体验：无需登录、无需 Key，直接试用智谱免费大模型（GLM-*-Flash）。每台设备每日有限次数，登录后可解锁更多模型与更高额度。",
+    fixedBaseUrl: true,
+    hosted: true,
+    anon: true,
+  },
   {
     // 无为托管：走网关、用无为币按 token 扣费，无需自己的 Key。仅灰度放开的用户可见。
     id: "wuwei-deepseek",
@@ -6858,6 +6887,7 @@ const PRESET_EN: Record<string, { label?: string; note?: string; keyHint?: strin
   "wuwei-gpt": { label: "Wuwei Hosted · GPT", note: "Hosted: no key needed, credits charged per token. GPT-5.5 / 5.6." },
   codex: { label: "Codex subscription (ChatGPT login)", note: "Uses your local ~/.codex login — no credentials needed. Only gpt-5.5 is device-verified; whether other models route through the subscription depends — watch the status light / actual requests after switching (a failure shows amber)." },
   "claude-oauth": { label: "Claude subscription (Claude Code)", keyHint: "sk-ant-oat… (auto-filled after one-click authorize above)" },
+  "wuwei-free": { label: "Free trial (no login)", note: "Free trial: no login, no API key — try Zhipu's free models (GLM-*-Flash) right away. Limited uses per device per day; sign in to unlock more models and higher limits." },
   anthropic: { label: "Claude API Key (Anthropic)" },
   openai: { label: "OpenAI (GPT)", note: "gpt-5.6-terra balanced / sol strongest / luna cheapest" },
   openrouter: { label: "OpenRouter (all providers)", note: "One key for Claude / GPT / Gemini and more. Use “vendor/model” slugs (full list at openrouter.ai/models), or pick “Custom” to enter any slug." },
@@ -6879,6 +6909,7 @@ const pNote = (p: Preset, lang: Lang) => (lang === "en" ? PRESET_EN[p.id]?.note 
 // 默认平台顺序（无为托管整块置顶；后台 /api/catalog 会下发覆盖此默认序，用户本地拖动的顺序仍最优先）。
 // 此常量是离线兜底：拉不到 catalog 时用它排。与后台迁移 ai_provider.sort 保持一致。
 const PROVIDER_ORDER = [
+  "wuwei-free",
   "wuwei-claude",
   "wuwei-gpt",
   "wuwei-deepseek",
@@ -6924,7 +6955,8 @@ function mergeCatalogIntoPresets(
     const models = c.models.map((m) => m.id);
     const local = byId.get(c.id);
     if (local) {
-      out.push(models.length ? { ...local, models } : local);
+      // 已知平台：保留本地元数据，模型用 catalog 覆盖；anon(未登录可见)由后台控制，跟随 catalog。
+      out.push({ ...local, ...(models.length ? { models } : {}), anon: c.anon });
     } else {
       out.push({
         id: c.id,
@@ -6938,6 +6970,7 @@ function mergeCatalogIntoPresets(
         fixedBaseUrl: c.hosted || !!c.baseUrl,
         custom: c.custom,
         hosted: c.hosted,
+        anon: c.anon,
       });
     }
     seen.add(c.id);
