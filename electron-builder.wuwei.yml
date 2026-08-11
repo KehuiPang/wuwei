@@ -17,7 +17,9 @@ asarUnpack:
   - "**/node_modules/@xenova/**"
 mac:
   target:
-    - target: dmg
+    - target: dmg # 用户下载安装用
+      arch: [x64, arm64]
+    - target: zip # electron-updater 自动更新用（mac 只能从 zip 增量更新，不能从 dmg）
       arch: [x64, arm64]
   icon: build/icon.png
   category: public.app-category.developer-tools

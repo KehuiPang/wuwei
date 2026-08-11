@@ -61,6 +61,7 @@ import {
   loadSettings,
   saveSettings,
   applyEnvFromSettings,
+  detectSysLang,
   loadRateLimits,
   saveRateLimits,
   loadWindowBounds,
@@ -912,7 +913,7 @@ export const DEFAULT_BRAIN_NOTE_EN =
 // 构造系统提示词：优先本平台专属覆盖(creds[pid].systemPrompt)，再全局(settings.systemPrompt)，都没有=默认模板；渲染 {model}/{cwd}
 function buildSysPrompt(cwd: string, model: string, providerId?: string): string {
   const st = loadSettings();
-  const lang = st?.app?.lang === "en" ? "en" : "zh"; // 界面语言→系统提示词走哪套默认模板
+  const lang = st?.app?.lang === "en" ? "en" : st?.app?.lang === "zh" ? "zh" : detectSysLang(); // 未手动设过→按系统语言
   const override = providerId ? st?.creds?.[providerId]?.systemPrompt : undefined;
   const custom = typeof override === "string" ? override : st?.systemPrompt;
   let base = typeof custom === "string" ? renderPrompt(custom, cwd, model) : systemPrompt(cwd, model, lang);
@@ -1710,7 +1711,11 @@ function isAnonProvider(pid?: string): boolean {
 // 第二个用的就是已被轮换作废的旧 refresh_token → 后端 refresh_failed → 误清会话 → 表现为「登录莫名很快就过期」。
 // 这里用「在途 Promise 单飞」让并发只跑一次 refresh，并提前 90s 主动续期，access_token 永不踩着过期线用。
 let refreshInflight: Promise<WuweiSession | null> | null = null;
+// 显式登出标志：用户主动退出后置真，掐断一切后台 me 拉取/推送/续期回写(否则迟到的刷新会把登录态复活，需退两次)。
+// 任何一次成功登录都清零(见各登录 handler)。
+let wuweiLoggedOut = false;
 async function getFreshWuweiSession(): Promise<WuweiSession | null> {
+  if (wuweiLoggedOut) return null; // 已显式登出：一律当未登录，防迟到刷新复活
   const sess = loadWuweiSession();
   if (!sess) return null;
   const BUFFER = 90 * 1000; // 距过期 <90s 就提前续
@@ -1719,6 +1724,7 @@ async function getFreshWuweiSession(): Promise<WuweiSession | null> {
     refreshInflight = (async () => {
       const fresh = await wuweiRefresh(sess.refreshToken);
       if (!fresh) { clearWuweiSession(); return null; }
+      if (wuweiLoggedOut) return null; // 续期期间用户登出了 → 不回写 session
       saveWuweiSession(fresh);
       return fresh;
     })().finally(() => { refreshInflight = null; });
@@ -2756,6 +2762,7 @@ ipcMain.handle("account:codex-login", async () => {
 ipcMain.handle("account:wuwei-login", async () => {
   const sess = await wuweiLogin();
   if (!sess) return null;
+  wuweiLoggedOut = false; // 重新登录 → 解除登出封锁
   saveWuweiSession(sess);
   const me = await wuweiFetchMe(sess.accessToken);
   if (me === "unauthorized" || !me) return null;
@@ -2768,6 +2775,7 @@ async function finishWuweiSignin(
   action: "login" | "register" = "login",
 ): Promise<{ me?: unknown; error?: string }> {
   if (typeof r === "string") return { error: r };
+  wuweiLoggedOut = false; // 重新登录 → 解除登出封锁
   saveWuweiSession(r);
   const me = await wuweiFetchMe(r.accessToken);
   if (me === "unauthorized" || !me) {
@@ -2810,6 +2818,8 @@ ipcMain.handle("account:wuwei-me", async () => {
   return meVal;
 });
 ipcMain.handle("account:wuwei-logout", () => {
+  wuweiLoggedOut = true;      // 掐断后台刷新/推送，防"退一次又自动登回"
+  refreshInflight = null;     // 丢弃进行中的续期(其回写已被 wuweiLoggedOut 拦)
   clearWuweiSession();
   applyProFromMe(null); // 退出 → 会员态清空 → 脑网络停用
   return true;

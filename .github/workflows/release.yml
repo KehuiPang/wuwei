@@ -31,19 +31,31 @@ jobs:
       - name: Build renderer/main
         run: npm run desktop:build
 
+      # 用 electron-builder.wuwei.yml：含 generic OSS publish 配置 → 会生成 latest*.yml 更新清单
+      # （--publish never 只是不让 electron-builder 自己上传；清单仍写入 release/，由下方 OSS 步骤上传）
       - name: Package Linux (AppImage/deb)
         if: matrix.os == 'ubuntu-latest'
-        run: npx electron-builder --linux --publish never
+        run: npx electron-builder --linux --config electron-builder.wuwei.yml --publish never
 
-      - name: Package macOS (dmg)
+      - name: Package macOS (dmg + zip)
         if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac --publish never
+        run: npx electron-builder --mac --config electron-builder.wuwei.yml --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false # 无签名证书：跳过签名，产出未签名 dmg
 
       - name: Package Windows (exe)
         if: matrix.os == 'windows-latest'
-        run: npx electron-builder --win --publish never
+        run: npx electron-builder --win --config electron-builder.wuwei.yml --publish never
+
+      # 上传安装包 + latest*.yml 到阿里云 OSS（自动更新源 + 官网下载源）。
+      # 凭证走仓库 secrets；未配置则脚本内跳过，不影响 GitHub Release。
+      - name: Upload to Aliyun OSS
+        run: |
+          npm i ali-oss@6 --no-save --no-audit --no-fund
+          node scripts/upload-oss.mjs
+        env:
+          OSS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
 
       - name: Publish to Release
         uses: softprops/action-gh-release@v2

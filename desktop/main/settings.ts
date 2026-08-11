@@ -5,6 +5,20 @@ import { join } from "node:path";
 
 const DIR = join(homedir(), ".wuwei");
 
+// 系统语言自动判定（用户没手动设过界面语言时用）：中国时区 → 中文；否则按系统 locale/LANG，
+// zh 开头 → 中文，其它 → 英文。不依赖 electron，CLI 侧同样可用。与 renderer i18n.getLang() 同逻辑。
+export function detectSysLang(): "zh" | "en" {
+  try {
+    const opt = Intl.DateTimeFormat().resolvedOptions();
+    const tz = (opt.timeZone || "").toLowerCase();
+    if (/shanghai|chongqing|harbin|urumqi|kashgar|hong_kong|macau|taipei/.test(tz)) return "zh";
+    const loc = (opt.locale || process.env.LC_ALL || process.env.LANG || "").toLowerCase();
+    return loc.startsWith("zh") ? "zh" : "en";
+  } catch {
+    return "zh"; // 兜底中文（主力用户群）
+  }
+}
+
 // 数据目录改名迁移：老版本存 ~/.minicc，改名后首启把老数据复制进 ~/.wuwei。
 // force:false → 不覆盖已存在文件(保住 ~/.wuwei 里已有的 auth.json 等)；一次性(靠 marker)。
 export function migrateFromMinicc(): void {
@@ -224,8 +238,10 @@ export function applyEnvFromSettings(s: Settings | null) {
   ]) {
     delete process.env[k];
   }
-  // 界面语言 → env，供 CLI 侧（mcp 状态、remember 的默认记忆头 # 记忆/# Memory）跟随
-  process.env.WUWEI_LANG = s?.app?.lang === "en" ? "en" : "zh";
+  // 界面语言 → env，供 CLI 侧（mcp 状态、remember 的默认记忆头 # 记忆/# Memory）跟随。
+  // 用户未手动设过 lang → 按系统语言自动判定（海外默认英文），与 renderer i18n getLang() 一致。
+  process.env.WUWEI_LANG =
+    s?.app?.lang === "en" ? "en" : s?.app?.lang === "zh" ? "zh" : detectSysLang();
   if (!s) return; // 无设置：走 loadConfig 自动推断（有 ~/.codex 即 codex）
   if (s.model) process.env.MINICC_MODEL = s.model;
   // 当前生效模型的能力开关：优先按模型(modelCaps[model])，回退到旧的平台级(迁移兼容)
