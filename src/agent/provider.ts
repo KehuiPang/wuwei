@@ -49,7 +49,7 @@ const CLIENT_OS = (() => {
 async function fetchWithRetry(url: string, init: RequestInit, retries = 4): Promise<Response> {
   // 无为网关：带上 X-Client-OS，后台「用量记录」据此显示游客系统。
   if (CLIENT_OS && typeof url === "string" && /wuweiai\.io\/api\/gateway/.test(url)) {
-    const h = new Headers(init.headers as HeadersInit | undefined);
+    const h = new Headers(init.headers as ConstructorParameters<typeof Headers>[0]);
     h.set("X-Client-OS", CLIENT_OS);
     init = { ...init, headers: h };
   }
