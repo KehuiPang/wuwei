@@ -296,6 +296,7 @@ class OpenAIProvider implements Provider {
     let buf = "";
     let text = "";
     let sawTool = false;
+    let reasoningOpen = false; // 推理模型的 reasoning_content 流：包成 <think>…</think> 让渲染统一折叠
     const toolAcc: Record<number, { id?: string; name?: string; args: string }> = {};
     let usage: {
       inputTokens: number;
@@ -345,7 +346,23 @@ class OpenAIProvider implements Provider {
         const ch = j.choices?.[0];
         if (!ch) continue;
         const d = ch.delta ?? {};
+        // 推理模型（GLM-Z1/4.7-Flash 等）的独立思考流：包进 <think>…</think>，与原生 <think> 归一，渲染端统一折叠
+        const rc = (d as { reasoning_content?: unknown }).reasoning_content;
+        if (typeof rc === "string" && rc) {
+          if (!reasoningOpen) {
+            reasoningOpen = true;
+            text += "<think>";
+            handlers.onText?.("<think>");
+          }
+          text += rc;
+          handlers.onText?.(rc);
+        }
         if (typeof d.content === "string" && d.content) {
+          if (reasoningOpen) {
+            reasoningOpen = false;
+            text += "</think>\n";
+            handlers.onText?.("</think>\n");
+          }
           text += d.content;
           handlers.onText?.(d.content); // 逐块推给渲染进程
         }
@@ -360,6 +377,12 @@ class OpenAIProvider implements Provider {
       }
     }
 
+    if (reasoningOpen) {
+      // 仅有思考、没跟正文就结束（罕见）：补上闭合，避免 <think> 悬空
+      reasoningOpen = false;
+      text += "</think>\n";
+      handlers.onText?.("</think>\n");
+    }
     const content: ContentBlock[] = [];
     if (text) content.push({ type: "text", text });
     for (const idx of Object.keys(toolAcc).map(Number).sort((a, b) => a - b)) {

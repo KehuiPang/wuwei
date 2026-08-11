@@ -6126,6 +6126,35 @@ function CopyBtn({ text }: { text: string }) {
 // 流式中「按段提交」：以最后一个空行(\n\n)为界，前面已完成的段落即时渲染 Markdown
 // (MarkdownView 有 memo，committed 不变就不重解析→只在跨段时解析一次)，最后没写完的一段用纯文本。
 // 流完(streaming=false)整体走完整 Markdown + 代码高亮。
+// 抽取开头的 <think>…</think>（推理模型思考流，provider 已把 reasoning_content 也归一成 <think>）。
+// open=true 表示流式中 <think> 还没闭合（正在思考）。只认开头，避免误伤正文里的代码/文本。
+function splitThinking(text: string): { think: string; answer: string; open: boolean } {
+  const closed = text.match(/^\s*<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>\s*/i);
+  if (closed) return { think: closed[1].trim(), answer: text.slice(closed[0].length), open: false };
+  const opening = text.match(/^\s*<think(?:ing)?>([\s\S]*)$/i);
+  if (opening) return { think: opening[1], answer: "", open: true };
+  return { think: "", answer: text, open: false };
+}
+
+// 可折叠「深度思考」块：思考时自动展开，思考完自动收起（用户仍可点开）。
+function ThinkBlock({ content, live }: { content: string; live?: boolean }) {
+  const en = getLang() === "en";
+  if (!content.trim() && !live) return null;
+  return (
+    <details className="think-block" open={live ? true : undefined}>
+      <summary>
+        <svg className="tk-ico" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 2.5c.32 3.6 2.28 5.56 5.9 5.88-3.62.32-5.58 2.28-5.9 5.9-.32-3.62-2.28-5.58-5.9-5.9 3.62-.32 5.58-2.28 5.9-5.88Z" />
+          <path d="M18.6 13.8c.16 1.82 1.14 2.8 2.96 2.96-1.82.16-2.8 1.14-2.96 2.96-.16-1.82-1.14-2.8-2.96-2.96 1.82-.16 2.8-1.14 2.96-2.96Z" />
+        </svg>
+        <span>{en ? "Deep thinking" : "深度思考"}</span>
+        {live && <span className="tk-live">{en ? "thinking…" : "思考中…"}</span>}
+      </summary>
+      <div className="tk-body">{content.trim()}</div>
+    </details>
+  );
+}
+
 const AssistantMsg = React.memo(function AssistantMsg({
   text,
   streaming,
@@ -6133,18 +6162,22 @@ const AssistantMsg = React.memo(function AssistantMsg({
   text: string;
   streaming?: boolean;
 }) {
+  const { think, answer, open } = splitThinking(text);
+  const thinkEl = (think || (streaming && open)) ? <ThinkBlock content={think} live={streaming && open} /> : null;
   if (!streaming) {
     return (
       <div className="aimsg">
-        <MarkdownView text={text} highlight={true} />
+        {thinkEl}
+        {answer && <MarkdownView text={answer} highlight={true} />}
       </div>
     );
   }
-  const cut = text.lastIndexOf("\n\n"); // 最后一个段落边界
-  const committed = cut >= 0 ? text.slice(0, cut) : "";
-  const tail = cut >= 0 ? text.slice(cut + 2) : text;
+  const cut = answer.lastIndexOf("\n\n"); // 最后一个段落边界
+  const committed = cut >= 0 ? answer.slice(0, cut) : "";
+  const tail = cut >= 0 ? answer.slice(cut + 2) : answer;
   return (
     <div className="aimsg">
+      {thinkEl}
       {committed && <MarkdownView text={committed} highlight={false} />}
       {tail && <div className="md md-streaming">{maskSecrets(tail)}</div>}
     </div>
