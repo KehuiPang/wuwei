@@ -2566,7 +2566,8 @@ export function App() {
           setRate(payload);
           break;
         case "evt:suggest":
-          if (payload.sid === currentIdRef.current) setSuggestion(payload.text || "");
+          // 推理模型(z1 等)会带 <think>…</think>：只取思考后的正文当建议；思考未闭合时先不显示 ghost
+          if (payload.sid === currentIdRef.current) setSuggestion(splitThinking(payload.text || "").answer.trim());
           break;
         case "evt:assistant-replace":
           // 清理泄漏工具调用/噪音后：把屏上那条 assistant 换成干净正文(为空则移除该气泡)
