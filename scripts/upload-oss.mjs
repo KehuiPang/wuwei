@@ -23,6 +23,7 @@ const client = new OSS({
   accessKeySecret: KEY_SECRET,
   bucket: "wuwei-repo",
   secure: true,
+  timeout: 600000, // 10min/请求：GitHub(美)→杭州OSS跨境慢，默认60s会超时
 });
 
 let files;
@@ -47,15 +48,26 @@ for (const f of files) {
   const key = `updates/${f}`;
   const local = join(DIR, f);
   const sizeMB = statSync(local).size / 1024 / 1024;
-  try {
-    if (sizeMB > 8) {
-      await client.multipartUpload(key, local, { parallel: 4, partSize: 10 * 1024 * 1024 });
-    } else {
-      await client.put(key, local);
+  const upload = () =>
+    sizeMB > 8
+      ? // 跨境上传：小分片(4MB)+限并发+大超时，避免单片 60s 超时
+        client.multipartUpload(key, local, { parallel: 3, partSize: 4 * 1024 * 1024, timeout: 600000 })
+      : client.put(key, local, { timeout: 600000 });
+
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await upload();
+      console.log(`[oss] ✓ ${BASE}${f}  (${sizeMB.toFixed(1)}MB)`);
+      lastErr = null;
+      break;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[oss] 第${attempt}次上传 ${f} 失败：${e?.message || e}${attempt < 3 ? "，重试…" : ""}`);
     }
-    console.log(`[oss] ✓ ${BASE}${f}  (${sizeMB.toFixed(1)}MB)`);
-  } catch (e) {
-    console.error(`[oss] ✗ 上传失败 ${f}:`, e?.message || e);
+  }
+  if (lastErr) {
+    console.error(`[oss] ✗ 放弃 ${f}`);
     process.exit(1);
   }
 }
