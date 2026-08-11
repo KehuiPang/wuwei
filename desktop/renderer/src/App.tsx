@@ -2195,7 +2195,8 @@ export function App() {
   const providerListRaw = arrangePresets(
     // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
     applyProviderEdits([...mergedPresets, ...stations.map(stationToPreset)], providerOverrides, removedProviders).filter(
-      (p) => (!p.hosted || !!wuwei || p.anon) && !backendHidden.includes(p.id),
+      // 游客也显示全部平台(含托管)——点托管平台发消息时才引导登录(见发送门槛)；仅按后台隐藏过滤。
+      (p) => !backendHidden.includes(p.id),
     ),
     providerOrder,
     hiddenProviders,
@@ -3936,44 +3937,50 @@ export function App() {
                 <WuweiLogo size={58} />
                 <p className="wc-eyebrow">{lang === "en" ? "One intention, everything follows" : "一念既出，万事自成"}</p>
                 <h1 className="wc-h1">
-                  {lang === "en" ? "Just set the intention — " : "你只管发念，"}
-                  <span className="wc-spark">{lang === "en" ? "Wuwei does the rest" : "余下交给无为"}</span>
+                  {lang === "en" ? "One sentence, and " : "一句话，让 "}
+                  <span className="wc-spark">{lang === "en" ? "AI gets it done" : "AI 替你干活"}</span>
                 </h1>
                 <p className="wc-lead">
                   {lang === "en"
-                    ? "Describe what you need and the app breaks it into tasks, calls agents, runs the steps, and brings back results. Great for coding, editing docs, research, organizing files, and running workflows."
-                    : "把需求说清楚，客户端会拆解任务、调用代理、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。"}
+                    ? "Describe what you need and AI breaks it into tasks, calls AI Agents, runs the steps, and brings back results. Great for coding, editing docs, research, organizing files, and running workflows."
+                    : "把需求说清楚，AI 会拆解任务、调用 AI Agent、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。"}
                 </p>
+                <div className="wc-tags">{lang === "en" ? "No sign-up · Free to start · Fast direct access" : "无需注册 · 免费开始 · 国内直连"}</div>
               </div>
               <div className="wc-flow">
                 <div className="wc-step">
-                  <em>{lang === "en" ? "Intend" : "发念"}</em>
+                  <em>{lang === "en" ? "You ask" : "你说"}</em>
                   <b>{lang === "en" ? "Say what you want done" : "说出你想完成的事"}</b>
                 </div>
                 <span className="wc-arrow" aria-hidden="true">→</span>
                 <div className="wc-step">
-                  <em>{lang === "en" ? "Act" : "有为"}</em>
-                  <b>{lang === "en" ? "Agents plan, call tools, push it forward" : "代理拆解、调用工具、推进执行"}</b>
+                  <em>{lang === "en" ? "AI works" : "AI 做"}</em>
+                  <b>{lang === "en" ? "AI Agents break it down, call tools, run it" : "AI Agent 拆解任务、调用工具、自动执行"}</b>
                 </div>
                 <span className="wc-arrow" aria-hidden="true">→</span>
                 <div className="wc-step">
-                  <em>{lang === "en" ? "Done" : "成事"}</em>
-                  <b>{lang === "en" ? "Delivers results, paths, and how to verify" : "交付结果、路径、验证口径"}</b>
+                  <em>{lang === "en" ? "You get" : "交付"}</em>
+                  <b>{lang === "en" ? "Results, file paths, how to verify" : "拿到结果、文件路径、验证方法"}</b>
                 </div>
               </div>
-              <button className="wc-brain" onClick={() => setShowBrainIntro(true)} title={t("wc.brainTitle", "了解脑网络")}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" />
-                </svg>
-                <span className="wc-brain-tx">
-                  <b>{lang === "en" ? "Brain" : "脑网络"}</b>
-                  {lang === "en" ? " keeps learning · long-term memory that knows you better the more you use it" : "持续学习 · 长期记忆，用得越久无为越懂你"}
-                </span>
-                <svg className="wc-brain-arr" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M6 3l5 5-5 5" />
-                </svg>
-              </button>
-              <div className="wc-tags">{lang === "en" ? "Fewer steps · no interruptions · results-first · traceable execution" : "少步骤 · 不中断 · 结果导向 · 可追溯执行"}</div>
+              {/* 脑网络入口 + 特性标签：先隐藏（改 false→true 即恢复） */}
+              {false && (
+                <>
+                  <button className="wc-brain" onClick={() => setShowBrainIntro(true)} title={t("wc.brainTitle", "了解脑网络")}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 3a4 4 0 0 0-4 4 3.5 3.5 0 0 0-1 6.8V17a3 3 0 0 0 5 2 3 3 0 0 0 5-2v-3.2A3.5 3.5 0 0 0 16 7a4 4 0 0 0-4-4Z" />
+                    </svg>
+                    <span className="wc-brain-tx">
+                      <b>{lang === "en" ? "Brain" : "脑网络"}</b>
+                      {lang === "en" ? " keeps learning · long-term memory that knows you better the more you use it" : "持续学习 · 长期记忆，用得越久无为越懂你"}
+                    </span>
+                    <svg className="wc-brain-arr" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M6 3l5 5-5 5" />
+                    </svg>
+                  </button>
+                  <div className="wc-tags">{lang === "en" ? "Fewer steps · no interruptions · results-first · traceable execution" : "少步骤 · 不中断 · 结果导向 · 可追溯执行"}</div>
+                </>
+              )}
             </div>
           )}
           {(() => {
