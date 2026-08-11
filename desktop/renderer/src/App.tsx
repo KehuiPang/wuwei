@@ -4560,7 +4560,7 @@ export function App() {
                               {lang === "en" ? "Free" : "免费"}
                             </span>
                           )}
-                          {modelBadges.get(m) && (
+                          {modelBadges.get(m) && modelBadges.get(m)!.toLowerCase() !== "free" && (
                             <span
                               style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "#e8722c", color: "#fff", verticalAlign: "middle" }}
                             >
