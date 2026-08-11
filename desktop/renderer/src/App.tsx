@@ -2190,7 +2190,8 @@ export function App() {
   // 把后台目录并入内置预设：已知平台沿用本地元数据(kind/baseUrl/note)、仅用 catalog 覆盖模型列表；
   // 后台新增的平台则整条按 catalog 构造。免费模型 id 收集给下拉打「免费」标。catalog=null 时原样返回。
   const freeModelIds = new Set<string>();
-  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId);
+  const modelBadges = new Map<string, string>(); // 后台配的模型角标(如「快」)，下拉里显示
+  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerListRaw = arrangePresets(
     // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
@@ -4557,6 +4558,13 @@ export function App() {
                               }}
                             >
                               {lang === "en" ? "Free" : "免费"}
+                            </span>
+                          )}
+                          {modelBadges.get(m) && (
+                            <span
+                              style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "#e8722c", color: "#fff", verticalAlign: "middle" }}
+                            >
+                              {modelBadges.get(m)}
                             </span>
                           )}
                         </span>
@@ -6978,13 +6986,17 @@ function mergeCatalogIntoPresets(
   catalog: CatalogProviderDto[] | null,
   freeSet: Set<string>,
   keepId?: string,
+  badgeMap?: Map<string, string>,
 ): Preset[] {
   if (!catalog || catalog.length === 0) return base;
   const byId = new Map(base.map((p) => [p.id, p]));
   const out: Preset[] = [];
   const seen = new Set<string>();
   for (const c of catalog) {
-    for (const m of c.models) if (m.free) freeSet.add(m.id);
+    for (const m of c.models) {
+      if (m.free) freeSet.add(m.id);
+      if (m.badge && badgeMap) badgeMap.set(m.id, m.badge);
+    }
     const models = c.models.map((m) => m.id);
     const local = byId.get(c.id);
     if (local) {

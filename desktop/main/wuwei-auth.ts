@@ -40,6 +40,7 @@ export interface CatalogModelDto {
   id: string;
   label: string;
   free: boolean;
+  badge?: string | null; // 角标（如「快」），下拉里显示，提醒用户
 }
 export interface CatalogProviderDto {
   id: string;
