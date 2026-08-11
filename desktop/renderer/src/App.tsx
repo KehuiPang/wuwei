@@ -159,7 +159,9 @@ function friendlyError(raw: string, t: T): string {
   const r = raw || "";
   // 无为托管网关的业务错误 → 友好文案（优先，避免被下方通用 401/429 规则吃掉）
   if (/insufficient_balance/i.test(r)) return t("err.insufficientBalance", "无为币余额不足：请点账号头像「充值」后，再使用无为托管模型。");
-  if (/daily_cap_reached/i.test(r)) return t("err.dailyCap", "今日无为托管消耗已达上限：明日自动恢复，或联系客服提额。");
+  if (/free_quota_exhausted/i.test(r)) return t("err.freeQuota", "免费体验次数已用完：登录即可继续使用（注册送 100 无为币）。");
+  if (/free_trial_disabled/i.test(r)) return t("err.freeDisabled", "免费体验暂未开放：请登录使用，或稍后再试。");
+  if (/daily_cap_reached/i.test(r)) return t("err.dailyCap", "今日消耗已达每日上限：明日自动恢复，或登录/充值解锁更高额度。");
   if (/gateway_not_configured/i.test(r)) return t("err.gatewayNotConfigured", "无为托管暂不可用（服务维护中）：请稍后再试，或切换到其它模型。");
   if (/unknown_hosted_model/i.test(r)) return t("err.unknownModel", "该无为托管模型暂不可用，请换一个模型。");
   if (/upstream_error/i.test(r)) return t("err.upstream", "模型服务商暂时不可用：请稍后重试。");
@@ -2190,7 +2192,7 @@ export function App() {
   const freeModelIds = new Set<string>();
   const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
-  const providerList = arrangePresets(
+  const providerListRaw = arrangePresets(
     // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
     applyProviderEdits([...mergedPresets, ...stations.map(stationToPreset)], providerOverrides, removedProviders).filter(
       (p) => (!p.hosted || !!wuwei || p.anon) && !backendHidden.includes(p.id),
@@ -2200,6 +2202,8 @@ export function App() {
     false,
     catalogOrder,
   );
+  // 未登录：免费体验(anon)恒置顶(稳定排序，其余相对序不变)——访客第一眼就是免费体验，也是唯一可用项。
+  const providerList = wuwei ? providerListRaw : [...providerListRaw].sort((a, b) => (b.anon ? 1 : 0) - (a.anon ? 1 : 0));
   const curPreset = providerList.find((p) => p.id === curProviderId);
   // 动态实时模型(从平台 /models 拉)并入预设，去重；预设在前(保证旗舰置顶)，实时补充新模型；
   // 再并入当前生效的模型(meta.model)——自建端点等没有预设列表时，配好的模型也能在快切里看到/切换。
@@ -2217,6 +2221,12 @@ export function App() {
     : [...new Set([...commonModels, ...(meta.model && !commonModels.includes(meta.model) ? [meta.model] : [])])];
   const hasMoreModels = quickModels.length > commonModels.length;
   async function quickModel(m: string) {
+    // 访客门禁：未登录时仅「免费体验(anon)」平台可切它自己的免费模型；其它一律引导登录
+    if (!wuwei && !curPreset?.anon) {
+      setShowModelMenu(false);
+      setShowLoginIntro(true);
+      return;
+    }
     const r = await window.wuwei.getSettings();
     const cur = r?.settings;
     if (cur) window.wuwei.setSettings({ ...cur, model: m });
@@ -2361,6 +2371,12 @@ export function App() {
 
   // 快捷切换供应商：带出该平台已存的 key/baseUrl，默认用该平台第一个模型
   async function quickProvider(p: (typeof PRESETS)[number]) {
+    // 访客门禁：未登录只能选「免费体验(anon)」，切到别的平台一律引导登录
+    if (!wuwei && !p.anon) {
+      setShowProviderMenu(false);
+      setShowLoginIntro(true);
+      return;
+    }
     const r = await window.wuwei.getSettings();
     const cur = r?.settings || {};
     const slot = (cur.creds || {})[p.id] || {};
@@ -2588,6 +2604,10 @@ export function App() {
           if (isCoinShortage(rawMsg) || isCoinShortage(friendly)) {
             setShowAcctMenu(false);
             void refreshWuweiForShortage(friendly);
+          }
+          // 免费体验触发上限/配额用尽/被关停 → 未登录则弹登录引导（"触发最大限制后才引导登录"）
+          if (!wuwei && /daily_cap_reached|free_quota_exhausted|free_trial_disabled/i.test(rawMsg)) {
+            setShowLoginIntro(true);
           }
           // 去重：与上一条完全相同的出错提示不重复堆叠
           setItems((p) => {
@@ -4429,7 +4449,11 @@ export function App() {
               <button
                 className="mq-btn mq-mod"
                 title={meta.model}
-                onClick={() => setShowModelMenu((v) => !v)}
+                onClick={() => {
+                  // 访客门禁：未登录且当前不是免费体验 → 点模型也引导登录
+                  if (!wuwei && !curPreset?.anon) { setShowLoginIntro(true); return; }
+                  setShowModelMenu((v) => !v);
+                }}
               >
                 <span className="mq-txt">{meta.model}</span>
                 <span className="mq-caret">▾</span>
@@ -4454,6 +4478,7 @@ export function App() {
                       className="mq-item mq-more"
                       onClick={() => {
                         setShowProviderMenu(false);
+                        if (!wuwei) { setShowLoginIntro(true); return; } // 访客：全部供应商设置需登录
                         setSettingsTab("platforms");
                         setShowSettings(true);
                       }}
@@ -4536,6 +4561,7 @@ export function App() {
                       className="mq-item mq-more"
                       onClick={() => {
                         setShowModelMenu(false);
+                        if (!wuwei) { setShowLoginIntro(true); return; } // 访客：全部设置/换平台需登录
                         setSettingsTab("model");
                         setShowSettings(true);
                       }}

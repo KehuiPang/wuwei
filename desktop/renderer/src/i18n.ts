@@ -490,7 +490,9 @@ const DICT_EN: Record<string, string> = {
   "usage.totalOut": "Total output",
   // 错误提示（err.*）
   "err.insufficientBalance": "Out of credits: tap your avatar → “Top up” to keep using Wuwei's hosted models.",
-  "err.dailyCap": "Daily hosted-usage limit reached: it resets tomorrow, or contact support to raise it.",
+  "err.freeQuota": "Free trial used up: sign in to keep going (get 100 credits on sign-up).",
+  "err.freeDisabled": "Free trial isn't open right now: please sign in, or try again later.",
+  "err.dailyCap": "Daily limit reached: it resets tomorrow, or sign in / top up to unlock a higher limit.",
   "err.gatewayNotConfigured": "Wuwei hosting is temporarily unavailable (under maintenance): please try again later, or switch to another model.",
   "err.unknownModel": "This hosted model is unavailable right now — please pick another model.",
   "err.upstream": "The model provider is temporarily unavailable: please retry shortly.",
