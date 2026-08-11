@@ -1436,9 +1436,12 @@ async function maybeSmartTitle(id: string) {
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("")
+      // 推理模型(z1 等)会带 <think>…</think>：先整块剥掉，别让标签漏进标题
+      .replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "")
+      .replace(/^\s*<think(?:ing)?>[\s\S]*$/i, "") // 极端情况：只有未闭合的 <think>
       .trim();
     const [rawTitle, rawProject] = raw.split(/[|｜]/);
-    const clean = (t?: string) => (t || "").replace(/[\s"'`。，、：:！!？?（）()【】\[\]]/g, "");
+    const clean = (t?: string) => (t || "").replace(/[\s"'`。，、：:！!？?（）()【】\[\]<>]/g, "");
     const title = clean(rawTitle).slice(0, 12);
     const project = clean(rawProject).slice(0, 8);
     if (title) {
