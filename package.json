@@ -1,6 +1,6 @@
 {
   "name": "wuwei",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "description": "无为 · AI 助手（CLI + 桌面版）。本质 = LLM + 工具执行循环 + 终端/GUI。",
   "type": "module",
   "main": "./out/main/index.cjs",
