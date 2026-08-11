@@ -3486,11 +3486,7 @@ export function App() {
                 return next;
               })}>
                 <div className={"acct-av" + (wuwei ? "" : " off")}>
-                  {wuwei?.user.avatar ? (
-                    <img src={wuwei.user.avatar} alt="" />
-                  ) : (
-                    (wuwei?.user.name || wuwei?.user.email || "游").slice(0, 1).toUpperCase()
-                  )}
+                  <UserAvatar url={wuwei?.user.avatar} fallback={(wuwei?.user.name || wuwei?.user.email || "游").slice(0, 1).toUpperCase()} />
                 </div>
                 <div
                   className="acct-name"
@@ -3532,7 +3528,7 @@ export function App() {
                             {/* 身份区：头像(Pro金光晕) + 昵称 + tier chip + 邮箱 */}
                             <div className="acct-id">
                               <div className={"acct-avatar" + (isPro ? " pro" : "")}>
-                                {wuwei.user.avatar ? <img src={wuwei.user.avatar} alt="" /> : initial}
+                                <UserAvatar url={wuwei.user.avatar} fallback={initial} />
                               </div>
                               <div className="acct-id-txt">
                                 <div className="acct-nm">
@@ -6127,6 +6123,14 @@ function CopyBtn({ text }: { text: string }) {
 // 流式中「按段提交」：以最后一个空行(\n\n)为界，前面已完成的段落即时渲染 Markdown
 // (MarkdownView 有 memo，committed 不变就不重解析→只在跨段时解析一次)，最后没写完的一段用纯文本。
 // 流完(streaming=false)整体走完整 Markdown + 代码高亮。
+// 用户头像：Google 头像(lh3.googleusercontent.com)带 Referer 会被 403 → referrerPolicy=no-referrer；
+// 仍加载失败(裂图)则退回首字母，绝不显示破图。
+function UserAvatar({ url, fallback }: { url?: string | null; fallback: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!url || broken) return <>{fallback}</>;
+  return <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} />;
+}
+
 // 抽取开头的 <think>…</think>（推理模型思考流，provider 已把 reasoning_content 也归一成 <think>）。
 // open=true 表示流式中 <think> 还没闭合（正在思考）。只认开头，避免误伤正文里的代码/文本。
 function splitThinking(text: string): { think: string; answer: string; open: boolean } {
