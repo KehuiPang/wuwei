@@ -1,9 +1,9 @@
 // 工具集：每个工具 = JSON Schema（给模型）+ 本地执行函数。
 // P1 版：Read / Write / Edit / Bash / Glob / Grep —— 覆盖"读代码、改文件、跑命令、搜索"。
-import { promises as fs } from "node:fs";
+import { promises as fs, existsSync } from "node:fs";
 import { resolve, isAbsolute, join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { exec } from "node:child_process";
+import { exec, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import * as brain from "../brain/index.js";
@@ -12,6 +12,62 @@ import * as brain from "../brain/index.js";
 export const MEMORY_FILE = join(homedir(), ".wuwei", "memory.md");
 
 const pexec = promisify(exec);
+
+// 跨平台 shell 解析：POSIX 用 /bin/bash；Windows 优先 Git Bash（自带 grep/head/find，能原样兼容工具的 bash 语法与管道）。
+// ⚠️ 绝不能用 System32\bash.exe（那是 WSL，Windows 路径映射会乱、cwd 也不对），故从 PATH 上的 git 反推 Git 根目录定位。
+let _shellCache: string | undefined;
+function resolveShell(): string {
+  if (_shellCache) return _shellCache;
+  if (process.platform !== "win32") {
+    _shellCache = process.env.SHELL || "/bin/bash";
+    return _shellCache;
+  }
+  _shellCache = findWinBash() || process.env.ComSpec || "cmd.exe"; // 兜底 cmd（bash 语法/grep 管道将不可用，仅避免 ENOENT）
+  return _shellCache;
+}
+// Git 根下 bash 有两处：<root>\bin\bash.exe、<root>\usr\bin\bash.exe。返回存在的那个。
+function bashUnder(root: string): string | undefined {
+  for (const p of [join(root, "bin", "bash.exe"), join(root, "usr", "bin", "bash.exe")]) {
+    try { if (existsSync(p)) return p; } catch {}
+  }
+  return undefined;
+}
+function findWinBash(): string | undefined {
+  const ov = process.env.WUWEI_SHELL; // 显式覆盖（用户可指定自己的 bash.exe）
+  if (ov && existsSync(ov)) return ov;
+  // 1) 从 git 可执行反推 Git 根（git.exe 可能在 <root>\cmd\ 或 <root>\mingw64\bin\ 下，故向上逐级找）
+  try {
+    const line = execFileSync("where", ["git"], { encoding: "utf8" }).split(/\r?\n/)[0]?.trim();
+    if (line) {
+      let dir = dirname(line);
+      for (let i = 0; i < 4; i++) {
+        const b = bashUnder(dir);
+        if (b) return b;
+        const up = dirname(dir);
+        if (up === dir) break;
+        dir = up;
+      }
+    }
+  } catch {}
+  // 2) 常见安装根
+  const bases = [
+    process.env.ProgramFiles,
+    process.env["ProgramFiles(x86)"],
+    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Programs") : undefined,
+  ].filter(Boolean) as string[];
+  for (const base of bases) {
+    const b = bashUnder(join(base, "Git"));
+    if (b) return b;
+  }
+  // 3) where bash，仅取 Git 目录下的（排除 System32/WSL）
+  try {
+    const cand = execFileSync("where", ["bash"], { encoding: "utf8" })
+      .split(/\r?\n/).map((s) => s.trim()).filter(Boolean)
+      .find((l) => /\\Git\\/i.test(l) && !/System32/i.test(l));
+    if (cand && existsSync(cand)) return cand;
+  } catch {}
+  return undefined;
+}
 
 function abs(ctx: ToolContext, p: string): string {
   return isAbsolute(p) ? p : resolve(ctx.cwd, p);
@@ -115,7 +171,7 @@ const editTool: Tool = {
 // ---- Bash ----
 const bashTool: Tool = {
   name: "bash",
-  description: "在工作目录执行 shell 命令（macOS/bash），返回 stdout+stderr。默认超时 120s。",
+  description: "在工作目录执行 shell 命令（bash；Windows 走 Git Bash），返回 stdout+stderr。默认超时 120s。",
   readOnly: false,
   inputSchema: {
     type: "object",
@@ -131,7 +187,7 @@ const bashTool: Tool = {
         cwd: ctx.cwd,
         timeout: Number(input.timeout_ms ?? 120000),
         maxBuffer: 10 * 1024 * 1024,
-        shell: "/bin/bash",
+        shell: resolveShell(),
         signal: ctx.signal, // 用户停止→杀子进程,别再干等超时
         // 本地密钥以环境变量注入子进程：模型只写 $OPENAI_API_KEY 即可，全程不接触明文
         env: ctx.env ? { ...process.env, ...ctx.env } : process.env,
@@ -199,7 +255,7 @@ const grepTool: Tool = {
         cwd: ctx.cwd,
         timeout: 60000,
         maxBuffer: 10 * 1024 * 1024,
-        shell: "/bin/bash",
+        shell: resolveShell(),
         signal: ctx.signal, // 用户停止→杀子进程
       });
       return { content: stdout.trim() || "(无命中)" };
