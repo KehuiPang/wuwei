@@ -36,7 +36,23 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     );
   });
 }
+// 客户端系统串（供无为网关做游客画像；只发给无为网关，不泄露给第三方厂商）。
+const CLIENT_OS = (() => {
+  try {
+    const p = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : String(process.platform);
+    const ver = (process as unknown as { getSystemVersion?: () => string }).getSystemVersion?.() || "";
+    return `${p} ${ver}`.trim();
+  } catch {
+    return process.platform || "";
+  }
+})();
 async function fetchWithRetry(url: string, init: RequestInit, retries = 4): Promise<Response> {
+  // 无为网关：带上 X-Client-OS，后台「用量记录」据此显示游客系统。
+  if (CLIENT_OS && typeof url === "string" && /wuweiai\.io\/api\/gateway/.test(url)) {
+    const h = new Headers(init.headers as HeadersInit | undefined);
+    h.set("X-Client-OS", CLIENT_OS);
+    init = { ...init, headers: h };
+  }
   const signal = init.signal as AbortSignal | undefined;
   for (let attempt = 0; ; attempt++) {
     let res: Response | null = null;
