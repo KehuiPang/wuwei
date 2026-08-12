@@ -2939,7 +2939,12 @@ export function App() {
       setShowLoginIntro(true);
       return;
     }
-    if (curPreset?.hosted && wuwei && wuwei.coin.balance <= 0) {
+    // 前置拦截仅针对「真的没额度可用」：余额≤0 且 会员周额度也没有(非会员/额度用尽)。
+    // 会员本周订阅额度还有(remainingPct>0) → 放行，用量走周额度(服务端按额度扣，见网关预检)，
+    // 否则付费会员余额为0会被客户端提前误拦、根本发不出请求。
+    const wq = wuwei?.membership?.weeklyQuota;
+    const hasWeeklyQuota = !!wq?.active && (wq.remainingPct ?? 0) > 0;
+    if (curPreset?.hosted && wuwei && wuwei.coin.balance <= 0 && !hasWeeklyQuota) {
       void refreshWuweiForShortage(lang === "en" ? "Out of credits: top up to keep using Wuwei hosted models." : "无为币余额不足：请充值后再使用无为托管模型。");
       return;
     }
