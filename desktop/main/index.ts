@@ -209,8 +209,23 @@ const PROVIDER_LABELS: Record<string, string> = {
   grok: "Grok",
   custom: "自定义端点",
 };
+// 无为托管平台(providerId 以 "wuwei-" 开头)的品牌名——底层都走 openai 兼容端点，
+// 不能用 cfg.provider(恒为 openai)当平台名，得按 providerId 映射真实品牌。
+const HOSTED_BRAND: Record<string, string> = {
+  deepseek: "DeepSeek",
+  zhipu: "智谱 GLM",
+  kimi: "Kimi",
+  claude: "Claude",
+  gpt: "GPT",
+};
 function labelFor(cfg: ReturnType<typeof loadConfig>, providerId?: string): string {
   if (providerId && PROVIDER_LABELS[providerId]) return PROVIDER_LABELS[providerId];
+  // 无为托管：显示「无为托管 · 品牌」，别露出底层 openai
+  if (providerId && providerId.startsWith("wuwei-")) {
+    if (providerId === "wuwei-free") return "无为 · 免费体验";
+    const base = providerId.slice("wuwei-".length);
+    return `无为托管 · ${HOSTED_BRAND[base] || PROVIDER_LABELS[base] || base}`;
+  }
   return cfg.provider === "anthropic" ? `anthropic/${cfg.authMode}` : cfg.provider;
 }
 

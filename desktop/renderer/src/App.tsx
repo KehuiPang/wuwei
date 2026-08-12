@@ -479,11 +479,6 @@ function PlanModal({ onClose, onCheckout, t, lang }: { onClose: () => void; onCh
   );
 }
 // 付费闭环辅助
-function genOrder(): string {
-  const d = new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  return "WW" + ymd + String(Math.floor(Math.random() * 900 + 100));
-}
 function fmtDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -855,7 +850,7 @@ function BrainIntroModal({ onClose, onUpgrade, t }: { onClose: () => void; onUpg
 }
 // 付款页（国内支付宝/微信扫码）：向后端下单拿二维码串 → 渲染真 QR → 轮询订单状态，到账自动跳成功页。
 // 国外 Paddle 走托管结账(不自建卡表单)，待接 Paddle.js。
-function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number) => void; onContactSupport: () => void; onNeedLogin: () => void }) {
+function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogin }: { order: PayOrder; onClose: () => void; onPaid: (balance?: number, orderId?: string) => void; onContactSupport: () => void; onNeedLogin: () => void }) {
   const en = getLang() === "en";
   const [method, setMethod] = useState<"ali" | "wx">("ali");
   const isPlan = order.kind === "plan";
@@ -908,7 +903,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
     const t = setInterval(async () => {
       const s = await window.wuwei.payStatus(orderId).catch(() => null);
       if (!alive || !s) return;
-      if (s.status === "paid") { clearInterval(t); onPaid(s.balance); }
+      if (s.status === "paid") { clearInterval(t); onPaid(s.balance, orderId); }
       else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg(en ? "Order expired, please reorder" : "订单已失效，请重新下单"); }
     }, 2500);
     return () => { alive = false; clearInterval(t); };
@@ -1037,7 +1032,7 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
               </div>
             </div>
             <div className="payres-btns"><button className="payres-btn pri ok" onClick={onClose}>{en ? "Start using" : "开始使用"}</button></div>
-            <div className="payres-foot">{en ? `Order ${result.order} · receipt issued` : `订单号 ${result.order} · 已开具凭证`}</div>
+            {result.order && <div className="payres-foot">{en ? `Order ${result.order}` : `订单号 ${result.order}`}</div>}
           </>
         )}
         {result.kind === "pro" && (
@@ -5337,11 +5332,12 @@ export function App() {
         <PayCheckoutModal
           order={payCheckout}
           onClose={() => setPayCheckout(null)}
-          onPaid={(balance) => {
+          onPaid={(balance, orderId) => {
             const o = payCheckout;
+            const ord = orderId || ""; // 真实后端订单号（拿不到就留空，不再瞎编）
             if (o.kind === "pack") {
               const added = o.pack.coins + o.pack.bonus;
-              setPayResult({ kind: "coin", added, bonus: o.pack.bonus, balance: balance ?? (wuwei?.coin.balance ?? 0) + added, order: genOrder() });
+              setPayResult({ kind: "coin", added, bonus: o.pack.bonus, balance: balance ?? (wuwei?.coin.balance ?? 0) + added, order: ord });
             } else {
               setPayResult({
                 kind: "pro",
@@ -5351,7 +5347,7 @@ export function App() {
                 signin: o.plan.signin,
                 perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt), // 各档同样的会员权益
                 saved: o.plan.saved || undefined,
-                order: genOrder(),
+                order: ord,
               });
             }
             setPayCheckout(null);
