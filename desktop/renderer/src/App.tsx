@@ -60,6 +60,7 @@ interface SessionMeta {
   order?: number;
   project?: string;
   done?: boolean;
+  discuss?: boolean;
 }
 
 // 优先级方案：高/中/低 + 艾森豪威尔四象限。weight 用于排序(大在前)，tag=徽标短标签，label=全称
@@ -161,7 +162,7 @@ function friendlyError(raw: string, t: T): string {
   if (/insufficient_balance/i.test(r)) return t("err.insufficientBalance", "无为币余额不足：请点账号头像「充值」后，再使用无为托管模型。");
   if (/free_quota_exhausted/i.test(r)) return t("err.freeQuota", "免费体验次数已用完：登录即可继续使用（注册送 100 无为币）。");
   if (/free_trial_disabled/i.test(r)) return t("err.freeDisabled", "免费体验暂未开放：请登录使用，或稍后再试。");
-  if (/daily_cap_reached/i.test(r)) return t("err.dailyCap", "今日消耗已达每日上限：明日自动恢复，或登录/充值解锁更高额度。");
+  if (/daily_cap_reached/i.test(r)) return t("err.dailyCap", "今日免费额度已用完：明日自动恢复，登录可解锁更高额度。");
   if (/gateway_not_configured/i.test(r)) return t("err.gatewayNotConfigured", "无为托管暂不可用（服务维护中）：请稍后再试，或切换到其它模型。");
   if (/unknown_hosted_model/i.test(r)) return t("err.unknownModel", "该无为托管模型暂不可用，请换一个模型。");
   if (/upstream_error/i.test(r)) return t("err.upstream", "模型服务商暂时不可用：请稍后重试。");
@@ -1151,6 +1152,20 @@ function GiftIcon({ size = 22, color = "currentColor" }: { size?: number; color?
   );
 }
 
+// 邮箱输入自动补全的常用后缀（国内外主流邮箱，按常用度排序）
+const EMAIL_SUFFIXES = [
+  "gmail.com",
+  "qq.com",
+  "163.com",
+  "126.com",
+  "foxmail.com",
+  "outlook.com",
+  "hotmail.com",
+  "sina.com",
+  "139.com",
+  "yeah.net",
+];
+
 // 应用内登录框（邮箱密码登录 / 邮箱验证码注册 / 手机验证码直登注册 / Google浏览器兜底）
 // 后端契约（需 wuwei-site 实现）：
 //   POST /api/auth/password    {identifier,password}     → {access_token,refresh_token,expires_at}|{error}
@@ -1234,10 +1249,10 @@ function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onCl
             }}
           >
             {[
-              { k: "kimi", n: "Kimi" },
               { k: "claude", n: "Claude" },
               { k: "gpt", n: "GPT" },
               { k: "deepseek", n: "DeepSeek" },
+              { k: "kimi", n: "Kimi" },
             ].map((m) => (
               <span key={m.k} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                 <span
@@ -1264,7 +1279,7 @@ function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onCl
             }}
           >
             <CoinIcon size={12} />
-            {zh ? "注册即得 100 无为币" : "Get 100 credits"}
+            {zh ? "新用户送 100 无为币" : "New users get 100 credits"}
           </div>
           <button
             onClick={onLogin}
@@ -1540,9 +1555,22 @@ function WuweiLoginModal({
                 {showAcctDrop && (() => {
                   const q = email.trim().toLowerCase();
                   const list = accounts.filter((a) => !q || a.email.toLowerCase().includes(q));
-                  if (!list.length) return null;
+                  // 常用邮箱后缀补全：输入前缀(未打 @ 或域名没打完)时，列出 前缀@常用后缀，方便快速填完整邮箱
+                  const raw = email.trim();
+                  const atIdx = raw.indexOf("@");
+                  const local = atIdx >= 0 ? raw.slice(0, atIdx) : raw;
+                  const domainPart = atIdx >= 0 ? raw.slice(atIdx + 1).toLowerCase() : "";
+                  const savedSet = new Set(list.map((a) => a.email.toLowerCase()));
+                  const suffixSug =
+                    local && !/\s/.test(local)
+                      ? EMAIL_SUFFIXES
+                          .filter((d) => !domainPart || (d.startsWith(domainPart) && d !== domainPart))
+                          .map((d) => `${local}@${d}`)
+                          .filter((full) => !savedSet.has(full.toLowerCase()))
+                      : [];
+                  if (!list.length && !suffixSug.length) return null;
                   return (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30, marginTop: 3, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 22px rgba(0,0,0,.24)", overflow: "hidden", maxHeight: 176, overflowY: "auto" }}>
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30, marginTop: 3, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 8px 22px rgba(0,0,0,.24)", overflow: "hidden", maxHeight: 220, overflowY: "auto" }}>
                       {list.map((a) => (
                         <div
                           key={a.email}
@@ -1553,6 +1581,20 @@ function WuweiLoginModal({
                         >
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.email}</span>
                           {a.password ? <span style={{ fontSize: 10.5, color: "var(--text-muted)", flex: "0 0 auto" }}>{getLang() === "en" ? "Saved" : "已记住"}</span> : null}
+                        </div>
+                      ))}
+                      {suffixSug.map((full) => (
+                        <div
+                          key={full}
+                          onMouseDown={(ev) => { ev.preventDefault(); setEmail(full); setShowAcctDrop(false); }}
+                          onMouseEnter={(ev) => (ev.currentTarget.style.background = "var(--bg-soft)")}
+                          onMouseLeave={(ev) => (ev.currentTarget.style.background = "transparent")}
+                          style={{ padding: "8px 11px", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {full.slice(0, full.indexOf("@"))}
+                            <span style={{ color: "var(--spark)" }}>{full.slice(full.indexOf("@"))}</span>
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -1763,6 +1805,7 @@ export function App() {
   streamSpeedRef.current = streamSpeed;
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
   const [ctxMenu, setCtxMenu] = useState<{ sid: string; x: number; y: number } | null>(null); // 会话右键菜单
+  const [handoffBusy, setHandoffBusy] = useState(false); // 正在生成交接文档(总结→开新会话)
   const [groupCtx, setGroupCtx] = useState<{ name: string; x: number; y: number } | null>(null); // 分组右键菜单
   const [dragId, setDragId] = useState<string | null>(null); // 正在拖拽的会话 id
   const [dragOverId, setDragOverId] = useState<string | null>(null); // 拖到哪个会话上(高亮)
@@ -2082,6 +2125,7 @@ export function App() {
   const [showConn, setShowConn] = useState(false); // 状态灯说明气泡
   const thinkStartRef = useRef<number | null>(null); // 本轮开始时间（思考计时）
   const charsRef = useRef(0); // 本轮已流式字符数（估算 token）
+  const turnTextRef = useRef(""); // 本轮已生成的正文(含 instant 模式还没揭示的),供状态栏悬停预览
   // 已"总是允许"的工具（记住授权，跨重启，手动模式下不再提示）
   const alwaysAllowRef = useRef<Set<string>>(
     new Set((() => {
@@ -2500,6 +2544,7 @@ export function App() {
         case "evt:assistant-delta":
           if (payload.sid !== currentIdRef.current) break; // 只画当前可见会话
           charsRef.current += (payload.delta as string).length;
+          turnTextRef.current += payload.delta; // 本轮全量正文(供悬停预览,instant 模式也能看到)
           pendingDeltaRef.current += payload.delta; // 累积，节流 flush
           scheduleFlush();
           break;
@@ -2598,6 +2643,13 @@ export function App() {
           if (payload.sid !== currentIdRef.current) break;
           thinkStartRef.current = null;
           push({ type: "notice", text: lang === "en" ? "Stopped" : "已停止" });
+          break;
+        case "evt:handoff":
+          // 交接进度反馈:总结中(在源会话提示)/完成(已切到新会话)/失败
+          if (payload.phase === "summarizing")
+            push({ type: "notice", text: lang === "en" ? "Summarizing valuable content, generating handoff doc…" : "正在总结有价值内容、生成交接文档…" });
+          else if (payload.phase === "done")
+            push({ type: "notice", text: lang === "en" ? "Handoff doc ready — continuing in a new chat →" : "交接文档已生成，已开新对话接着做 →" });
           break;
         case "evt:error": {
           if (payload.sid && payload.sid !== currentIdRef.current) break;
@@ -2803,9 +2855,11 @@ export function App() {
     }
     push({ type: "user", text, images: imgs.length ? imgs : undefined, ts: Date.now() });
     atBottomRef.current = true; // 发新消息=想看这轮回复：重新贴底,后续流式自动吸底(哪怕刚才滚上去看历史)
+    forceBottomRef.current = true; // 多帧兜底吸底：AI 回复开始撑高度/异步渲染时也稳稳落到最新，不用手滚一下
     setRunningSet((s) => new Set(s).add(currentId)); // 乐观置为运行中(主进程随后 evt:tasks 校准)
     thinkStartRef.current = Date.now();
     charsRef.current = 0;
+    turnTextRef.current = ""; // 新一轮:清掉上轮预览缓冲
     window.wuwei.send(currentId, text, imgs.length ? imgs : undefined);
   }
 
@@ -3160,6 +3214,7 @@ export function App() {
                     {s.priorityTag}
                   </span>
                 )}
+                {s.discuss && <span className="s-discuss" title={t("side.discuss", "待讨论：需过会议讨论")}>{t("side.discussBadge", "议")}</span>}
                 {s.done && <span className="s-done" title={t("side.done", "已完成")}>✓</span>}
                 <span className="s-title">{s.title}</span>
                 <span className="s-time" title={new Date(s.updatedAt).toLocaleString()}>
@@ -3277,6 +3332,26 @@ export function App() {
                 />
                 <div className="ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
                   <button
+                    className="ctx-item"
+                    disabled={handoffBusy}
+                    onClick={async () => {
+                      const sid = ctxMenu.sid;
+                      close();
+                      setHandoffBusy(true);
+                      try {
+                        const r = await window.wuwei.handoffSession(sid);
+                        if (!r?.ok)
+                          push({ type: "notice", text: lang === "en" ? "Handoff failed: nothing to distill from this chat" : "交接失败：该会话暂无可提炼的内容" });
+                      } finally {
+                        setHandoffBusy(false);
+                      }
+                    }}
+                    title={t("ctx.handoffTip", "总结本对话有价值的内容，生成交接文档，并开一个干净的新对话接着做(解决上下文被污染)")}
+                  >
+                    {t("ctx.handoff", "🔀 总结并交接到新对话")}
+                  </button>
+                  <div className="ctx-sep" />
+                  <button
                     className="ctx-item ctx-done"
                     onClick={() => {
                       window.wuwei.setSessionDone(ctxMenu.sid, !s.done);
@@ -3284,6 +3359,15 @@ export function App() {
                     }}
                   >
                     {s.done ? t("ctx.markUndone", "↩ 取消完成") : t("ctx.markDone", "✓ 标记完成")}
+                  </button>
+                  <button
+                    className="ctx-item ctx-discuss"
+                    onClick={() => {
+                      window.wuwei.setSessionDiscuss(ctxMenu.sid, !s.discuss);
+                      close();
+                    }}
+                  >
+                    {s.discuss ? t("ctx.unmarkDiscuss", "↩ 取消待讨论") : t("ctx.markDiscuss", "🗣 标记待讨论")}
                   </button>
                   <div className="ctx-sep" />
                   <div className="ctx-head">{t("ctx.moveToGroup", "移动到分组")}</div>
@@ -3726,10 +3810,10 @@ export function App() {
                           }}
                         >
                           {[
-                            { k: "kimi", n: "Kimi" },
                             { k: "claude", n: "Claude" },
                             { k: "gpt", n: "GPT" },
                             { k: "deepseek", n: "DeepSeek" },
+                            { k: "kimi", n: "Kimi" },
                           ].map((m) => (
                             <span key={m.k} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
                               <span
@@ -3773,7 +3857,7 @@ export function App() {
                           }}
                         >
                           <CoinIcon size={12} />
-                          {lang === "zh" ? "注册即得 100 无为币" : "Get 100 credits"}
+                          {lang === "zh" ? "新用户送 100 无为币" : "New users get 100 credits"}
                         </div>
                         <button
                           onClick={() => {
@@ -3925,8 +4009,9 @@ export function App() {
           ref={streamRef}
           onScroll={(e) => {
             const el = e.currentTarget;
-            // 距底 ≤40px 视为"贴底"→继续自动吸底；否则用户在往上看→暂停
-            atBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+            // 距底 ≤ 一屏(clientHeight) 都算"还在跟读"→继续自动吸底；
+            // 只有向上滚超过一整屏(明显要回看历史/长回复)才暂停吸底，避免流式时轻轻一滚就断、还得手动滚到底。
+            atBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight;
           }}
         >
           {items.length === 0 && (
@@ -4157,7 +4242,7 @@ export function App() {
             });
           })()}
           {busy && !pending && (
-            <ThinkingBar startRef={thinkStartRef} charsRef={charsRef} items={items} />
+            <ThinkingBar startRef={thinkStartRef} charsRef={charsRef} textRef={turnTextRef} items={items} />
           )}
         </div>
 
@@ -5488,13 +5573,16 @@ function liveStatus(items: Item[], chars: number, elapsed: number): string {
 function ThinkingBar({
   startRef,
   charsRef,
+  textRef,
   items,
 }: {
   startRef: React.MutableRefObject<number | null>;
   charsRef: React.MutableRefObject<number>;
+  textRef?: React.MutableRefObject<string>;
   items: Item[];
 }) {
   const [, force] = useState(0);
+  const [previewOn, setPreviewOn] = useState(false); // 悬停 token 数→预览已生成正文
   useEffect(() => {
     const t = setInterval(() => force((x) => x + 1), 400);
     return () => clearInterval(t);
@@ -5509,12 +5597,30 @@ function ThinkingBar({
   const time = mm > 0 ? `${mm}m ${ss}s` : `${ss}s`;
   const status = liveStatus(items, chars, elapsed);
   const running = runningTools(items).length;
+  const en = getLang() === "en";
   return (
     <div className="thinking">
       <span className="tspark">✳</span>
       <span className="tstatus">{status}…</span>
-      <span className="tmeta">
-        {time} · {tokLabel} tokens · {running > 0 ? (getLang() === "en" ? `${running} task(s) running` : `${running} 个任务执行中`) : (getLang() === "en" ? "Working" : "执行中")}
+      <span
+        className="tmeta tmeta-hover"
+        onMouseEnter={() => setPreviewOn(true)}
+        onMouseLeave={() => setPreviewOn(false)}
+        title={en ? "Hover to preview generated text" : "悬停查看已生成的正文"}
+      >
+        {time} · {tokLabel} tokens · {running > 0 ? (en ? `${running} task(s) running` : `${running} 个任务执行中`) : (en ? "Working" : "执行中")}
+        {previewOn && (() => {
+          const preview = (textRef?.current || "").slice(-2000);
+          return (
+            <div className="tpreview">
+              {preview
+                ? preview
+                : en
+                  ? "(nothing generated yet; if it stays at 0 tokens, the model hasn't emitted its first token)"
+                  : "（还没有已生成的正文；若一直 0 token，是模型还没吐出首字）"}
+            </div>
+          );
+        })()}
       </span>
     </div>
   );

@@ -44,6 +44,7 @@ import {
   saveSession,
   deleteSession,
   deriveTitle,
+  stripHandoffWrapper,
   listGroups,
   setSessionGroup,
   setSessionPriority,
@@ -51,6 +52,7 @@ import {
   setSessionProject,
   setGroupsOrder,
   setSessionDone,
+  setSessionDiscuss,
   setSessionRunning,
   clearInterrupted,
   dismissResume,
@@ -1420,7 +1422,11 @@ async function maybeSmartTitle(id: string) {
   const recent = msgs.slice(-6);
   const picked = firstUser && !recent.includes(firstUser) ? [firstUser, ...recent] : recent;
   const convo = picked
-    .map((m: any) => `${m.role === "user" ? "用户" : "助手"}: ${msgText(m)}`)
+    .map((m: any) => {
+      // 剥掉交接前言只留正文；首条(定主题)多给点字数，确保覆盖到"目标+项目"这几节
+      const body = stripHandoffWrapper(msgText(m)).trim().slice(0, m === firstUser ? 500 : 200);
+      return `${m.role === "user" ? "用户" : "助手"}: ${body}`;
+    })
     .filter((s: string) => s.length > 3)
     .join("\n");
   try {
@@ -1878,10 +1884,21 @@ ipcMain.handle("chat:recall-inject", (_e, sid: string, text: string) => {
 
 ipcMain.on("chat:stop", (_e, sid?: string) => {
   const id = sid || currentId;
+  const ac = runs.get(id);
+  const agent = agents.get(id);
+  // 两段式停止:
+  //  第一次点 → 温和收尾:不切断当前输出，让模型把这轮自然吐完、完整落历史后在下个边界停。
+  //    历史尾部是完整的助手消息(非截断)，下次发消息无缝接续，不再产生 (已停止) 截断疤。
+  //  第二次点(或已在收尾/卡权限)→ 强制中断(abort)，兜底救卡死的工具/流。
+  if (ac && agent && !ac.signal.aborted && !agent.isSoftStopping() && pendingPerm.size === 0 && pendingAsk.size === 0) {
+    agent.requestSoftStop();
+    log("softStop", id.slice(0, 8), "温和收尾中(再点一次强制停止)");
+    return;
+  }
   // 只 abort，不立即删 runs——留给 agent.send 的 finally 结算后清理。
   // 否则会话仍在跑就被移出 runs，紧接着的新消息不再被拦→并发跑同一 agent→历史错乱(连续user/悬空tool_use)致 400。
   // loop 已在中断后尽快收尾(补齐 tool_result 并 return)，所以很快结算、UI 随即解锁。
-  runs.get(id)?.abort();
+  ac?.abort();
   // 若正卡在权限确认，一并取消(否则中断信号也叫不醒它)
   for (const [pid, r] of pendingPerm) {
     r("deny");
@@ -2010,6 +2027,47 @@ ipcMain.on("report:generate", (_e, group: string, sessionIds: string[]) => {
   void startTurn(sid, `请生成「${group}」今天的工作日报。`, undefined, sys);
 });
 
+// 一键工作交接:把某会话有价值的内容总结成交接文档 → 开一个干净的新会话(继承当前平台/模型)
+// → 把文档喂进去让 AI 接着把没做完的事做完。解决老对话上下文被污染后，还在原地续跑越跑越乱的问题。
+ipcMain.handle("session:handoff", async (_e, sid: string) => {
+  const srcId = sid || currentId;
+  const srcAgent = getAgent(srcId);
+  if (!srcAgent) {
+    send("evt:error", { sid: srcId, message: "交接失败：源会话未初始化。" });
+    return { ok: false };
+  }
+  send("evt:handoff", { sid: srcId, phase: "summarizing" }); // UI 提示"正在生成交接文档…"
+  let doc = "";
+  try {
+    doc = await srcAgent.makeHandoff();
+  } catch (e: any) {
+    log("handoffError", srcId.slice(0, 8), String(e?.message || e).slice(0, 300));
+    send("evt:handoff", { sid: srcId, phase: "error" });
+    send("evt:error", { sid: srcId, message: "生成交接文档失败：" + String(e?.message || e).slice(0, 200) });
+    return { ok: false };
+  }
+  if (!doc.trim()) {
+    send("evt:handoff", { sid: srcId, phase: "error" });
+    send("evt:error", { sid: srcId, message: "交接文档为空(该会话暂无可提炼的内容)。" });
+    return { ok: false };
+  }
+  // 新会话：沿用当前全局平台/模型(handoff 后 currentId 切到新会话)，让续跑用同一套模型
+  const newId = randomUUID();
+  currentId = newId;
+  getAgent(newId);
+  send("evt:session-loaded", { id: newId, messages: [] });
+  sendUsageFor(newId);
+  send("evt:handoff", { sid: newId, phase: "done" });
+  const firstMsg =
+    "【工作交接（来自上一个对话）】\n" +
+    "上一个对话的上下文比较杂乱/过长，以下是从中整理出的有价值内容与当前进展。" +
+    "请先理解交接内容，然后**接着把未完成的部分继续做完**；有不确定处再问我。\n\n" +
+    "----\n" +
+    doc;
+  void startTurn(newId, firstMsg);
+  return { ok: true, newId };
+});
+
 ipcMain.on("session:switch", (_e, id: string) => {
   currentId = id;
   const a = getAgent(id);
@@ -2086,6 +2144,12 @@ ipcMain.on("session:reorder-groups", (_e, names: string[]) => {
 // 标记已完成(排到最后、置灰)
 ipcMain.on("session:set-done", (_e, id: string, done: boolean) => {
   setSessionDone(id, done);
+  send("evt:sessions", listSessions());
+});
+
+// 标记待讨论(需过会议讨论)：仅列表徽标区分，不影响排序
+ipcMain.on("session:set-discuss", (_e, id: string, discuss: boolean) => {
+  setSessionDiscuss(id, discuss);
   send("evt:sessions", listSessions());
 });
 

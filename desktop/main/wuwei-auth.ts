@@ -211,7 +211,7 @@ export async function wuweiSendCode(target: string, lang?: string, purpose?: str
   try {
     const res = await fetch(`${SITE}/api/auth/send-code`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Device-Id": getDeviceId() }, // 设备指纹→后端注册防刷计数
       body: JSON.stringify({ target, lang, purpose }),
     });
     const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
@@ -228,7 +228,7 @@ export async function wuweiCodeLogin(target: string, code: string): Promise<Wuwe
   try {
     const res = await fetch(`${SITE}/api/auth/verify-code`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Device-Id": getDeviceId() }, // 设备指纹→后端注册防刷计数
       body: JSON.stringify({ target, code }),
     });
     const j = (await res.json().catch(() => ({}))) as SigninResp;
@@ -245,7 +245,7 @@ export async function wuweiRegister(email: string, code: string, password: strin
   try {
     const res = await fetch(`${SITE}/api/auth/register`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Device-Id": getDeviceId() }, // 设备指纹→后端注册防刷计数
       body: JSON.stringify({ email, code, password }),
     });
     const j = (await res.json().catch(() => ({}))) as SigninResp;

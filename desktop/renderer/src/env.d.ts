@@ -30,6 +30,7 @@ export interface WuweiApi {
   reset(): void;
   undoLast(): void;
   newSession(): void;
+  handoffSession(sid: string): Promise<{ ok: boolean; newId?: string }>; // 一键总结→开新会话接着做
   switchSession(id: string): void;
   resumeSession(id: string): void;
   dismissInterrupted(id: string): void;
@@ -38,6 +39,7 @@ export interface WuweiApi {
   setSessionPriority(id: string, priority: number, tag?: string): void;
   setSessionOrder(id: string, order: number): void;
   setSessionDone(id: string, done: boolean): void;
+  setSessionDiscuss(id: string, discuss: boolean): void;
   reorderGroups(names: string[]): void;
   generateReport(group: string, sessionIds: string[]): void;
   setGroupMode(mode: "manual" | "date" | "project"): void;

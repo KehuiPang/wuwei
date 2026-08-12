@@ -29,6 +29,7 @@ const EVENTS = [
   "evt:assistant-replace",
   "evt:brain-docs",
   "evt:brain-concepts",
+  "evt:handoff",
 ] as const;
 
 // 把当前 edition(wuwei/minicc)暴露给渲染层，供动态设置窗口/文档标题。
@@ -48,6 +49,8 @@ const api = {
   reset: () => ipcRenderer.send("chat:reset"),
   undoLast: () => ipcRenderer.send("chat:undo-last"),
   newSession: () => ipcRenderer.send("session:new"),
+  handoffSession: (sid: string) =>
+    ipcRenderer.invoke("session:handoff", sid) as Promise<{ ok: boolean; newId?: string }>, // 一键总结→开新会话接着做
   switchSession: (id: string) => ipcRenderer.send("session:switch", id),
   resumeSession: (id: string) => ipcRenderer.send("session:resume", id), // 崩溃恢复:继续中断的任务
   dismissInterrupted: (id: string) => ipcRenderer.send("session:dismiss-interrupted", id), // 崩溃恢复:忽略
@@ -59,6 +62,8 @@ const api = {
   setSessionOrder: (id: string, order: number) =>
     ipcRenderer.send("session:set-order", id, order),
   setSessionDone: (id: string, done: boolean) => ipcRenderer.send("session:set-done", id, done),
+  setSessionDiscuss: (id: string, discuss: boolean) =>
+    ipcRenderer.send("session:set-discuss", id, discuss),
   reorderGroups: (names: string[]) => ipcRenderer.send("session:reorder-groups", names),
   generateReport: (group: string, sessionIds: string[]) =>
     ipcRenderer.send("report:generate", group, sessionIds),

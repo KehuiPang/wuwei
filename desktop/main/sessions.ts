@@ -26,6 +26,7 @@ export interface SessionMeta {
   order?: number; // 手动拖拽排序键(同优先级内按此升序；未拖过=按 -updatedAt)
   project?: string; // AI 推断的项目/主题(用于「按项目智能分组」)
   done?: boolean; // 已完成：排到最后、置灰
+  discuss?: boolean; // 待讨论：该会话内容需过会议讨论，列表里打「议」徽标区分(独立于优先级/完成)
   running?: boolean; // 正在跑一轮(开跑置 true、结束置 false)；能跨重启存活→崩溃/强杀时残留 true
   interrupted?: boolean; // 上次运行被强制中断(启动时检测到残留 running=true 或内容明显干到一半)→提示恢复
   resumeDismissed?: boolean; // 用户点过「忽略」→内容启发式不再重复提示该会话(强杀 running 仍会重新提示)
@@ -118,6 +119,15 @@ export function setSessionDone(id: string, done: boolean) {
   const s = l.find((x) => x.id === id);
   if (!s) return;
   s.done = !!done || undefined;
+  saveList(l);
+}
+
+// 标记待讨论(该会话内容需过会议讨论)：不影响排序，仅列表徽标区分
+export function setSessionDiscuss(id: string, discuss: boolean) {
+  const l = listSessions();
+  const s = l.find((x) => x.id === id);
+  if (!s) return;
+  s.discuss = !!discuss || undefined;
   saveList(l);
 }
 
@@ -338,6 +348,7 @@ export function saveSession(
     order: prev?.order,
     project: prev?.project,
     done: prev?.done,
+    discuss: prev?.discuss, // 保留待讨论标记，别被每轮落盘抹掉
     running: prev?.running, // 保留运行/中断标记，别被每轮落盘抹掉(否则崩溃检测失效)
     interrupted: prev?.interrupted,
     resumeDismissed: prev?.resumeDismissed,
@@ -356,12 +367,30 @@ export function deleteSession(id: string) {
 }
 
 // 从首条用户消息推导标题
+// 交接会话的首条消息 = 固定套话前言 + "----" 分隔 + 真正的交接文档。
+// 派生/智能标题若直接吃首条文本，标题永远是"【工作交接（来自上一个对话）】…"这段套话。
+// 这里剥掉前言，只留分隔线之后的文档正文，让标题基于当下项目/内容来命名。
+export function stripHandoffWrapper(text: string): string {
+  const t = text || "";
+  if (t.startsWith("【工作交接")) {
+    const i = t.indexOf("\n----\n");
+    if (i >= 0) {
+      const body = t.slice(i + 6).trim();
+      if (body) return body;
+    }
+  }
+  return t;
+}
+
 export function deriveTitle(messages: Message[]): string {
   for (const m of messages) {
     if (m.role === "user") {
       for (const b of m.content) {
         if (b.type === "text" && b.text.trim()) {
-          const t = b.text.trim().replace(/\s+/g, " ");
+          let t = stripHandoffWrapper(b.text).trim().replace(/\s+/g, " ");
+          // 去掉交接文档常见的分节前缀(如 "1) 目标/任务：")，让标题直奔主题
+          t = t.replace(/^\d+\s*[).、．]\s*[^：:]{0,12}[：:]\s*/, "").trim();
+          if (!t) t = b.text.trim().replace(/\s+/g, " ");
           return t.length > 24 ? t.slice(0, 24) + "…" : t;
         }
       }

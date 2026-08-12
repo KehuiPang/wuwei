@@ -123,6 +123,7 @@ export class Agent {
   private keepRecent: number;
   private pendingInject: { text: string; images: string[] }[] = []; // 运行中注入的新需求，循环边界取用
   private round: RoundUsage = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, steps: 0, lastInput: 0 }; // 本轮自足用量
+  private softStop = false; // 温和停止:不切断当前输出，让本轮自然吐完并干净落历史后，在下个边界停
 
   constructor(
     private provider: Provider,
@@ -134,6 +135,43 @@ export class Agent {
   ) {
     this.compactThreshold = opts.compactThreshold ?? 60000;
     this.keepRecent = opts.keepRecent ?? 6;
+  }
+
+  // 温和停止:不 abort 当前模型流，让它把这轮自然吐完、完整落历史后，在下个循环边界干净停下。
+  // 与 abort(硬中断)分开:硬中断会截断输出、留悬空 tool_use 需事后补 (已停止) 补丁；软停止不会。
+  requestSoftStop() {
+    this.softStop = true;
+  }
+  isSoftStopping(): boolean {
+    return this.softStop;
+  }
+
+  // 收尾:把当前(已完整生成的)助手消息里想调的工具剥掉，只保留已写完的正文，
+  // 让历史干净停在一条「完整的助手消息」上——不切断、不留截断疤，下次发消息无缝接续。
+  private finishSoftStop(hooks: AgentHooks): void {
+    this.pendingInject = []; // 停止即停干净:丢掉还没并入的注入消息，避免下一轮乱序冒出来
+    const last = this.messages[this.messages.length - 1];
+    if (last && last.role === "assistant") {
+      const kept = last.content.filter((b) => b.type !== "tool_use");
+      const hadToolUse = kept.length !== last.content.length;
+      const hasText = kept.some((b) => b.type === "text" && ((b as any).text || "").trim());
+      this.messages[this.messages.length - 1] = {
+        role: "assistant",
+        content: hasText ? kept : [{ type: "text", text: "（已停止）" }], // 极少数「纯工具无正文」才占位，但这是完整边界非截断
+        ts: last.ts,
+        usage: last.usage,
+      };
+      // 刚剥掉半截工具调用 → 通知前端把它从屏上抹掉，只留正文
+      if (hadToolUse) {
+        const t = (hasText ? kept : [])
+          .filter((b) => b.type === "text")
+          .map((b: any) => b.text)
+          .join("");
+        hooks.onRecover?.(t);
+      }
+    }
+    hooks.onStep?.();
+    hooks.onAssistantDone?.();
   }
 
   // 运行中注入新需求：不打断当前步，在下一个循环边界并入历史，让模型综合权衡/优先处理
@@ -237,9 +275,22 @@ export class Agent {
     this.ensureCanAcceptUser(); // 上一轮若被中断,先修好历史尾部,避免连续user/悬空tool_use致API 400
     this.messages.push({ role: "user", content: userContent, ts: Date.now() });
     this.round = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, steps: 0, lastInput: 0 }; // 本轮清零重记
+    this.softStop = false; // 新一轮开始，清掉上一轮可能残留的软停止标志
 
     while (true) {
-      if (signal?.aborted) return; // 已被用户中断
+      if (signal?.aborted) return; // 已被用户硬中断(abort)
+      // 温和停止:上一步(工具结果/助手)已干净入历史。若尾部是 user(tool_result)，补一条完整助手收尾，
+      // 让历史停在助手消息上(完整边界，非截断)，下次发消息无缝接续，且不再触发新的模型请求。
+      if (this.softStop) {
+        this.pendingInject = []; // 停止即停干净:丢掉还没并入的注入消息
+        const last = this.messages[this.messages.length - 1];
+        if (last && last.role === "user") {
+          this.messages.push({ role: "assistant", content: [{ type: "text", text: "（已停止）" }], ts: Date.now() });
+          hooks.onStep?.();
+        }
+        hooks.onAssistantDone?.();
+        return;
+      }
       // 上下文过长则先压缩，再请求模型（省 token / 防撑爆）
       await this.maybeCompact(hooks);
 
@@ -316,6 +367,14 @@ export class Agent {
           .map((b: any) => b.text)
           .join("");
         hooks.onRecover?.(t);
+      }
+
+      // 温和停止检查点:此刻这轮模型已「完整」生成并入历史(不是被截断的半截)。
+      // 剥掉它接下来想调的工具、保留已写完的正文，干净停在一条完整助手消息上就返回——
+      // 既让 AI 把话说完，又不再执行新动作/发新请求，历史尾部合法，下次无缝接续。
+      if (this.softStop) {
+        this.finishSoftStop(hooks);
+        return;
       }
 
       if (toolUses.length === 0) {
@@ -402,6 +461,55 @@ export class Agent {
       hooks.onStep?.(); // 工具结果已入历史，即时落盘
       if (signal?.aborted) return; // 中断：tool_result 已入队(历史合法)，就此结束
     }
+  }
+
+  // 生成「工作交接文档」：把本会话历史里真正有价值的内容(目标/决策/涉及的文件命令参数机器/
+  // 已完成/当前进展/未完成/下一步/坑)提炼成一份结构化中文文档，明确剔除跑题与噪音。
+  // 用途：老对话上下文被污染/太长时，一键交接到一个干净的新对话接着做。用本会话自己的模型来总结。
+  async makeHandoff(): Promise<string> {
+    const msgs = [...this.messages]; // 快照:即使源会话还在跑，也按当下这份历史来总结，不受后续 mutate 影响
+    let transcript = msgs
+      .map((m) => {
+        const parts = (m.content || [])
+          .map((b: any) => {
+            if (b.type === "text") return b.text;
+            if (b.type === "tool_use") return `[调用 ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`;
+            if (b.type === "tool_result") return `[结果: ${String(b.content).slice(0, 500)}]`;
+            if (b.type === "image") return "[图片]";
+            return "";
+          })
+          .filter(Boolean)
+          .join("\n");
+        return parts ? `${m.role === "user" ? "用户" : "助手"}：${parts}` : "";
+      })
+      .filter((s) => s.length > 3)
+      .join("\n\n");
+    if (!transcript.trim()) return "";
+    // 太长则掐头留尾(目标通常在开头、最新进展在结尾)，防喂给模型时超上下文
+    const MAX = 80000;
+    if (transcript.length > MAX) {
+      transcript = transcript.slice(0, 6000) + "\n\n…(中间大段略去)…\n\n" + transcript.slice(-(MAX - 6000));
+    }
+    const res = await this.provider.complete(
+      "你是「工作交接文档」整理器。下面是一段可能很长、甚至跑题或被无关内容污染的工作对话。" +
+        "请只抽取真正有价值的信息，产出一份结构清晰的中文交接文档，让接手者(另一个 AI 助手)不看原对话也能直接继续干活。" +
+        "务必分节输出：\n" +
+        "1) 目标/任务：用户到底要做什么；\n" +
+        "2) 关键背景与决策：涉及的项目/仓库/机器/服务/文件路径/命令/参数/配置，已敲定的方案及理由；\n" +
+        "3) 已完成：具体做了什么、改了哪些文件、验证结果；\n" +
+        "4) 当前进展 / 未完成：正卡在哪、还差什么；\n" +
+        "5) 下一步：接手者应立刻执行的具体动作(有序列出)；\n" +
+        "6) 坑与注意事项：踩过的坑、红线、易错点。\n" +
+        "要求：条目式、带具体名字(别泛泛而谈)、剔除跑题闲聊与噪音、不要复述无关内容。只输出交接文档本身。",
+      [{ role: "user", content: [{ type: "text", text: `工作对话原文：\n${transcript}\n\n请输出交接文档：` }] }],
+      [],
+      {},
+    );
+    return res.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { text: string }).text)
+      .join("")
+      .trim();
   }
 
   // 让历史能安全接受新的 user 消息：修好上一轮中断残留的尾部，避免连续 user / 悬空 tool_use 致 API 400
