@@ -350,9 +350,9 @@ const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price:
 // 月付阶梯（价/币量/签到 对齐库 coin_catalog）：CN plan_pro/5x/50x = ¥29/99/899；EN pro/plus/max = $6.99/19.99/199。
 type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
-  { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "每月 1000 无为币 · 每日签到 20", subEn: "2000 credits/mo · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
-  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "每月 5000 无为币 · 每日签到 40", subEn: "6000 credits/mo · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
-  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "每月 50000 无为币 · 每日签到 100", subEn: "70000 credits/mo · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
+  { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "包月托管额度 · 每日签到 20", subEn: "Monthly hosted quota · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
+  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
+  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "50× 额度 · 每日签到 100", subEn: "50× quota · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
@@ -1057,7 +1057,6 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
               <div className="payres-b1">{en ? "Valid until" : "会员有效期"}</div>
               <div className="payres-b2">{en ? result.expire : `至 ${result.expire}`}</div>
               <div className="payres-b3">
-                <span>{en ? <>+<b>{result.giftCoins.toLocaleString()}</b> credits</> : <>含赠 <b>{result.giftCoins.toLocaleString()}</b> 无为币</>}</span>
                 <span>{en ? `Daily check-in ${result.signin}` : `每日签到 ${result.signin}`}</span>
               </div>
             </div>
@@ -1066,7 +1065,7 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
             </div>
             <div className="payres-btns"><button className="payres-btn pri gold" onClick={onClose}>{en ? "Start using" : "开始使用"}</button></div>
             <div className="payres-foot">
-              {result.saved ? (en ? `Saved ¥${result.saved} · order ${result.order}` : `已省 ¥${result.saved} · 订单号 ${result.order}`) : (en ? "We'll remind you before renewal · 10% off" : "到期前提醒续费 · 续费享 9 折")}
+              {result.saved ? (en ? `Saved ¥${result.saved} · order ${result.order}` : `已省 ¥${result.saved} · 订单号 ${result.order}`) : (en ? "We'll remind you before renewal" : "到期前提醒续费")}
             </div>
           </>
         )}
@@ -1141,6 +1140,47 @@ function RefreshIcon({ size = 13 }: { size?: number }) {
   );
 }
 
+// —— 会话右键菜单图标（统一简约线性 · currentColor · 无为 VI）——
+function HandoffIcon({ size = 15 }: { size?: number }) {
+  // 主干下行 → 向右分叉 → 箭头：表意「从本对话交接/分流到一个新对话」
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M7 4v6a4 4 0 0 0 4 4h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 11l3.5 3-3.5 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function DoneIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M5 12.5l4.2 4.2L19 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function DiscussIcon({ size = 15 }: { size?: number }) {
+  // 带小尾巴的对话气泡 = 待讨论
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M5 5h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-9l-4 3.5V15H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function PlusIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function ReportIcon({ size = 15 }: { size?: number }) {
+  // 带横线的文档 = 一键生成日报
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <rect x="5" y="4" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8.5 9h7M8.5 12.5h7M8.5 16h4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
 function GiftIcon({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: "block" }}>
@@ -3332,7 +3372,7 @@ export function App() {
                 />
                 <div className="ctx-menu" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
                   <button
-                    className="ctx-item"
+                    className="ctx-item ctx-ico"
                     disabled={handoffBusy}
                     onClick={async () => {
                       const sid = ctxMenu.sid;
@@ -3348,26 +3388,29 @@ export function App() {
                     }}
                     title={t("ctx.handoffTip", "总结本对话有价值的内容，生成交接文档，并开一个干净的新对话接着做(解决上下文被污染)")}
                   >
-                    {t("ctx.handoff", "🔀 总结并交接到新对话")}
+                    <HandoffIcon />
+                    <span>{t("ctx.handoff", "总结并交接到新对话")}</span>
                   </button>
                   <div className="ctx-sep" />
                   <button
-                    className="ctx-item ctx-done"
+                    className="ctx-item ctx-ico ctx-done"
                     onClick={() => {
                       window.wuwei.setSessionDone(ctxMenu.sid, !s.done);
                       close();
                     }}
                   >
-                    {s.done ? t("ctx.markUndone", "↩ 取消完成") : t("ctx.markDone", "✓ 标记完成")}
+                    <DoneIcon />
+                    <span>{s.done ? t("ctx.markUndone", "取消完成") : t("ctx.markDone", "标记完成")}</span>
                   </button>
                   <button
-                    className="ctx-item ctx-discuss"
+                    className="ctx-item ctx-ico ctx-discuss"
                     onClick={() => {
                       window.wuwei.setSessionDiscuss(ctxMenu.sid, !s.discuss);
                       close();
                     }}
                   >
-                    {s.discuss ? t("ctx.unmarkDiscuss", "↩ 取消待讨论") : t("ctx.markDiscuss", "🗣 标记待讨论")}
+                    <DiscussIcon />
+                    <span>{s.discuss ? t("ctx.unmarkDiscuss", "取消待讨论") : t("ctx.markDiscuss", "标记待讨论")}</span>
                   </button>
                   <div className="ctx-sep" />
                   <div className="ctx-head">{t("ctx.moveToGroup", "移动到分组")}</div>
@@ -3400,13 +3443,14 @@ export function App() {
                     />
                   ) : (
                     <button
-                      className="ctx-item ctx-new"
+                      className="ctx-item ctx-ico ctx-new"
                       onClick={() => {
                         setGroupInputSid(ctxMenu.sid);
                         setNewGroupName("");
                       }}
                     >
-                      {t("ctx.newGroup", "＋ 新建分组…")}
+                      <PlusIcon />
+                      <span>{t("ctx.newGroup", "新建分组…")}</span>
                     </button>
                   )}
                   <div className="ctx-sep" />
@@ -3469,14 +3513,15 @@ export function App() {
                 <div className="ctx-menu" style={{ left: groupCtx.x, top: groupCtx.y }}>
                   <div className="ctx-head">{lang === "en" ? `Group "${groupCtx.name}"` : `分组「${groupCtx.name}」`}</div>
                   <button
-                    className="ctx-item ctx-new"
+                    className="ctx-item ctx-ico ctx-new"
                     onClick={() => {
                       const ids = sessions.filter((s) => groupOf(s) === groupCtx.name).map((s) => s.id);
                       window.wuwei.generateReport(groupCtx.name, ids);
                       close();
                     }}
                   >
-                    {lang === "en" ? "📋 Generate daily report" : "📋 一键生成日报"}
+                    <ReportIcon />
+                    <span>{lang === "en" ? "Generate daily report" : "一键生成日报"}</span>
                   </button>
                 </div>
               </>
@@ -3638,13 +3683,13 @@ export function App() {
                                     {bal.toLocaleString()}
                                   </div>
                                 </div>
-                                {bal <= 0 && (
+                                {bal <= 0 && !isPro && (
                                   <button className="acct-topup" onClick={openPack}>
-                                    {lang === "en" ? "Top up" : "捐赠"}
+                                    {lang === "en" ? "Top up" : "充值"}
                                   </button>
                                 )}
                               </div>
-                              {bal > 0 ? (
+                              {bal > 0 || isPro ? (
                                 <button
                                   type="button"
                                   className={"acct-checkin" + (checkinDone ? " done" : "")}
@@ -3706,7 +3751,7 @@ export function App() {
                                   <rect x="3" y="5" width="18" height="14" rx="2.5" />
                                   <path d="M3 10h18M7 15h4" />
                                 </svg>
-                                {t("menu.donate", "捐赠")}
+                                {t("menu.donate", "充值")}
                               </button>
                               <button
                                 className="acct-it"
@@ -5219,7 +5264,7 @@ export function App() {
                 <span style={{ minWidth: 0 }}>
                   <span className="pay-ot">{lang === "en" ? "Upgrade to Wuwei Pro" : "升级无为 Pro"}</span>
                   <span className="pay-os" style={{ display: "block" }}>
-                    {lang === "en" ? "From $6.99/mo · monthly credits + hosted quota" : "¥29/月 · 每月 1000 无为币 + 托管额度"}
+                    {lang === "en" ? "From $6.99/mo · hosted quota, resets weekly" : "¥29/月起 · 托管额度 · 每周重置"}
                   </span>
                 </span>
                 <span className="pay-arr">

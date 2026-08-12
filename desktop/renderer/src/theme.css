@@ -4069,6 +4069,10 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ctx-item:hover { background: var(--accent-soft); }
+/* 带图标的菜单项：图标 + 文字横向对齐；图标继承文字色(currentColor) */
+.ctx-item.ctx-ico { display: flex; align-items: center; gap: 8px; }
+.ctx-item.ctx-ico > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-item.ctx-ico > svg { opacity: 0.85; }
 .ctx-new { color: var(--accent); }
 .ctx-input {
   width: 100%; box-sizing: border-box; margin: 2px 0;
