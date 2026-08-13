@@ -5330,7 +5330,7 @@ export function App() {
         const closeAnnounce = () => { try { localStorage.setItem("wuwei_seen_announcement", announce.version); } catch { /* ignore */ } setAnnounce(null); };
         return (
           <div className="perm-overlay" onClick={closeAnnounce}>
-            <div className="add-st-dialog announce-dialog" style={{ maxWidth: 600, width: "92vw", position: "relative", paddingTop: 22 }} onClick={(e) => e.stopPropagation()}>
+            <div className="add-st-dialog announce-dialog" style={{ maxWidth: 500, width: "92vw", position: "relative", paddingTop: 22 }} onClick={(e) => e.stopPropagation()}>
               <button className="announce-x" aria-label={lang === "en" ? "Close" : "关闭"} title={lang === "en" ? "Close" : "关闭"} onClick={closeAnnounce}>×</button>
               <h3 style={{ marginTop: 0, paddingRight: 28 }}>{announce.title}</h3>
               <div className="s-note" style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, maxHeight: "68vh", overflow: "auto" }}>{announce.body}</div>
