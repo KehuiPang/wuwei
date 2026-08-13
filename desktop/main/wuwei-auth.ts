@@ -77,7 +77,9 @@ setTimeout(function(){
 </script></body>`;
 
 /** 弹系统浏览器走完整登录，成功返回会话；用户放弃/超时返回 null。 */
-export function wuweiLogin(): Promise<WuweiSession | null> {
+// forceSwitch=true(用户显式退出后再登)：给中转页带 switch=1，让它先在浏览器里 signOut 旧会话
+// 再跳 /login 重新选账号——否则浏览器残留的旧会话会被直接复用，导致"换不了账号、跳回原账号"。
+export function wuweiLogin(forceSwitch = false): Promise<WuweiSession | null> {
   const state = randomBytes(16).toString("hex");
   return new Promise((resolve) => {
     let done = false;
@@ -142,8 +144,8 @@ export function wuweiLogin(): Promise<WuweiSession | null> {
         finish(null);
         return;
       }
-      const authUrl = `${SITE}/auth/desktop?port=${port}&state=${state}`;
-      // 直接开中转页：已登录直接回传、未登录中转页会自跳 /login?next=
+      const authUrl = `${SITE}/auth/desktop?port=${port}&state=${state}${forceSwitch ? "&switch=1" : ""}`;
+      // 直接开中转页：已登录直接回传、未登录中转页会自跳 /login?next=；switch=1 则先退干净旧会话再重登
       log("wuweiAuth", "打开浏览器登录", authUrl);
       void shell.openExternal(authUrl);
     });

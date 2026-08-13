@@ -4,6 +4,8 @@ import {
   writeFileSync,
   mkdirSync,
   rmSync,
+  renameSync,
+  existsSync,
 } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -14,6 +16,9 @@ const DIR = join(homedir(), ".wuwei");
 const SDIR = join(DIR, "sessions");
 const META = join(DIR, "sessions.json");
 const GROUPS = join(DIR, "groups.json"); // 分组顺序(手动),新组前插=置顶
+const TDIR = join(DIR, "trash"); // 回收站:软删除的会话正文文件挪这里
+const TRASH = join(DIR, "trash.json"); // 回收站元信息(含 deletedAt),独立于 sessions.json
+const TRASH_TTL = 7 * 24 * 3600 * 1000; // 回收站保留 7 天,过期自动彻底清除
 
 export interface SessionMeta {
   id: string;
@@ -356,14 +361,104 @@ export function saveSession(
   saveList(l);
 }
 
-export function deleteSession(id: string) {
+// —— 回收站(软删除) ——
+export interface TrashMeta extends SessionMeta {
+  deletedAt: number; // 删除时间戳,7 天后自动彻底清除
+}
+function ensureTrash() {
+  mkdirSync(TDIR, { recursive: true });
+}
+function saveTrash(l: TrashMeta[]) {
+  ensureTrash();
+  writeFileSync(TRASH, JSON.stringify(l));
+}
+function readTrash(): TrashMeta[] {
   try {
-    rmSync(join(SDIR, id + ".json"));
+    const t = JSON.parse(readFileSync(TRASH, "utf8"));
+    return Array.isArray(t) ? t : [];
   } catch {
-    /* ignore */
+    return [];
+  }
+}
+// 清掉超过 TTL 的回收站条目(彻底删正文文件)。返回仍在保留期内的条目。
+function purgeExpired(list: TrashMeta[], now: number): TrashMeta[] {
+  const kept: TrashMeta[] = [];
+  let changed = false;
+  for (const t of list) {
+    if (now - (t.deletedAt || 0) >= TRASH_TTL) {
+      try { rmSync(join(TDIR, t.id + ".json")); } catch { /* ignore */ }
+      changed = true;
+    } else kept.push(t);
+  }
+  if (changed) saveTrash(kept);
+  return kept;
+}
+// 列出回收站(顺带清掉过期项);最近删的排前面
+export function listTrash(now = Date.now()): TrashMeta[] {
+  const kept = purgeExpired(readTrash(), now);
+  return [...kept].sort((a, b) => b.deletedAt - a.deletedAt);
+}
+
+// 软删除:正文文件挪进 trash/,元信息进 trash.json(带 deletedAt),从会话列表摘掉。可恢复。
+export function deleteSession(id: string, now = Date.now()) {
+  pendingBody.delete(id); // 取消未落盘的正文写,避免挪走后又被重建
+  ensureTrash();
+  try {
+    const src = join(SDIR, id + ".json");
+    if (existsSync(src)) renameSync(src, join(TDIR, id + ".json"));
+  } catch {
+    /* 正文挪动失败也继续:至少元信息进回收站,不至于卡住删除 */
+  }
+  const meta = listSessions().find((s) => s.id === id);
+  if (meta) {
+    const t = readTrash().filter((x) => x.id !== id);
+    t.unshift({ ...meta, running: undefined, interrupted: undefined, deletedAt: now });
+    saveTrash(t);
   }
   saveList(listSessions().filter((s) => s.id !== id));
   pruneGroups();
+}
+
+// 从回收站恢复:正文挪回 sessions/,元信息回 sessions.json(去掉 deletedAt),原分组还在则复用。
+export function restoreSession(id: string): boolean {
+  const t = readTrash();
+  const item = t.find((x) => x.id === id);
+  if (!item) return false;
+  try {
+    const src = join(TDIR, id + ".json");
+    if (existsSync(src)) renameSync(src, join(SDIR, id + ".json"));
+  } catch {
+    /* ignore */
+  }
+  saveTrash(t.filter((x) => x.id !== id));
+  const { deletedAt: _drop, ...meta } = item;
+  const l = listSessions().filter((s) => s.id !== id);
+  l.unshift(meta);
+  saveList(l);
+  if (meta.group) {
+    const g = listGroups();
+    if (!g.includes(meta.group)) saveGroups([meta.group, ...g]); // 组被 prune 掉了就补回
+  }
+  return true;
+}
+
+// 彻底删除回收站里的某条(不可恢复)
+export function purgeTrashItem(id: string) {
+  try { rmSync(join(TDIR, id + ".json")); } catch { /* ignore */ }
+  saveTrash(readTrash().filter((x) => x.id !== id));
+}
+
+// 清空回收站(全部彻底删除)
+export function emptyTrash() {
+  for (const t of readTrash()) {
+    try { rmSync(join(TDIR, t.id + ".json")); } catch { /* ignore */ }
+  }
+  saveTrash([]);
+}
+
+// 启动时调用:清掉过期回收站项(顺带保证 trash 目录存在)
+export function autoPurgeTrash(now = Date.now()) {
+  purgeExpired(readTrash(), now);
 }
 
 // 从首条用户消息推导标题

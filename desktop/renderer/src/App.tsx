@@ -1176,6 +1176,22 @@ function ReportIcon({ size = 15 }: { size?: number }) {
     </svg>
   );
 }
+function RestoreSizeIcon({ size = 14 }: { size?: number }) {
+  // 四角箭头回中心 = 尺寸复位(恢复默认/跟随输入框)
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function FoldIcon({ size = 14 }: { size?: number }) {
+  // 下折箭头 = 折叠/缩小(先看后面的内容)
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
+      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function GiftIcon({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ display: "block" }}>
@@ -1821,6 +1837,8 @@ export function App() {
   const [interruptedSessions, setInterruptedSessions] = useState<{ id: string; title: string }[]>([]); // 上次被强杀、待恢复的任务
   const [autoMode, setAutoMode] = useState(true);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const [trash, setTrash] = useState<import("./env").TrashItem[]>([]); // 回收站:软删除的会话(7天自动清)
+  const [showTrash, setShowTrash] = useState(false);
   const sessionsRef = useRef<SessionMeta[]>([]); // 事件回调里取会话标题(ask 通知文案)
   sessionsRef.current = sessions;
   const [groups, setGroups] = useState<string[]>([]); // 分组顺序(新组置顶)
@@ -2270,7 +2288,8 @@ export function App() {
   // 后台新增的平台则整条按 catalog 构造。免费模型 id 收集给下拉打「免费」标。catalog=null 时原样返回。
   const freeModelIds = new Set<string>();
   const modelBadges = new Map<string, string>(); // 后台配的模型角标(如「快」)，下拉里显示
-  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges);
+  const modelLabels = new Map<string, string>(); // 后台配的模型显示名(如 gpt-5.6→"GPT-5.6 Sol")，下拉里优先显示 label
+  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerListRaw = arrangePresets(
     // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
@@ -2551,6 +2570,9 @@ export function App() {
           break;
         case "evt:groups":
           setGroups(Array.isArray(payload) ? payload : []);
+          break;
+        case "evt:trash":
+          setTrash(Array.isArray(payload) ? payload : []);
           break;
         case "evt:account":
           setAccount(payload);
@@ -3527,6 +3549,15 @@ export function App() {
               </>
             );
           })()}
+        {trash.length > 0 && (
+          <button
+            className="trash-entry"
+            title={lang === "en" ? "Trash: deleted chats are here, restorable; auto-cleared after 7 days" : "回收站：已删除的对话在这里，可恢复；7 天后自动清除"}
+            onClick={() => setShowTrash(true)}
+          >
+            <TrashIcon /> {lang === "en" ? "Trash" : "回收站"} <span className="trash-count">{trash.length}</span>
+          </button>
+        )}
         {(() => {
           const name =
             account.nickname || account.email || account.label || (account.loggedIn ? (lang === "en" ? "Signed in" : "已登录") : (lang === "en" ? "Not signed in" : "未登录"));
@@ -4590,7 +4621,7 @@ export function App() {
                   setShowModelMenu((v) => !v);
                 }}
               >
-                <span className="mq-txt">{meta.model}</span>
+                <span className="mq-txt">{modelLabels.get(meta.model) || meta.model}</span>
                 <span className="mq-caret">▾</span>
               </button>
               {showProviderMenu && (
@@ -4671,7 +4702,7 @@ export function App() {
                         onClick={() => quickModel(m)}
                       >
                         <span>
-                          {m}
+                          {modelLabels.get(m) || m}
                           {freeModelIds.has(m) && (
                             <span
                               style={{
@@ -5073,6 +5104,63 @@ export function App() {
             setShowBrowser(false);
           }}
         />
+      )}
+      {showTrash && (
+        <>
+          <div className="mq-overlay" onClick={() => setShowTrash(false)} />
+          <div className="trash-modal">
+            <div className="trash-head">
+              <span className="trash-head-t"><TrashIcon /> {lang === "en" ? "Trash" : "回收站"}</span>
+              <span className="trash-sub">{lang === "en" ? "Deleted chats can be restored; auto-cleared after 7 days" : "已删除的对话可恢复，7 天后自动清除"}</span>
+              <button className="trash-x" title={lang === "en" ? "Close" : "关闭"} onClick={() => setShowTrash(false)}>×</button>
+            </div>
+            <div className="trash-list">
+              {trash.length === 0 && <div className="empty">{lang === "en" ? "Trash is empty" : "回收站是空的"}</div>}
+              {trash.map((ti) => {
+                const leftMs = ti.deletedAt + 7 * 24 * 3600 * 1000 - Date.now();
+                const leftDays = Math.max(0, Math.ceil(leftMs / (24 * 3600 * 1000)));
+                const title = ti.title || (lang === "en" ? "New chat" : "新对话");
+                return (
+                  <div key={ti.id} className="trash-row">
+                    <div className="trash-info">
+                      <div className="trash-title" title={title}>{title}</div>
+                      <div className="trash-meta">
+                        {ti.group ? (lang === "en" ? `Group "${ti.group}" · ` : `分组「${ti.group}」· `) : ""}
+                        {lang === "en" ? `deleted ${relTime(ti.deletedAt, now, t)} · clears in ${leftDays}d` : `删除于 ${relTime(ti.deletedAt, now, t)} · ${leftDays} 天后清除`}
+                      </div>
+                    </div>
+                    <button className="trash-restore" onClick={() => window.wuwei.restoreSession(ti.id)}>
+                      {lang === "en" ? "Restore" : "恢复"}
+                    </button>
+                    <button
+                      className="trash-purge"
+                      title={lang === "en" ? "Delete permanently, cannot undo" : "彻底删除,不可恢复"}
+                      onClick={() => {
+                        if (confirm(lang === "en" ? `Permanently delete "${title}"? This cannot be undone.` : `彻底删除「${title}」？此操作不可恢复。`))
+                          window.wuwei.purgeTrash(ti.id);
+                      }}
+                    >
+                      {lang === "en" ? "Delete" : "彻底删除"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {trash.length > 0 && (
+              <div className="trash-foot">
+                <button
+                  className="trash-empty"
+                  onClick={() => {
+                    if (confirm(lang === "en" ? `Empty trash? This permanently deletes ${trash.length} chat(s).` : `清空回收站？将彻底删除 ${trash.length} 个对话，不可恢复。`))
+                      window.wuwei.emptyTrash();
+                  }}
+                >
+                  {lang === "en" ? "Empty trash" : "清空回收站"}
+                </button>
+              </div>
+            )}
+          </div>
+        </>
       )}
       {showSettings && (
         <SettingsModal
@@ -6128,9 +6216,9 @@ function AskModal({
   // 对齐到输入框：同左、同宽、贴其正上方 8px
   const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
   useLayoutEffect(() => {
+    const el = anchor.current;
+    if (!el) return;
     const upd = () => {
-      const el = anchor.current;
-      if (!el) return;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el); // composer 有左右 padding，对齐到内容区(真正的输入条)
       const padL = parseFloat(cs.paddingLeft) || 0;
@@ -6140,16 +6228,90 @@ function AskModal({
     };
     upd();
     window.addEventListener("resize", upd);
-    return () => window.removeEventListener("resize", upd);
+    // 直接观察输入框尺寸：浏览器面板开合等布局变化 window resize 监听不到，用 ResizeObserver 才能自动跟随复位
+    const ro = new ResizeObserver(upd);
+    ro.observe(el);
+    return () => {
+      window.removeEventListener("resize", upd);
+      ro.disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor]);
+  // 手动尺寸覆盖：拖右上角手柄放大/缩小后记住宽高；null=跟随输入框自动尺寸
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [userSize, setUserSize] = useState<{ w: number; h: number } | null>(null);
+  const [collapsed, setCollapsed] = useState(false); // 折叠成小条：挡住后面内容时先缩起来看，再展开选择
+  function onResizeDown(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const sx = e.clientX;
+    const sy = e.clientY;
+    const startW = userSize?.w ?? panelRef.current?.offsetWidth ?? box?.width ?? 360;
+    const startH = userSize?.h ?? panelRef.current?.offsetHeight ?? 240;
+    const leftEdge = box?.left ?? 0;
+    const move = (ev: MouseEvent) => {
+      const maxW = Math.max(260, window.innerWidth - leftEdge - 12);
+      const maxH = Math.round(window.innerHeight * 0.9);
+      // 右上角手柄：右移加宽；底边锚定，上移(clientY 变小)即向上长高
+      const w = Math.min(maxW, Math.max(260, startW + (ev.clientX - sx)));
+      const h = Math.min(maxH, Math.max(120, startH + (sy - ev.clientY)));
+      setUserSize({ w, h });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }
   // 单个单选题靠点击即交，不显示按钮；多选题/多题分步/已附截图时显示「下一步/提交」
   const showPrimary = curMulti || qs.length > 1 || curImgs.length > 0;
+  // 折叠态：只剩一个小条(不挡后面内容)，点「展开」还原
+  if (box && collapsed) {
+    return (
+      <div className="ask ask-collapsed" style={{ left: box.left, bottom: box.bottom }}>
+        <span className="ask-collapsed-title">{lang === "en" ? "A choice is waiting" : "有个选择待处理"}</span>
+        <button type="button" className="ask-expand" onClick={() => setCollapsed(false)}>
+          {lang === "en" ? "Expand" : "展开"}
+        </button>
+      </div>
+    );
+  }
   return (
     <div
+      ref={panelRef}
       className="ask"
-      style={box ? { left: box.left, width: box.width, bottom: box.bottom } : { visibility: "hidden" }}
+      style={
+        box
+          ? {
+              left: box.left,
+              width: userSize ? userSize.w : box.width,
+              bottom: box.bottom,
+              ...(userSize ? { height: userSize.h, maxHeight: "none" } : null),
+            }
+          : { visibility: "hidden" }
+      }
     >
+      {/* 右上角：复位(仅放大后显示) + 折叠 + 调尺寸手柄 */}
+      {userSize && (
+        <button
+          type="button"
+          className="ask-ctl ask-restore"
+          title={t("ask.restoreSize", "恢复默认宽高(跟随输入框)")}
+          onClick={() => setUserSize(null)}
+        >
+          <RestoreSizeIcon />
+        </button>
+      )}
+      <button
+        type="button"
+        className="ask-ctl ask-fold"
+        title={t("ask.fold", "折叠(先看后面的内容，再展开选择)")}
+        onClick={() => setCollapsed(true)}
+      >
+        <FoldIcon />
+      </button>
+      <span className="ask-resize" onMouseDown={onResizeDown} title={t("ask.resize", "拖动调整大小")} />
       <div className="ask-q">
         <div className="ask-qhead">
           {q.header && <span className="ask-tag">{q.header}</span>}
@@ -7177,6 +7339,7 @@ function mergeCatalogIntoPresets(
   freeSet: Set<string>,
   keepId?: string,
   badgeMap?: Map<string, string>,
+  labelMap?: Map<string, string>,
 ): Preset[] {
   if (!catalog || catalog.length === 0) return base;
   const byId = new Map(base.map((p) => [p.id, p]));
@@ -7186,6 +7349,8 @@ function mergeCatalogIntoPresets(
     for (const m of c.models) {
       if (m.free) freeSet.add(m.id);
       if (m.badge && badgeMap) badgeMap.set(m.id, m.badge);
+      // 后台配了显示名且与 id 不同 → 记下，下拉里优先显示 label(如 gpt-5.6→"GPT-5.6 Sol")
+      if (labelMap && m.label && m.label !== m.id) labelMap.set(m.id, m.label);
     }
     const models = c.models.map((m) => m.id);
     const local = byId.get(c.id);

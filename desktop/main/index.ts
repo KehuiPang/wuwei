@@ -43,6 +43,11 @@ import {
   loadMessages,
   saveSession,
   deleteSession,
+  listTrash,
+  restoreSession,
+  purgeTrashItem,
+  emptyTrash,
+  autoPurgeTrash,
   deriveTitle,
   stripHandoffWrapper,
   listGroups,
@@ -1356,10 +1361,12 @@ function sendUsageFor(id: string) {
 
 // 启动时：选最近会话或新建，推送列表与当前会话历史
 function bootstrapSessions() {
+  autoPurgeTrash(); // 启动先清掉回收站里超过 7 天的
   const list = listSessions();
   currentId = list[0]?.id ?? randomUUID();
   const a = getAgent(currentId);
   send("evt:sessions", listSessions());
+  send("evt:trash", listTrash());
   send("evt:session-loaded", { id: currentId, messages: a ? a.getMessages() : [] });
   const rl = loadRateLimits(curProviderId()); // 上次的订阅额度快照（按平台），打开即显示
   if (rl) send("evt:ratelimits", rl);
@@ -2129,6 +2136,30 @@ ipcMain.on("session:delete", (_e, id: string) => {
   }
   send("evt:sessions", listSessions());
   send("evt:groups", listGroups());
+  send("evt:trash", listTrash()); // 删除→进回收站,同步刷新回收站
+});
+
+// 回收站:列出(顺带清过期)
+ipcMain.handle("session:list-trash", () => listTrash());
+
+// 回收站:恢复某条→回到会话列表
+ipcMain.on("session:restore", (_e, id: string) => {
+  restoreSession(id);
+  send("evt:sessions", listSessions());
+  send("evt:groups", listGroups());
+  send("evt:trash", listTrash());
+});
+
+// 回收站:彻底删除某条(不可恢复)
+ipcMain.on("session:purge", (_e, id: string) => {
+  purgeTrashItem(id);
+  send("evt:trash", listTrash());
+});
+
+// 回收站:清空(全部彻底删除)
+ipcMain.on("session:empty-trash", () => {
+  emptyTrash();
+  send("evt:trash", listTrash());
 });
 
 // 会话分组：移动到分组(group 空=移出)；新组自动创建并置顶
@@ -2842,7 +2873,8 @@ ipcMain.handle("account:codex-login", async () => {
 // —— 无为账号登录（B2：登录闭环，独立于 codex/claude 账号态，不动 account.ts）——
 // 登录 → 拿 /api/me(user+coin) → 明文持久化 ~/.wuwei/auth.json（B3 改 safeStorage 加密）。
 ipcMain.handle("account:wuwei-login", async () => {
-  const sess = await wuweiLogin();
+  // 之前显式退出过(wuweiLoggedOut) → 强制重新选账号(浏览器先 signOut)，避免复用残留旧会话跳回原账号
+  const sess = await wuweiLogin(wuweiLoggedOut);
   if (!sess) return null;
   wuweiLoggedOut = false; // 重新登录 → 解除登出封锁
   saveWuweiSession(sess);
