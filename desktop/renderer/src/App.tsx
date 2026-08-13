@@ -349,6 +349,25 @@ const COIN_PACKS: CoinPack[] = [
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, priceUsd: 1, desc: "测试专用 · 小额验证", descEn: "Test · small verification", badge: "测试", badgeEn: "Test", badgeType: "val" };
 // 月付阶梯（价/币量/签到 对齐库 coin_catalog）：CN plan_pro/5x/50x = ¥29/99/899；EN pro/plus/max = $6.99/19.99/199。
 type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
+// 订阅版模型显示名(Claude/Codex 订阅是硬编码 preset，无 catalog label)：统一格式，避免下拉里
+// 一会儿 "GPT-5.6 Terra"(空格) 一会儿 "gpt-5.6-sol"(连字符) 混着显示。优先级高于 catalog label。
+const MODEL_LABEL_OVERRIDES: Record<string, string> = {
+  // Codex(GPT) 订阅
+  "gpt-5.6-sol": "GPT-5.6 Sol",
+  "gpt-5.6-terra": "GPT-5.6 Terra",
+  "gpt-5.6-luna": "GPT-5.6 Luna",
+  "gpt-5.5": "GPT-5.5",
+  // Claude 订阅
+  "claude-opus-5": "Claude Opus 5",
+  "claude-sonnet-5": "Claude Sonnet 5",
+  "claude-fable-5": "Claude Fable 5",
+  "claude-opus-4-8": "Claude Opus 4.8",
+  "claude-opus-4-7": "Claude Opus 4.7",
+  "claude-opus-4-6": "Claude Opus 4.6",
+  "claude-sonnet-4-6": "Claude Sonnet 4.6",
+  "claude-haiku-4-5": "Claude Haiku 4.5",
+};
+
 const PRO_PLANS: ProPlan[] = [
   { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "包月托管额度 · 每日签到 20", subEn: "Monthly hosted quota · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
   { id: "pro5x", sku: "plan_pro_5x", name: "无为 Plus", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
@@ -4621,7 +4640,7 @@ export function App() {
                   setShowModelMenu((v) => !v);
                 }}
               >
-                <span className="mq-txt">{modelLabels.get(meta.model) || meta.model}</span>
+                <span className="mq-txt">{MODEL_LABEL_OVERRIDES[meta.model] || modelLabels.get(meta.model) || meta.model}</span>
                 <span className="mq-caret">▾</span>
               </button>
               {showProviderMenu && (
@@ -4702,7 +4721,7 @@ export function App() {
                         onClick={() => quickModel(m)}
                       >
                         <span>
-                          {modelLabels.get(m) || m}
+                          {MODEL_LABEL_OVERRIDES[m] || modelLabels.get(m) || m}
                           {freeModelIds.has(m) && (
                             <span
                               style={{
@@ -7005,14 +7024,12 @@ const PRESETS: Preset[] = [
     keyUrl: "",
     keyHint: "",
     models: [
-      "gpt-5.5",
-      "gpt-5.6-terra",
       "gpt-5.6-sol",
+      "gpt-5.6-terra",
       "gpt-5.6-luna",
-      "gpt-5.5-pro",
-      "gpt-5.4",
+      "gpt-5.5",
     ],
-    note: "使用本机 ~/.codex 登录态，无需填写凭证。仅 gpt-5.5 经真机验证；其它型号能否走订阅通道，切换后看状态灯/实际请求为准（不通会亮黄灯）。",
+    note: "使用本机 ~/.codex 登录态，无需填写凭证。切换后看状态灯/实际请求为准（不通会亮黄灯）。",
     fixedBaseUrl: true,
   },
   {
@@ -7023,13 +7040,14 @@ const PRESETS: Preset[] = [
     keyUrl: "",
     keyHint: "sk-ant-oat…（点上方一键授权自动获取）",
     models: [
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-fable-5",
       "claude-opus-4-8",
       "claude-opus-4-7",
       "claude-opus-4-6",
-      "claude-sonnet-5",
       "claude-sonnet-4-6",
       "claude-haiku-4-5",
-      "claude-fable-5",
     ],
     note: "",
     fixedBaseUrl: true,
