@@ -1803,7 +1803,12 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     send("evt:error", { sid: useId, message: tt("未初始化：缺少模型凭证。请确认 ~/.codex/auth.json 或设置 API key 后重启。", "Not initialized: missing model credentials. Check ~/.codex/auth.json or set an API key, then restart.") });
     return;
   }
-  if (runs.has(useId)) return; // 该会话已在跑，忽略重复提交
+  if (runs.has(useId)) {
+    // 该会话已在跑(上一条可能挂住/未返回，如没权限的型号请求卡住)——不再静默丢弃，
+    // 给用户明确提示可「停止」后重发，避免"发了没反应"的困惑。
+    send("evt:error", { sid: useId, message: tt("上一条还在处理中（可能卡住了）。请点输入框旁的「停止」结束后再重发。", "The previous message is still running (it may be stuck). Click Stop next to the input, then resend.") });
+    return;
+  }
   await ensureFreshClaudeOAuth(); // Claude 订阅 OAuth 快过期则先静默续期，避免本轮请求 401
   await ensureHostedProviderReady(); // 无为托管平台：注入新鲜无为 token 为网关 key
   // 每轮开跑前刷新系统提示词，让上一轮 remember 写入的记忆立即生效(日报等场景用 sysOverride 注入聚合内容)
