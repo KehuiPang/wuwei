@@ -4664,3 +4664,21 @@ body {
   cursor: pointer;
 }
 .trash-empty:hover { color: #e0533d; border-color: #e0533d; }
+
+/* 公告弹窗右上角关闭叉叉 */
+.announce-x {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.announce-x:hover { background: var(--bg-soft); color: var(--text); }
