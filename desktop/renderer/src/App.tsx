@@ -351,8 +351,8 @@ const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price:
 type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
 const PRO_PLANS: ProPlan[] = [
   { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "包月托管额度 · 每日签到 20", subEn: "Monthly hosted quota · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
-  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Pro 5×", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
-  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Pro 50×", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "50× 额度 · 每日签到 100", subEn: "50× quota · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
+  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Plus", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
+  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Max", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "50× 额度 · 每日签到 100", subEn: "50× quota · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
@@ -5338,27 +5338,36 @@ export function App() {
               </div>
             </div>
             <div className="pay-opts">
-              <button
-                className="pay-opt pay-opt-plan"
-                onClick={() => {
-                  setCoinShortage(null);
-                  setPlanOpen(true);
-                }}
-              >
-                <span className="pay-badge">{lang === "en" ? "Better value" : "更划算"}</span>
-                <span className="pay-oi">
-                  <PaySpark size={20} />
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span className="pay-ot">{lang === "en" ? "Upgrade to Wuwei Pro" : "升级无为 Pro"}</span>
-                  <span className="pay-os" style={{ display: "block" }}>
-                    {lang === "en" ? "From $6.99/mo · hosted quota, resets weekly" : "¥29/月起 · 托管额度 · 每周重置"}
-                  </span>
-                </span>
-                <span className="pay-arr">
-                  <PayArrow />
-                </span>
-              </button>
+              {(() => {
+                // 按当前会员等级显示"下一级"：free/未登录→Pro，Pro→Plus，Plus→Max；Max 已顶配→不显升级卡
+                const cur = wuwei?.membership?.plan ?? null; // 服务端给的档位名 Pro/Plus/Max，free 时 null
+                const nextTier = cur === "Max" ? null : cur === "Plus" ? "Max" : cur === "Pro" ? "Plus" : "Pro";
+                const nextPlan = nextTier ? PRO_PLANS.find((p) => p.nameEn === "Wuwei " + nextTier) : null;
+                if (!nextPlan) return null; // 已是 Max：无更高等级，只保留购买积分包
+                return (
+                  <button
+                    className="pay-opt pay-opt-plan"
+                    onClick={() => {
+                      setCoinShortage(null);
+                      setPlanOpen(true);
+                    }}
+                  >
+                    <span className="pay-badge">{lang === "en" ? "Better value" : "更划算"}</span>
+                    <span className="pay-oi">
+                      <PaySpark size={20} />
+                    </span>
+                    <span style={{ minWidth: 0 }}>
+                      <span className="pay-ot">{lang === "en" ? `Upgrade to ${nextPlan.nameEn}` : `升级${nextPlan.name}`}</span>
+                      <span className="pay-os" style={{ display: "block" }}>
+                        {lang === "en" ? `From $${nextPlan.priceUsd}/mo · hosted quota, resets weekly` : `¥${nextPlan.price}/月 · 托管额度 · 每周重置`}
+                      </span>
+                    </span>
+                    <span className="pay-arr">
+                      <PayArrow />
+                    </span>
+                  </button>
+                );
+              })()}
               <button
                 className="pay-opt pay-opt-pack"
                 onClick={() => {
