@@ -1662,7 +1662,7 @@ if (!gotLock) {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg>`,
     },
   ];
-  const CARD_W = 208; // 卡片宽
+  const CARD_W = 180; // 卡片宽
   const SHADOW = 16; // 阴影/圆角留白（窗口比卡片大一圈，给 box-shadow 留空间）
   const ITEM_H = 38;
   const SEP_H = 9;
