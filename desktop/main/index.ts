@@ -1,6 +1,6 @@
 // Electron 主进程：创建窗口，复用核心(agent/tools/config)，
 // 通过 IPC 把 Agent 流式 hooks 推给渲染进程，权限确认走 IPC 往返。
-import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage, dialog } from "electron";
+import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage, dialog, screen, nativeTheme } from "electron";
 import electronUpdater from "electron-updater";
 const safeStorageOk = () => {
   try {
@@ -151,6 +151,7 @@ protocol.registerSchemesAsPrivileged([
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
+let trayMenu: BrowserWindow | null = null; // 自绘托盘右键菜单（无框弹窗，替代原生 setContextMenu）
 // 关闭按钮(✕)默认隐藏到托盘常驻；只有托盘「退出」/before-quit 把它置 true 才真正退出。
 let quitting = false;
 
@@ -1631,7 +1632,131 @@ if (!gotLock) {
       win.focus();
     }
   });
-  // 系统托盘 + 右键菜单（任务栏图标右键：打开无为 / 退出）
+  // 自绘托盘右键菜单：原生 setContextMenu 的行高/hover 样式锁死在系统层无法定制(又大又丑、hover 贴边)，
+  // 改用无框透明弹窗，走无为 VI(玄墨黑)、紧凑行高、hover 高亮带内边距+圆角。
+  const TRAY_MENU_ITEMS = () => [
+    {
+      id: "show",
+      label: tt("显示主窗口", "Show main window"),
+      // 线性窗口图标
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>`,
+    },
+    { id: "sep" },
+    {
+      id: "quit",
+      label: tt("退出", "Quit"),
+      danger: true,
+      // 线性电源图标
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg>`,
+    },
+  ];
+  const CARD_W = 208; // 卡片宽
+  const SHADOW = 16; // 阴影/圆角留白（窗口比卡片大一圈，给 box-shadow 留空间）
+  const ITEM_H = 38;
+  const SEP_H = 9;
+  const PAD_V = 6;
+  function trayMenuSize() {
+    const items = TRAY_MENU_ITEMS();
+    const cardH = PAD_V * 2 + items.reduce((h, it) => h + (it.id === "sep" ? SEP_H : ITEM_H), 0);
+    return { cardH, winW: CARD_W + SHADOW * 2, winH: cardH + SHADOW * 2 };
+  }
+  function trayMenuHtml(cardH: number) {
+    const dark = nativeTheme.shouldUseDarkColors;
+    // 无为 VI：玄墨黑底；亮色降级用近白卡片
+    const c = dark
+      ? { bg: "#1B1F26", border: "rgba(255,255,255,.08)", text: "#E6E8EC", sub: "#9AA0AA", hover: "rgba(255,255,255,.07)", sep: "rgba(255,255,255,.08)", danger: "#F0806B", dangerHover: "rgba(240,128,107,.12)" }
+      : { bg: "#FFFFFF", border: "rgba(0,0,0,.08)", text: "#1B1F26", sub: "#6B7280", hover: "rgba(0,0,0,.05)", sep: "rgba(0,0,0,.07)", danger: "#D9503B", dangerHover: "rgba(217,80,59,.08)" };
+    const rows = TRAY_MENU_ITEMS()
+      .map((it) => {
+        if (it.id === "sep") return `<div class="sep"></div>`;
+        const cls = it.danger ? "row danger" : "row";
+        return `<button class="${cls}" data-act="${it.id}"><span class="ico">${it.icon}</span><span class="lbl">${it.label}</span></button>`;
+      })
+      .join("");
+    return `<!doctype html><meta charset="utf-8"><style>
+      *{margin:0;padding:0;box-sizing:border-box;-webkit-user-select:none;user-select:none}
+      html,body{background:transparent;overflow:hidden;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif}
+      .card{position:fixed;left:${SHADOW}px;top:${SHADOW}px;width:${CARD_W}px;height:${cardH}px;
+        background:${c.bg};border:1px solid ${c.border};border-radius:12px;
+        box-shadow:0 8px 28px rgba(0,0,0,.32),0 2px 6px rgba(0,0,0,.18);
+        padding:${PAD_V}px;display:flex;flex-direction:column;gap:2px;
+        animation:pop .12s ease-out}
+      @keyframes pop{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
+      .row{display:flex;align-items:center;gap:10px;height:${ITEM_H}px;width:100%;
+        margin:0 2px;padding:0 10px;border:0;border-radius:8px;background:transparent;cursor:pointer;
+        color:${c.text};font-size:13px;text-align:left;transition:background .1s}
+      .row:hover{background:${c.hover}}
+      .row.danger{color:${c.danger}}
+      .row.danger:hover{background:${c.dangerHover}}
+      .ico{display:flex;width:16px;height:16px;color:${c.sub};flex:none}
+      .row.danger .ico{color:${c.danger}}
+      .row:hover .ico{color:currentColor}
+      .ico svg{width:16px;height:16px}
+      .lbl{flex:1}
+      .sep{height:${SEP_H}px;margin:2px 8px;position:relative}
+      .sep::after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:${c.sep}}
+    </style>
+    <div class="card">${rows}</div>
+    <script>
+      const send=(a)=>{location.href='wuwei-tray:'+a};
+      document.querySelectorAll('.row').forEach(b=>b.addEventListener('click',()=>send(b.dataset.act)));
+      window.addEventListener('keydown',e=>{if(e.key==='Escape')send('close')});
+    </script>`;
+  }
+  function ensureTrayMenu(): BrowserWindow {
+    if (trayMenu && !trayMenu.isDestroyed()) return trayMenu;
+    const { winW, winH } = trayMenuSize();
+    trayMenu = new BrowserWindow({
+      width: winW,
+      height: winH,
+      show: false,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      hasShadow: false,
+      fullscreenable: false,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    });
+    trayMenu.setMenu(null);
+    // 点菜单项：页面把动作塞进 wuwei-tray: 伪协议，这里拦下来执行，避免额外 preload
+    trayMenu.webContents.on("will-navigate", (e, url) => {
+      if (!url.startsWith("wuwei-tray:")) return;
+      e.preventDefault();
+      const act = url.slice("wuwei-tray:".length).replace(/\/+$/, "");
+      trayMenu?.hide();
+      if (act === "show") {
+        win?.show();
+        win?.focus();
+      } else if (act === "quit") {
+        quitting = true; // 放行 close 事件，真正退出
+        app.quit();
+      }
+    });
+    trayMenu.on("blur", () => trayMenu?.hide()); // 点别处/失焦自动收起
+    return trayMenu;
+  }
+  function popupTrayMenu() {
+    const menu = ensureTrayMenu();
+    const { winW, winH, cardH } = trayMenuSize();
+    const cursor = screen.getCursorScreenPoint();
+    const wa = screen.getDisplayNearestPoint(cursor).workArea;
+    // 卡片右下角贴着鼠标（任务栏在下时菜单弹在光标上方），再整体夹进工作区
+    let x = cursor.x - SHADOW - CARD_W;
+    let y = cursor.y - SHADOW - cardH;
+    x = Math.min(Math.max(x, wa.x - SHADOW), wa.x + wa.width - winW + SHADOW);
+    y = Math.min(Math.max(y, wa.y - SHADOW), wa.y + wa.height - winH + SHADOW);
+    menu.setBounds({ x: Math.round(x), y: Math.round(y), width: winW, height: winH });
+    menu.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(trayMenuHtml(cardH)));
+    menu.show();
+    menu.focus(); // 抢焦点，blur 才能触发自动收起
+  }
+
+  // 系统托盘（左键：显示主窗口；右键：自绘菜单）
   function createTray() {
     try {
       // 托盘专用多尺寸 ico：Windows 按 DPI 自动选最清晰的一档，别手动缩到 18(会糊)
@@ -1639,25 +1764,6 @@ if (!gotLock) {
       const img = nativeImage.createFromPath(iconFile);
       tray = new Tray(img);
       tray.setToolTip(APP_NAME);
-      tray.setContextMenu(
-        Menu.buildFromTemplate([
-          {
-            label: tt(`显示主窗口`, `Show main window`),
-            click: () => {
-              win?.show();
-              win?.focus();
-            },
-          },
-          { type: "separator" },
-          {
-            label: tt("退出", "Quit"),
-            click: () => {
-              quitting = true; // 放行 close 事件，真正退出
-              app.quit();
-            },
-          },
-        ]),
-      );
       const showAndFocus = () => {
         if (win?.isVisible()) win.focus();
         else {
@@ -1667,6 +1773,7 @@ if (!gotLock) {
       };
       tray.on("click", showAndFocus); // 左键单击：显示并聚焦主窗口
       tray.on("double-click", showAndFocus); // 双击同理
+      tray.on("right-click", popupTrayMenu); // 右键：自绘弹窗菜单
     } catch (e) {
       log("boot", "托盘创建失败", String(e));
     }
