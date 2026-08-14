@@ -235,6 +235,23 @@ const api = {
   // 客户端公告（公开）：返回当前发布中的公告 + version(updated_at)，未发布/异常 → {active:false}
   getAnnouncement: () =>
     ipcRenderer.invoke("announcement:get") as Promise<{ active: boolean; version?: string; titleZh?: string; titleEn?: string; bodyZh?: string; bodyEn?: string }>,
+  // 消息中心：拉取当前用户的消息列表 + 未读数（需登录，未登录返回空）
+  getMessages: () =>
+    ipcRenderer.invoke("messages:list") as Promise<{
+      messages: Array<{
+        id: number;
+        category: string; // system | reward | activity | feedback
+        title: string;
+        body: string;
+        reward: { kind: "coins" | "membership"; amount: number; plan?: string } | null;
+        readAt: string | null;
+        createdAt: string;
+      }>;
+      unread: number;
+    }>,
+  // 消息中心：标记已读（传 ids 标指定，或 all=true 全部已读）→ 返回剩余未读数
+  markMessagesRead: (arg: { ids?: number[]; all?: boolean }) =>
+    ipcRenderer.invoke("messages:read", arg) as Promise<{ ok: boolean; unread: number }>,
   // 当前应用版本号（帮助菜单显示）
   getAppVersion: () => ipcRenderer.invoke("app:version") as Promise<string>,
   // 手动检查更新：返回是否有新版 + 版本号（未打包/无更新源时 available:false）

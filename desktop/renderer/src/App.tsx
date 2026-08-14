@@ -812,6 +812,143 @@ function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack
     </>
   );
 }
+// 消息中心：拉取当前用户消息，分类展示（系统/奖励/活动/反馈回复），进入即标记全部已读并回传未读数给父组件更新红点。
+type UserMessage = {
+  id: number;
+  category: string;
+  title: string;
+  body: string;
+  reward: { kind: "coins" | "membership"; amount: number; plan?: string } | null;
+  readAt: string | null;
+  createdAt: string;
+};
+function MessageCenterModal({ onClose, onRead, lang, t }: { onClose: () => void; onRead: (unread: number) => void; lang: string; t: T }) {
+  const en = lang === "en";
+  const [msgs, setMsgs] = useState<UserMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>("all");
+  // 分类元数据：标签 + 主题色（承 VI，语义化）
+  const CATS: Record<string, { zh: string; en: string; color: string }> = {
+    system: { zh: "系统通知", en: "System", color: "#6B7280" },
+    reward: { zh: "奖励", en: "Reward", color: "#E67E22" },
+    activity: { zh: "活动", en: "Activity", color: "#3B82F6" },
+    feedback: { zh: "反馈回复", en: "Feedback", color: "#10B981" },
+  };
+  const catLabel = (c: string) => (CATS[c] ? (en ? CATS[c].en : CATS[c].zh) : c);
+  const catColor = (c: string) => CATS[c]?.color || "#6B7280";
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const r = await window.wuwei.getMessages().catch(() => null);
+      if (!alive) return;
+      const list = r?.messages || [];
+      setMsgs(list);
+      setLoading(false);
+      // 进入消息中心即视为已读：标记全部 + 通知父级清红点
+      if ((r?.unread || 0) > 0) {
+        window.wuwei.markMessagesRead({ all: true }).then((rr) => onRead(rr?.unread ?? 0)).catch(() => {});
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const relTime = (iso: string) => {
+    const d = new Date(iso).getTime();
+    if (!d) return "";
+    const s = Math.floor((Date.now() - d) / 1000);
+    if (s < 60) return en ? "just now" : "刚刚";
+    if (s < 3600) return `${Math.floor(s / 60)}${en ? "m ago" : " 分钟前"}`;
+    if (s < 86400) return `${Math.floor(s / 3600)}${en ? "h ago" : " 小时前"}`;
+    if (s < 2592000) return `${Math.floor(s / 86400)}${en ? "d ago" : " 天前"}`;
+    return new Date(iso).toLocaleDateString();
+  };
+  const rewardText = (r: NonNullable<UserMessage["reward"]>) => {
+    if (r.kind === "coins") return en ? `+${r.amount} coins` : `无为币 +${r.amount}`;
+    const plan = (r.plan || "Pro").replace(/^\w/, (c) => c.toUpperCase());
+    return en ? `${plan} +${r.amount}d` : `${plan} 会员 +${r.amount}天`;
+  };
+  const cats = ["all", "system", "reward", "activity", "feedback"];
+  const shown = filter === "all" ? msgs : msgs.filter((m) => m.category === filter);
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+      <div className="pay-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460, width: "92%" }}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 4 }}>
+          <PayEnso size={40} />
+          <h2>{en ? "Message Center" : "消息中心"}</h2>
+        </div>
+        {/* 分类筛选 */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 30px 12px" }}>
+          {cats.map((c) => {
+            const active = filter === c;
+            return (
+              <button
+                key={c}
+                onClick={() => setFilter(c)}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: 999,
+                  border: `1px solid ${active ? "var(--spark)" : "var(--border)"}`,
+                  background: active ? "var(--spark)" : "transparent",
+                  color: active ? "#fff" : "var(--text-dim)",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {c === "all" ? (en ? "All" : "全部") : catLabel(c)}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ padding: "0 30px 28px", maxHeight: 440, overflowY: "auto" }}>
+          {loading ? (
+            <div style={{ textAlign: "center", color: "var(--text-muted)", fontSize: 13, padding: "40px 0" }}>{en ? "Loading…" : "加载中…"}</div>
+          ) : shown.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0" }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 10, opacity: 0.6 }}>
+                <path d="M4 5h16v11H7l-3 3z" />
+              </svg>
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{en ? "No messages yet" : "暂无消息"}</div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {shown.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    position: "relative",
+                    border: "1px solid var(--border)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    background: m.readAt ? "transparent" : "var(--bg-soft)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: catColor(m.category), background: catColor(m.category) + "1A", borderRadius: 6, padding: "2px 7px" }}>
+                      {catLabel(m.category)}
+                    </span>
+                    {m.reward && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: "#fff", background: "var(--spark)", borderRadius: 6, padding: "2px 7px" }}>
+                        🎁 {rewardText(m.reward)}
+                      </span>
+                    )}
+                    {!m.readAt && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#E5484D", flex: "0 0 auto" }} />}
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)", flex: "0 0 auto" }}>{relTime(m.createdAt)}</span>
+                  </div>
+                  {m.title && <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", marginBottom: 4, lineHeight: 1.4 }}>{m.title}</div>}
+                  <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{m.body}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 // 脑网络功能介绍弹窗（会员专享）：欢迎页案例卡 / 非会员点灰置脑网络菜单时弹出。
 function BrainIntroModal({ onClose, onUpgrade, t }: { onClose: () => void; onUpgrade: () => void; t: T }) {
   const feats: [React.ReactNode, string, string][] = [
@@ -2065,6 +2202,8 @@ export function App() {
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」/ 账号菜单「留言反馈」进入）
   const [leaveMsgFromSupport, setLeaveMsgFromSupport] = useState(false); // 区分来源：从客服弹窗进=显返回；从菜单直接进=无返回
+  const [showMsgCenter, setShowMsgCenter] = useState(false); // 消息中心弹窗
+  const [msgUnread, setMsgUnread] = useState(0); // 消息中心未读数（菜单红点）
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
   const [checkinDone, setCheckinDone] = useState(false); // 今日是否已签到（手动签或已签后置 true）
@@ -2576,6 +2715,15 @@ export function App() {
   // 托盘菜单从主进程事件触发检查更新：用 ref 持有最新闭包，避免 onEvent(空依赖)调到旧的 lang/appVer
   const checkUpdateRef = useRef(checkUpdateNow);
   checkUpdateRef.current = checkUpdateNow;
+
+  // 消息中心未读数：启动拉一次 + 每 5 分钟轮询（登录后才有；未登录返回 0）。面板打开会置 0。
+  useEffect(() => {
+    let alive = true;
+    const pull = () => window.wuwei.getMessages().then((r) => { if (alive) setMsgUnread(r?.unread || 0); }).catch(() => {});
+    pull();
+    const timer = setInterval(pull, 5 * 60 * 1000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [wuwei?.user?.id]);
 
   // 启动拉公告：active 且未读过该 version → 弹窗（标题/正文随界面语言）。读过或后台没发则不弹。
   useEffect(() => {
@@ -3821,6 +3969,25 @@ export function App() {
                                   <path d="M3 10h18M7 15h4" />
                                 </svg>
                                 {t("menu.donate", "充值")}
+                              </button>
+                              {/* 消息中心：奖励到账/活动/系统/反馈回复通知；有未读标红点 */}
+                              <button
+                                className="acct-it"
+                                onClick={() => {
+                                  setShowAcctMenu(false);
+                                  setShowMsgCenter(true);
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                                  <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+                                </svg>
+                                <span style={{ flex: 1, textAlign: "left", whiteSpace: "nowrap" }}>{lang === "en" ? "Messages" : "消息中心"}</span>
+                                {msgUnread > 0 && (
+                                  <span style={{ flex: "0 0 auto", fontSize: 10, fontWeight: 700, color: "#fff", background: "#E5484D", borderRadius: 999, padding: "1px 6px", minWidth: 16, textAlign: "center", whiteSpace: "nowrap" }}>
+                                    {msgUnread > 99 ? "99+" : msgUnread}
+                                  </span>
+                                )}
                               </button>
                               <button
                                 className="acct-it"
@@ -5300,6 +5467,15 @@ export function App() {
                 }
               : undefined
           }
+        />
+      )}
+      {/* 消息中心：账号菜单进入；进入即标全部已读并清红点 */}
+      {showMsgCenter && (
+        <MessageCenterModal
+          t={t}
+          lang={lang}
+          onClose={() => setShowMsgCenter(false)}
+          onRead={(u) => setMsgUnread(u)}
         />
       )}
       {/* 未登录发消息先弹的居中登录激励卡；点登录再切到下面的登录框 */}

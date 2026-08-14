@@ -3231,6 +3231,43 @@ ipcMain.handle(
     }
   },
 );
+// 消息中心：拉取当前用户消息 + 未读数。未登录 → 空列表。带 token 后端按 user_id 过滤。
+ipcMain.handle("messages:list", async () => {
+  const empty = { messages: [], unread: 0 };
+  const sess = await getFreshWuweiSession();
+  if (!sess) return empty;
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const res = await fetch(`${site}/api/me/messages`, {
+      headers: { Authorization: `Bearer ${sess.accessToken}`, "X-Device-Id": getDeviceId() },
+    });
+    const j = (await res.json().catch(() => null)) as { messages?: unknown[]; unread?: number } | null;
+    if (!res.ok || !j) return empty;
+    return { messages: Array.isArray(j.messages) ? j.messages : [], unread: Number(j.unread) || 0 };
+  } catch (e) {
+    log("messages", "拉取消息异常", String(e));
+    return empty;
+  }
+});
+// 消息中心：标记已读（ids 或 all）→ 返回剩余未读数
+ipcMain.handle("messages:read", async (_e, arg: { ids?: number[]; all?: boolean }) => {
+  const sess = await getFreshWuweiSession();
+  if (!sess) return { ok: false, unread: 0 };
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const res = await fetch(`${site}/api/me/messages/read`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sess.accessToken}`, "Content-Type": "application/json", "X-Device-Id": getDeviceId() },
+      body: JSON.stringify({ ids: Array.isArray(arg?.ids) ? arg.ids : undefined, all: !!arg?.all }),
+    });
+    const j = (await res.json().catch(() => null)) as { ok?: boolean; unread?: number } | null;
+    if (!res.ok || !j) return { ok: false, unread: 0 };
+    return { ok: j.ok !== false, unread: Number(j.unread) || 0 };
+  } catch (e) {
+    log("messages", "标记已读异常", String(e));
+    return { ok: false, unread: 0 };
+  }
+});
 // 稳定设备指纹（灰度开关 & 免费试用额度共用）
 ipcMain.handle("account:wuwei-device-id", () => getDeviceId());
 
