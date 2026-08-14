@@ -2007,6 +2007,7 @@ export function App() {
     const off = window.wuwei.onEvent((ch, p: any) => {
       if (ch === "evt:brain-docs") setIdxProg(p);
       else if (ch === "evt:brain-concepts") setConProg(p);
+      else if (ch === "evt:tray-settings") setShowSettings(true); // 托盘菜单「设置」→ 打开设置面板
     });
     return off;
   }, []);

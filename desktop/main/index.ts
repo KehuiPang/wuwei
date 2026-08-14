@@ -1641,6 +1641,18 @@ if (!gotLock) {
       // 线性窗口图标
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>`,
     },
+    {
+      id: "settings",
+      label: tt("设置", "Settings"),
+      // 线性齿轮图标
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    },
+    {
+      id: "restart",
+      label: tt("重启", "Restart"),
+      // 线性刷新/重启图标
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg>`,
+    },
     { id: "sep" },
     {
       id: "quit",
@@ -1732,6 +1744,14 @@ if (!gotLock) {
       if (act === "show") {
         win?.show();
         win?.focus();
+      } else if (act === "settings") {
+        win?.show();
+        win?.focus();
+        send("evt:tray-settings"); // 通知渲染层打开设置面板
+      } else if (act === "restart") {
+        quitting = true; // 放行 close 事件
+        app.relaunch(); // 退出后自动重新拉起
+        app.quit();
       } else if (act === "quit") {
         quitting = true; // 放行 close 事件，真正退出
         app.quit();
