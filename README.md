@@ -14,10 +14,10 @@
 
 <br/>
 
-<!-- 演示 GIF 占位：录一段「一句话 → AI 干完活」的操作，导出为 docs/demo.gif 后把下面 src 换成 docs/demo.gif -->
-<img src="https://placehold.co/860x480/16191E/E6E9EE?text=Wuwei+AI+%C2%B7+Demo+GIF" alt="Wuwei AI 演示（占位，替换为 docs/demo.gif）" width="820">
+<!-- 示意动画(SVG，GitHub 会渲染动画)。有真机录屏后可替换为 docs/demo.gif -->
+<img src="docs/demo.svg" alt="Wuwei AI 演示：一句话 → 读文件 → 权限确认 → 改代码 → 完成" width="820">
 
-<sub>▶️ 演示占位 —— 录一段操作导出为 <code>docs/demo.gif</code>，替换上方图片即可</sub>
+<sub>示意动画 · 想换成真机录屏，导出 <code>docs/demo.gif</code> 并把上方 src 改掉即可</sub>
 
 </div>
 
