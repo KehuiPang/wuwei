@@ -1354,10 +1354,10 @@ function RestoreSizeIcon({ size = 14 }: { size?: number }) {
   );
 }
 function FoldIcon({ size = 14 }: { size?: number }) {
-  // 下折箭头 = 折叠/缩小(先看后面的内容)
+  // 缩小/折叠 = 一条横线（与右上角窗口最小化图标一致，简洁）
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flex: "0 0 auto" }}>
-      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 12h12" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   );
 }
@@ -6525,9 +6525,9 @@ function AskModal({
   if (box && collapsed) {
     return (
       <div className="ask ask-collapsed" style={{ left: box.left, bottom: box.bottom }}>
-        <span className="ask-collapsed-title">{lang === "en" ? "A choice is waiting" : "有个选择待处理"}</span>
+        <span className="ask-collapsed-title">{getLang() === "en" ? "A choice is waiting" : "有个选择待处理"}</span>
         <button type="button" className="ask-expand" onClick={() => setCollapsed(false)}>
-          {lang === "en" ? "Expand" : "展开"}
+          {getLang() === "en" ? "Expand" : "展开"}
         </button>
       </div>
     );
