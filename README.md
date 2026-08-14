@@ -12,6 +12,13 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
+<br/>
+
+<!-- 演示 GIF 占位：录一段「一句话 → AI 干完活」的操作，导出为 docs/demo.gif 后把下面 src 换成 docs/demo.gif -->
+<img src="https://placehold.co/860x480/16191E/E6E9EE?text=Wuwei+AI+%C2%B7+Demo+GIF" alt="Wuwei AI 演示（占位，替换为 docs/demo.gif）" width="820">
+
+<sub>▶️ 演示占位 —— 录一段操作导出为 <code>docs/demo.gif</code>，替换上方图片即可</sub>
+
 </div>
 
 ---
@@ -28,6 +35,40 @@
 - 🔌 **模型自由**：Claude / OpenAI 兼容端点 / 本地模型（vLLM、Ollama）/ 国产大模型，一键切换
 - 🌏 **国内直连**：接国产模型不用梯子
 - 🛡️ **权限确认**：写文件、跑命令前请求确认（`y` / `N` / `a`=以后总是允许该工具）
+
+## 架构
+
+界面（TUI / GUI）→ 自研 Agent 主循环 → 工具执行（带权限确认）↔ 模型后端。
+模型接入两条路：**自带 key 直连** 或 **无为托管网关**。
+
+```mermaid
+flowchart TB
+    User(["你 · 一句话目标"])
+
+    subgraph UI["界面"]
+      TUI["终端 TUI · Ink"]
+      GUI["桌面 GUI · Electron"]
+    end
+
+    subgraph Core["Agent 核心 · 自研 harness（MIT 开源）"]
+      Loop["Agent 主循环<br/>token 计数 · 上下文自动压缩"]
+      Perm{"权限确认<br/>写文件 / 跑命令"}
+      Tools["工具集<br/>read · write · edit · bash · glob · grep"]
+    end
+
+    subgraph Backend["模型后端"]
+      P1["Claude<br/>api-key / 订阅 OAuth"]
+      P2["OpenAI 兼容<br/>DeepSeek·智谱·Kimi·本地 vLLM/Ollama"]
+      P3["Codex<br/>ChatGPT 订阅"]
+    end
+
+    User --> UI --> Loop
+    Loop --> Perm -->|确认后| Tools
+    Tools -->|结果回灌| Loop
+    Loop <-->|自带 key：直连| Backend
+    Loop <-->|无为托管：平台额度| GW["无为网关<br/>wuweiai.io/api/gateway"]
+    GW <--> Backend
+```
 
 ## 两种用法
 
