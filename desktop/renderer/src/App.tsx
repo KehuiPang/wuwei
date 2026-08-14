@@ -659,7 +659,7 @@ function ContactSupportModal({ onClose, onLeaveMessage, t }: { onClose: () => vo
 }
 
 // 留言表单：加不上微信时走这里。留言内容 + 可粘贴图片 + 联系方式 → 提交到后端（wuwei-site 留言管理可见）。
-function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack: () => void; t: T }) {
+function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack?: () => void; t: T }) {
   const [msg, setMsg] = useState("");
   const [contact, setContact] = useState("");
   const [images, setImages] = useState<string[]>([]); // data URL 缩略
@@ -731,6 +731,17 @@ function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack
             </div>
           ) : (
             <>
+              {/* 被采纳有奖：鼓励高质量反馈，后台采纳后可发无为币/会员 */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--spark-soft, rgba(230,126,34,.08))", border: "1px solid var(--spark-border, rgba(230,126,34,.2))", borderRadius: 10, padding: "9px 12px", marginBottom: 12 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--spark)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }} aria-hidden="true">
+                  <path d="M12 15l-2 5 2-1.2L14 20l-2-5" />
+                  <circle cx="12" cy="9" r="6" />
+                  <path d="M12 6.5l1 2 2.2.2-1.6 1.5.5 2.1L12 11.2 9.9 12.3l.5-2.1L8.8 8.7l2.2-.2z" />
+                </svg>
+                <span style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5 }}>
+                  {t("pay.msg.rewardHint", "有价值的反馈被采纳后，可获无为币或会员奖励 🎁")}
+                </span>
+              </div>
               <textarea
                 value={msg}
                 onChange={(e) => setMsg(e.target.value)}
@@ -769,12 +780,14 @@ function LeaveMessageModal({ onClose, onBack, t }: { onClose: () => void; onBack
               />
               {err && <div style={{ fontSize: 12, color: "#C0392B", marginBottom: 10, lineHeight: 1.5 }}>{err}</div>}
               <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  onClick={onBack}
-                  style={{ flex: "0 0 auto", padding: "10px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "none", color: "var(--text-dim)", fontSize: 13, cursor: "pointer" }}
-                >
-                  {t("pay.msg.back", "返回")}
-                </button>
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    style={{ flex: "0 0 auto", padding: "10px 16px", borderRadius: 10, border: "1px solid var(--border)", background: "none", color: "var(--text-dim)", fontSize: 13, cursor: "pointer" }}
+                  >
+                    {t("pay.msg.back", "返回")}
+                  </button>
+                )}
                 <button
                   onClick={submit}
                   disabled={phase === "sending"}
@@ -2050,7 +2063,8 @@ export function App() {
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
   const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
-  const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」进入）
+  const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」/ 账号菜单「留言反馈」进入）
+  const [leaveMsgFromSupport, setLeaveMsgFromSupport] = useState(false); // 区分来源：从客服弹窗进=显返回；从菜单直接进=无返回
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
   const [checkinDone, setCheckinDone] = useState(false); // 今日是否已签到（手动签或已签后置 true）
@@ -3834,6 +3848,21 @@ export function App() {
                                 </svg>
                                 {t("menu.contactSupport", "联系客服")}
                               </button>
+                              {/* 留言反馈：直接开留言弹窗（被采纳有奖）；与客服弹窗内「直接留言」共用同一表单 */}
+                              <button
+                                className="acct-it"
+                                onClick={() => {
+                                  setShowAcctMenu(false);
+                                  setLeaveMsgFromSupport(false);
+                                  setShowLeaveMsg(true);
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M21 11.5a8.5 8.5 0 0 1-11.7 7.9L4 20l1.4-4A8.5 8.5 0 1 1 21 11.5z" />
+                                  <path d="M8.5 11.5h7M8.5 8.5h4" />
+                                </svg>
+                                {t("menu.feedback", "留言反馈")}
+                              </button>
                               {/* 帮助 · 检查更新：平时只显「更新」，有新版才标小红点；点击弹窗看结果/版本信息 */}
                               <button className="acct-it" onClick={() => (updateReady ? (setShowAcctMenu(false), setShowUpdateModal(true)) : checkUpdateNow())}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -5252,19 +5281,25 @@ export function App() {
           onClose={() => setShowSupport(false)}
           onLeaveMessage={() => {
             setShowSupport(false);
+            setLeaveMsgFromSupport(true);
             setShowLeaveMsg(true);
           }}
         />
       )}
-      {/* 留言表单：客服弹窗点「直接留言」进入；返回则回到客服弹窗 */}
+      {/* 留言表单：客服弹窗点「直接留言」进入(带返回)；账号菜单「留言反馈」直接进入(无返回) */}
       {showLeaveMsg && (
         <LeaveMessageModal
           t={t}
           onClose={() => setShowLeaveMsg(false)}
-          onBack={() => {
-            setShowLeaveMsg(false);
-            setShowSupport(true);
-          }}
+          onBack={
+            leaveMsgFromSupport
+              ? () => {
+                  setShowLeaveMsg(false);
+                  setLeaveMsgFromSupport(false);
+                  setShowSupport(true);
+                }
+              : undefined
+          }
         />
       )}
       {/* 未登录发消息先弹的居中登录激励卡；点登录再切到下面的登录框 */}
