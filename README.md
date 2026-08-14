@@ -35,6 +35,17 @@
 - 🔌 **模型自由**：Claude / OpenAI 兼容端点 / 本地模型（vLLM、Ollama）/ 国产大模型，一键切换
 - 🌏 **国内直连**：接国产模型不用梯子
 - 🛡️ **权限确认**：写文件、跑命令前请求确认（`y` / `N` / `a`=以后总是允许该工具）
+- 🧠 **脑网络（Brain）**：本地概念知识网络，沉淀项目 / 部署 / 踩坑等结构化知识，按需 `brain_recall` 检索子图，省 token 不必每次全量翻文档
+
+## 脑网络（Brain · 本地知识网络）
+
+一个跑在你本地的**概念知识网络**：把项目背景、git 路径、测试 / 线上环境、部署脚本位置、踩坑注意事项等**结构化沉淀**下来，需要时按需检索，而不是每次把整份文档塞进上下文。
+
+- `brain_recall` — 按任务检索相关概念子图（+ 命中文档库的原文片段，只给摘要 + 路径）
+- `brain_learn` / `brain_link` — 记住高价值知识、串联关系；同名覆盖纠正旧信息
+- `brain_read_doc` — 需要全文时按路径读，不必全量扫
+
+> 说明：脑网络为**无为托管 / 会员**能力，可在「知识网络」设置里开关、查看 / 覆盖其提示词。关闭后 `brain_*` 工具与说明一并停用。
 
 ## 架构
 
@@ -54,6 +65,7 @@ flowchart TB
       Loop["Agent 主循环<br/>token 计数 · 上下文自动压缩"]
       Perm{"权限确认<br/>写文件 / 跑命令"}
       Tools["工具集<br/>read · write · edit · bash · glob · grep"]
+      Brain[("脑网络 Brain<br/>本地知识网络<br/>recall · learn · link")]
     end
 
     subgraph Backend["模型后端"]
@@ -65,6 +77,7 @@ flowchart TB
     User --> UI --> Loop
     Loop --> Perm -->|确认后| Tools
     Tools -->|结果回灌| Loop
+    Loop <-->|brain_recall / learn<br/>按需检索省 token| Brain
     Loop <-->|自带 key：直连| Backend
     Loop <-->|无为托管：平台额度| GW["无为网关<br/>wuweiai.io/api/gateway"]
     GW <--> Backend
