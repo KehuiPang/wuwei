@@ -1648,6 +1648,12 @@ if (!gotLock) {
       icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
     },
     {
+      id: "check-update",
+      label: tt("检查更新", "Check for updates"),
+      // 线性向上箭头/升级图标
+      icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V8"/><path d="m6 12 6-6 6 6"/><path d="M6 4h12"/></svg>`,
+    },
+    {
       id: "restart",
       label: tt("重启", "Restart"),
       // 线性刷新/重启图标
@@ -1748,6 +1754,10 @@ if (!gotLock) {
         win?.show();
         win?.focus();
         send("evt:tray-settings"); // 通知渲染层打开设置面板
+      } else if (act === "check-update") {
+        win?.show();
+        win?.focus();
+        send("evt:tray-check-update"); // 通知渲染层走检查更新流程(检查中/已最新/发现新版)
       } else if (act === "restart") {
         quitting = true; // 放行 close 事件
         app.relaunch(); // 退出后自动重新拉起
@@ -1765,9 +1775,10 @@ if (!gotLock) {
     const { winW, winH, cardH } = trayMenuSize();
     const cursor = screen.getCursorScreenPoint();
     const wa = screen.getDisplayNearestPoint(cursor).workArea;
-    // 卡片右下角贴着鼠标（任务栏在下时菜单弹在光标上方），再整体夹进工作区
-    let x = cursor.x - SHADOW - CARD_W;
-    let y = cursor.y - SHADOW - cardH;
+    // 卡片水平居中对准鼠标、底边留 8px 间距浮在光标正上方，再整体夹进工作区
+    const GAP = 8;
+    let x = cursor.x - SHADOW - CARD_W / 2;
+    let y = cursor.y - SHADOW - cardH - GAP;
     x = Math.min(Math.max(x, wa.x - SHADOW), wa.x + wa.width - winW + SHADOW);
     y = Math.min(Math.max(y, wa.y - SHADOW), wa.y + wa.height - winH + SHADOW);
     menu.setBounds({ x: Math.round(x), y: Math.round(y), width: winW, height: winH });

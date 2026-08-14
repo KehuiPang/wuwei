@@ -32,6 +32,7 @@ const EVENTS = [
   "evt:handoff",
   "evt:trash",
   "evt:tray-settings",
+  "evt:tray-check-update",
 ] as const;
 
 // 把当前 edition(wuwei/minicc)暴露给渲染层，供动态设置窗口/文档标题。

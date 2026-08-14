@@ -2529,6 +2529,7 @@ export function App() {
       if (ch === "evt:update-available") setHasUpdate(true);
       else if (ch === "evt:update-progress") setDlProgress({ percent: Math.round(p?.percent ?? 0), bytesPerSecond: p?.bytesPerSecond ?? 0 });
       else if (ch === "evt:update-downloaded") { setHasUpdate(true); setDlProgress(null); setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); }
+      else if (ch === "evt:tray-check-update") checkUpdateRef.current(); // 托盘菜单「检查更新」→ 走与账号菜单同一套检查流程
     });
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2558,6 +2559,9 @@ export function App() {
     }
     else setUpdateMsg(r.error ? (lang === "en" ? "Can't check updates right now (dev build or no update source)." : "暂时无法检查更新（开发版或未配置更新源）。") : (lang === "en" ? `You're on the latest version (v${appVer}).` : `已是最新版本（v${appVer}）。`));
   }
+  // 托盘菜单从主进程事件触发检查更新：用 ref 持有最新闭包，避免 onEvent(空依赖)调到旧的 lang/appVer
+  const checkUpdateRef = useRef(checkUpdateNow);
+  checkUpdateRef.current = checkUpdateNow;
 
   // 启动拉公告：active 且未读过该 version → 弹窗（标题/正文随界面语言）。读过或后台没发则不弹。
   useEffect(() => {
