@@ -85,6 +85,7 @@ const DICT: Record<string, { zh: string; en: string }> = {
   "login.err.email_not_found": { zh: "该账号不存在，请先注册", en: "Account not found — sign up first" },
   "login.err.user_exists": { zh: "该邮箱已注册，请直接登录", en: "Email already registered — sign in instead" },
   "login.err.email_exists": { zh: "该邮箱已注册，请直接登录", en: "Email already registered — sign in instead" },
+  "login.err.email_domain_not_allowed": { zh: "该邮箱域名不支持，请换一个能收邮件的常用邮箱", en: "This email domain isn't allowed — use a deliverable email address" },
   "login.err.register_limit_reached": { zh: "该设备/网络注册的账号已达上限，无法再注册新号", en: "This device/network has reached its account signup limit" },
   "login.err.email_taken": { zh: "该邮箱已注册，请直接登录", en: "Email already registered — sign in instead" },
   "login.err.invalid_email": { zh: "邮箱格式不正确", en: "Invalid email format" },
