@@ -4324,7 +4324,14 @@ export function App() {
                     ? "Describe what you need and AI breaks it into tasks, calls AI Agents, runs the steps, and brings back results. Great for coding, editing docs, research, organizing files, and running workflows."
                     : "把需求说清楚，AI 会拆解任务、调用 AI Agent、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。"}
                 </p>
-                <div className="wc-tags">{lang === "en" ? "No sign-up · Free to start · Fast direct access" : "无需注册 · 免费开始 · 国内直连"}</div>
+                <div className="wc-feats">
+                  {(lang === "en"
+                    ? ["No sign-up", "Free to start", "Switch top models seamlessly", "Instant responses", "Fast in China"]
+                    : ["无需注册", "免费开始", "无缝切换顶级模型", "秒级响应", "国内直连"]
+                  ).map((tx) => (
+                    <span className="wc-feat" key={tx}>{tx}</span>
+                  ))}
+                </div>
               </div>
               <div className="wc-flow">
                 <div className="wc-step">
