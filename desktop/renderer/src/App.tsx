@@ -3146,8 +3146,10 @@ export function App() {
   }, [busy, lastWasInterrupted, lang]);
 
   // override：不经过输入框直接发一句（如中断后点「继续」）。缺省仍用输入框内容。
+  // 防御 typeof：万一哪个 onClick 直接写成 {submit}，传进来的是 MouseEvent，
+  // 对它调 .trim() 会当场抛异常把整个界面炸成白屏——这里一律只认字符串。
   function submit(override?: string) {
-    const text = (override ?? input).trim();
+    const text = (typeof override === "string" ? override : input).trim();
     if (!text && pendingImages.length === 0) return;
     if (text === "/reset") {
       window.wuwei.reset();
@@ -4760,7 +4762,7 @@ export function App() {
             ) : (
               <button
                 className={"send-btn" + (input.trim() || pendingImages.length ? " active" : "")}
-                onClick={submit}
+                onClick={() => submit()} // 必须包一层：直接 onClick={submit} 会把 MouseEvent 当 override 传进去
                 title={t("composer.send", "发送 (Enter)")}
                 disabled={!input.trim() && pendingImages.length === 0}
               >
