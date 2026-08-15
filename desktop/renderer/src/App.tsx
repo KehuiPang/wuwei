@@ -4348,7 +4348,8 @@ export function App() {
                     { zh: "免费开始", en: "Free to start", path: <><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" /><circle cx="7" cy="7" r="1.3" /></> },
                     { zh: "切换顶级模型", en: "Switch top models", path: <><path d="M17 2l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><path d="M7 22l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></> },
                     { zh: "秒级响应", en: "Instant responses", path: <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" /> },
-                    { zh: "国内直连", en: "Fast in China", path: <><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z" /></> },
+                    // 国内直连仅中文版显示（对海外用户无意义）
+                    ...(lang === "en" ? [] : [{ zh: "国内直连", en: "Fast in China", path: <><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20Z" /></> }]),
                   ].map((f) => (
                     <span className="wc-feat" key={f.zh}>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{f.path}</svg>
