@@ -172,6 +172,10 @@ function friendlyError(raw: string, t: T): string {
     return t("err.auth", "出错：当前模型未授权或缺少凭证（API Key / 订阅授权），请先完成授权。");
   if (/rate.?limit|\b429\b|quota|exceed|too many/i.test(r))
     return t("err.rateLimit", "出错：请求过于频繁或额度已用尽（触发限流），请稍后再试。");
+  // 长回复被中途切断（undici 的 TypeError: terminated / premature close 等）：
+  // 网关已做退避重连+路由兜底，还走到这里说明确实没救回来 → 明确告诉用户「回复继续即可接着做」，别甩英文原文。
+  if (/\bterminated\b|premature close|other side closed|aborted|ECONNABORTED/i.test(r))
+    return t("err.interrupted", "出错：与模型的连接中断了（长回复被切断）。回复「继续」即可从中断处接着做。");
   if (/timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|network|fetch failed|socket hang/i.test(r))
     return t("err.network", "出错：网络连接失败，请检查网络 / 代理后重试。");
   if (/\b400\b|invalid_request|bad request|context length|too long|max.*token/i.test(r))
@@ -3127,8 +3131,23 @@ export function App() {
     }
   }
 
-  function submit() {
-    const text = input.trim();
+  // 上一条是否「被中断」：两种来源——
+  //   ① 网关重连全失败后优雅收尾，会以助手正文补一句「回复「继续」…」（finish_reason=stop，不算报错）
+  //   ② 客户端到网关这段自己断了 → notice 走 friendlyError 的 err.interrupted 文案
+  const lastWasInterrupted = useMemo(() => {
+    const last = items[items.length - 1];
+    if (!last || (last.type !== "notice" && last.type !== "assistant")) return false;
+    return /连接中断|被切断|回复「继续」|dropped|cut off|reply "continue"/i.test(last.text || "");
+  }, [items]);
+
+  // 被中断 → 给输入框挂「继续」幽灵提示：按 Tab 即填入（复用既有补全机制），或点提示条的「继续」直接发
+  useEffect(() => {
+    if (!busy && lastWasInterrupted) setSuggestion(lang === "en" ? "continue" : "继续");
+  }, [busy, lastWasInterrupted, lang]);
+
+  // override：不经过输入框直接发一句（如中断后点「继续」）。缺省仍用输入框内容。
+  function submit(override?: string) {
+    const text = (override ?? input).trim();
     if (!text && pendingImages.length === 0) return;
     if (text === "/reset") {
       window.wuwei.reset();
@@ -4651,15 +4670,27 @@ export function App() {
               )}
             </div>
           )}
-          {/* 非鉴权类错误：提示删除上一条 */}
+          {/* 非鉴权类错误：中断类主推「继续」（一键从中断处接着做），其它错误仍给「删除这条」。
+              注意判断要中英都认——英文界面的报错以 "Error" 开头，旧代码只认「出错」，导致英文下这条提示条从不出现。 */}
           {!busy &&
             !needAuth &&
             items.length > 0 &&
             items[items.length - 1].type === "notice" &&
-            (items[items.length - 1] as { type: "notice"; text: string }).text.startsWith("出错") && (
+            /^(出错|Error)/.test((items[items.length - 1] as { type: "notice"; text: string }).text) && (
               <div className="err-fix">
-                <span>{lang === "en" ? "The last message errored (may block further sends)" : "上一条消息出错了（可能卡住后续发送）"}</span>
-                <button onClick={() => window.wuwei.undoLast()}>{lang === "en" ? "Delete it and continue" : "删除这条并继续"}</button>
+                {lastWasInterrupted ? (
+                  <>
+                    <span>{t("err.fix.interrupted", "上一条回复被中断了")}</span>
+                    <button className="primary" onClick={() => submit(lang === "en" ? "continue" : "继续")}>
+                      {t("err.fix.continue", "继续")}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span>{lang === "en" ? "The last message errored (may block further sends)" : "上一条消息出错了（可能卡住后续发送）"}</span>
+                    <button onClick={() => window.wuwei.undoLast()}>{lang === "en" ? "Delete it and continue" : "删除这条并继续"}</button>
+                  </>
+                )}
               </div>
             )}
           {pendingImages.length > 0 && (
