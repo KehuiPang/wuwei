@@ -1759,9 +1759,18 @@ if (!gotLock) {
         win?.focus();
         send("evt:tray-check-update"); // 通知渲染层走检查更新流程(检查中/已最新/发现新版)
       } else if (act === "restart") {
-        quitting = true; // 放行 close 事件
-        app.relaunch(); // 退出后自动重新拉起
-        app.quit();
+        // 开发模式(electron-vite dev)下退化为「重载窗口」：那里 app.quit() 会把 vite dev server
+        // 一并带走，relaunch 拉起的新实例再去 loadURL(ELECTRON_RENDERER_URL) 必然失败，
+        // 只剩 backgroundColor 的纯色窗口——看着就是黑屏。重载渲染层效果等价，还不弄丢 dev server。
+        if (process.env["ELECTRON_RENDERER_URL"]) {
+          win?.show();
+          win?.focus();
+          win?.reload();
+        } else {
+          quitting = true; // 放行 close 事件
+          app.relaunch(); // 退出后自动重新拉起
+          app.quit();
+        }
       } else if (act === "quit") {
         quitting = true; // 放行 close 事件，真正退出
         app.quit();
