@@ -41,4 +41,5 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   artifactName: "minicc-${version}-setup.${ext}"
+  include: build/installer.nsh # 同 wuwei：修 electron-builder 默认「应用在运行」检测漏排自身 PID
 npmRebuild: false
