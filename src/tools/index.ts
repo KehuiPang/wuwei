@@ -3,7 +3,7 @@
 import { promises as fs, existsSync } from "node:fs";
 import { resolve, isAbsolute, join, dirname } from "node:path";
 import { homedir } from "node:os";
-import { exec, execFileSync } from "node:child_process";
+import { exec, execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import type { Tool, ToolContext, ToolResult } from "../types.js";
 import * as brain from "../brain/index.js";
@@ -12,6 +12,7 @@ import * as brain from "../brain/index.js";
 export const MEMORY_FILE = join(homedir(), ".wuwei", "memory.md");
 
 const pexec = promisify(exec);
+const pexecFile = promisify(execFile);
 
 // 跨平台 shell 解析：POSIX 用 /bin/bash；Windows 优先 Git Bash（自带 grep/head/find，能原样兼容工具的 bash 语法与管道）。
 // ⚠️ 绝不能用 System32\bash.exe（那是 WSL，Windows 路径映射会乱、cwd 也不对），故从 PATH 上的 git 反推 Git 根目录定位。
@@ -67,6 +68,23 @@ function findWinBash(): string | undefined {
     if (cand && existsSync(cand)) return cand;
   } catch {}
   return undefined;
+}
+
+// 解析 PowerShell 可执行：优先 pwsh(PowerShell 7)，回退 Windows 自带 powershell.exe。
+let _psCache: string | undefined | null;
+function resolvePowerShell(): string | undefined {
+  if (_psCache !== undefined) return _psCache ?? undefined;
+  for (const exe of ["pwsh", "powershell"]) {
+    try {
+      const line = execFileSync("where", [exe], { encoding: "utf8" }).split(/\r?\n/)[0]?.trim();
+      if (line && existsSync(line)) { _psCache = line; return line; }
+    } catch {}
+  }
+  // where 找不到就用系统默认路径兜底
+  const sys = process.env.SystemRoot || "C:\\Windows";
+  const fallback = join(sys, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  _psCache = existsSync(fallback) ? fallback : null;
+  return _psCache ?? undefined;
 }
 
 function abs(ctx: ToolContext, p: string): string {
@@ -197,6 +215,85 @@ const bashTool: Tool = {
     } catch (e: any) {
       const out = [e.stdout, e.stderr, e.message].filter(Boolean).join("\n").trim();
       return { content: out || `执行失败: ${e.message}`, isError: true };
+    }
+  },
+};
+
+// ---- PowerShell（Windows 原生命令：建 junction/软链、注册表、服务、WMI 等）----
+// Windows 上原生操作用 bash(Git Bash) 套 cmd 极易被引号/路径转换搞坏（mklink 卡死就是此坑）。
+// 本工具直接调 PowerShell（成功率高），失败/不可用再回退 cmd.exe。非 Windows 直接回退 bash。
+const powershellTool: Tool = {
+  name: "powershell",
+  description:
+    "在 Windows 上执行原生命令（首选 PowerShell，失败自动回退 cmd）。适合建 junction/符号链接、改注册表、管理服务/进程、WMI 等 Windows 原生操作——比在 bash 里套 cmd 更稳、成功率更高。非 Windows 会退回普通 shell。",
+  readOnly: false,
+  inputSchema: {
+    type: "object",
+    properties: {
+      command: { type: "string", description: "要执行的命令（PowerShell 语法；回退时按 cmd 语法执行同一字符串）" },
+      timeout_ms: { type: "number", description: "超时毫秒，默认 120000" },
+    },
+    required: ["command"],
+  },
+  async run(input, ctx): Promise<ToolResult> {
+    const command = String(input.command);
+    const timeout = Number(input.timeout_ms ?? 120000);
+    const baseOpts = {
+      cwd: ctx.cwd,
+      timeout,
+      maxBuffer: 10 * 1024 * 1024,
+      signal: ctx.signal,
+      env: ctx.env ? { ...process.env, ...ctx.env } : process.env,
+      windowsHide: true,
+    } as const;
+
+    // 非 Windows：没有 PowerShell 场景，直接走 bash。
+    if (process.platform !== "win32") {
+      try {
+        const { stdout, stderr } = await pexec(command, { ...baseOpts, shell: resolveShell() });
+        const out = [stdout, stderr].filter(Boolean).join("\n").trim();
+        return { content: out || "(无输出)" };
+      } catch (e: any) {
+        const out = [e.stdout, e.stderr, e.message].filter(Boolean).join("\n").trim();
+        return { content: out || `执行失败: ${e.message}`, isError: true };
+      }
+    }
+
+    // Windows：优先 PowerShell。
+    const ps = resolvePowerShell();
+    let psErr: any;
+    if (ps) {
+      try {
+        const { stdout, stderr } = await pexecFile(
+          ps,
+          ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+          baseOpts,
+        );
+        const out = [stdout, stderr].filter(Boolean).join("\n").trim();
+        return { content: out || "(无输出)" };
+      } catch (e: any) {
+        // 被用户主动中止：直接抛，不做无谓回退。
+        if (e?.name === "AbortError" || ctx.signal?.aborted) {
+          return { content: [e.stdout, e.stderr, "已中止"].filter(Boolean).join("\n").trim(), isError: true };
+        }
+        psErr = e;
+      }
+    }
+
+    // 回退 cmd.exe。
+    try {
+      const { stdout, stderr } = await pexecFile(
+        process.env.ComSpec || "cmd.exe",
+        ["/d", "/s", "/c", command],
+        baseOpts,
+      );
+      const out = [stdout, stderr].filter(Boolean).join("\n").trim();
+      const prefix = ps ? "(PowerShell 失败，已回退 cmd)\n" : "";
+      return { content: (prefix + (out || "(无输出)")).trim() };
+    } catch (e: any) {
+      const psPart = psErr ? `PowerShell 失败: ${[psErr.stdout, psErr.stderr, psErr.message].filter(Boolean).join(" ")}\n` : "";
+      const cmdPart = [e.stdout, e.stderr, e.message].filter(Boolean).join("\n").trim();
+      return { content: (psPart + `cmd 也失败: ${cmdPart}`).trim(), isError: true };
     }
   },
 };
@@ -581,6 +678,7 @@ export const ALL_TOOLS: Tool[] = [
   writeTool,
   editTool,
   bashTool,
+  powershellTool,
   globTool,
   grepTool,
   webSearchTool,

@@ -4299,8 +4299,10 @@ export function App() {
           <span className="tb-title">
             <WuweiMark />
             {(() => {
-              const t = sessions.find((s) => s.id === currentId)?.title;
-              return t && t !== "新对话" ? t : "无为";
+              const st = sessions.find((s) => s.id === currentId)?.title;
+              // 还没生成智能标题(仍是默认「新对话/New chat」)就显示品牌名，跟随界面语言
+              const isDefault = !st || st === "新对话" || st === "New chat";
+              return isDefault ? (lang === "en" ? "Wuwei" : "无为") : st;
             })()}
           </span>
           <span className="tb-spacer" />
@@ -7039,6 +7041,8 @@ function toolMeta(item: Extract<Item, { type: "tool" }>): {
       const bi = bashIntent(String(inp.command || ""));
       return { icon: "⌘", label: bi.label, category: bi.category };
     }
+    case "powershell":
+      return { icon: "⌘", label: (en ? "PowerShell: " : "PowerShell：") + String(inp.command || ""), category: en ? "Windows command" : "Windows 命令" };
     case "read_file":
       return {
         icon: "◎",
@@ -7088,6 +7092,8 @@ function toolInputPreview(item: Extract<Item, { type: "tool" }>): string {
   switch (item.name) {
     case "bash":
       return "$ " + String(inp.command || "");
+    case "powershell":
+      return "PS> " + String(inp.command || "");
     case "read_file":
       return (en ? "Read " : "读取 ") + String(inp.path || "");
     case "write_file":
@@ -7121,7 +7127,7 @@ const ToolView = React.memo(function ToolView({ item }: { item: Extract<Item, { 
   const en = getLang() === "en";
   const running = item.status === "running";
   const diff = renderDiff(item);
-  const cmd = item.name === "bash" ? String((item.input as any).command || "") : "";
+  const cmd = (item.name === "bash" || item.name === "powershell") ? String((item.input as any).command || "") : "";
   const inputStr = toolInputPreview(item);
   // 有输入/结果/diff 都可展开——运行中也能点开看正在执行的输入
   const hasDetail = !!diff || !!item.result || !!inputStr;
@@ -7959,6 +7965,7 @@ const TOOL_DESC_EN: Record<string, string> = {
   write_file: "Write/overwrite a file (creates it and parent dirs if missing).",
   edit_file: "Make an exact string replacement in a file. old_string must appear exactly once, or it errors.",
   bash: "Run a shell command in the working dir (bash on macOS/Linux; Windows defaults to WSL bash). Returns stdout+stderr and exit code.",
+  powershell: "Run native Windows commands (PowerShell first, auto-falls back to cmd). For junctions/symlinks, the registry, services/processes, WMI and other native Windows work — more reliable than wrapping cmd inside bash. Falls back to a normal shell off Windows.",
   glob: "Find files by glob pattern (e.g. '**/*.ts'), returns matching paths.",
   grep: "Search file contents by regex/string, returns matching lines (file:line:content).",
   remember: "Save a long-term memory (preferences, facts, project background); auto-loaded in future chats.",
@@ -7985,11 +7992,21 @@ const TOOL_PARAM_EN: Record<string, Record<string, string>> = {
   write_file: { path: "File path (relative or absolute)", content: "Full content to write" },
   edit_file: { path: "File path", old_string: "Exact text to replace (must be unique in the file)", new_string: "Replacement text", replace_all: "Replace all occurrences, default false" },
   bash: { command: "Shell command to run", timeout_ms: "Timeout in ms, default 120000" },
+  powershell: { command: "Command to run (PowerShell syntax; the same string is run as cmd syntax when falling back)", timeout_ms: "Timeout in ms, default 120000" },
   glob: { pattern: "Glob pattern, e.g. **/*.ts", path: "Search root directory, default working dir" },
   grep: { pattern: "Regex/string to search for", path: "Directory/file to search, default working dir", glob: "Filter by file type, e.g. '*.ts' (optional)" },
   web_search: { query: "Search query" },
   web_fetch: { url: "Web page URL (http/https)" },
-  ask_user: { questions: "One or more questions to ask the user" },
+  // ask_user 的问题/选项说明嵌在 items 里，逐层替换(见 localizeToolGroups)
+  ask_user: {
+    questions: "One or more questions to ask the user",
+    question: "The question text",
+    header: "Very short label (optional, e.g. “Approach”, “File”)",
+    multiSelect: "Allow multiple selections (default: single-select)",
+    options: "Clickable options",
+    label: "Option text",
+    description: "Option explanation (optional)",
+  },
   remember: { text: "One line to remember long-term (concise, self-contained)" },
   browser_open: { url: "Web page URL to open" },
   browser_click: { selector: "CSS selector of the element to click" },
@@ -8015,12 +8032,23 @@ function localizeToolGroups(groups: ToolGroupRaw[], lang: Lang): ToolGroupRaw[] 
     tools: g.tools.map((tl) => {
       const pmap = TOOL_PARAM_EN[tl.name];
       let schema = tl.inputSchema;
-      if (pmap && schema?.properties && typeof schema.properties === "object") {
-        const props: any = {};
-        for (const [k, v] of Object.entries(schema.properties as Record<string, any>)) {
-          props[k] = pmap[k] ? { ...v, description: pmap[k] } : v;
-        }
-        schema = { ...schema, properties: props };
+      if (pmap && schema && typeof schema === "object") {
+        // 逐层下钻：ask_user 的问题/选项说明嵌在 items.properties 里，只译顶层会漏中文
+        const walk = (node: any): any => {
+          if (!node || typeof node !== "object") return node;
+          const out: any = { ...node };
+          if (out.properties && typeof out.properties === "object") {
+            const props: any = {};
+            for (const [k, v] of Object.entries(out.properties as Record<string, any>)) {
+              const child = walk(v);
+              props[k] = pmap[k] ? { ...child, description: pmap[k] } : child;
+            }
+            out.properties = props;
+          }
+          if (out.items) out.items = walk(out.items);
+          return out;
+        };
+        schema = walk(schema);
       }
       return { ...tl, description: TOOL_DESC_EN[tl.name] ?? tl.description, inputSchema: schema };
     }),

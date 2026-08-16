@@ -491,5 +491,5 @@ export function deriveTitle(messages: Message[]): string {
       }
     }
   }
-  return "新对话";
+  return process.env.WUWEI_LANG === "en" ? "New chat" : "新对话"; // 会话默认标题也跟随界面语言
 }

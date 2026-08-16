@@ -103,6 +103,11 @@ function resolveEdition(): "wuwei" | "minicc" {
 const EDITION = resolveEdition();
 const IS_MINICC = EDITION === "minicc";
 const APP_NAME = IS_MINICC ? "minicc" : "无为";
+// 窗口标题/托盘提示等「显示用」名字：英文界面显示 Wuwei。
+// ⚠️ 只用于显示，绝不能拿去 app.setName()——那会改 userData 目录名，切个语言就把用户数据全丢了。
+function appDisplayName(): string {
+  return IS_MINICC ? "minicc" : process.env.WUWEI_LANG === "en" ? "Wuwei" : "无为";
+}
 const APP_ID = IS_MINICC ? "com.minicc.app" : "com.wuwei.app";
 const DATA_DIR_NAME = IS_MINICC ? ".minicc" : ".wuwei";
 process.env.WUWEI_DATA_DIR_NAME = DATA_DIR_NAME;
@@ -1268,6 +1273,7 @@ const TOOL_DESC_EN_MODEL: Record<string, string> = {
   write_file: "Write/overwrite a file (creates it and parent dirs if missing).",
   edit_file: "Make an exact string replacement in a file. old_string must appear exactly once, or it errors.",
   bash: "Run a shell command in the working dir (bash on macOS/Linux). Returns stdout+stderr. Default timeout 120s.",
+  powershell: "Run native Windows commands (PowerShell first, auto-falls back to cmd). Best for junctions/symlinks, the registry, services/processes, WMI — more reliable than wrapping cmd inside bash. Falls back to a normal shell off Windows.",
   glob: "Find files by glob pattern (e.g. '**/*.ts'), returns matching paths.",
   grep: "Search file contents by regex/string, returns matching lines (file:line:content).",
   remember: "Save a long-term memory (a concise, self-contained sentence); auto-loaded in future chats.",
@@ -1283,10 +1289,21 @@ const TOOL_DESC_EN_MODEL: Record<string, string> = {
   browser_read: "Read the visible text of the built-in browser's current page (open one first with browser_open).",
   browser_click: "Click an element matching a CSS selector on the built-in browser's current page (buttons/links etc). Follow with browser_read to see changes.",
 };
+// ask_user 的参数说明（嵌套在 questions.items / options.items 里），主进程与设置页共用同一套文案
+const ASK_USER_PARAM_EN: Record<string, string> = {
+  questions: "One or more questions to ask the user",
+  question: "The question text",
+  header: "Very short label (optional, e.g. “Approach”, “File”)",
+  multiSelect: "Allow multiple selections (default: single-select)",
+  options: "Clickable options",
+  label: "Option text",
+  description: "Option explanation (optional)",
+};
 const TOOL_PARAM_EN_MODEL: Record<string, Record<string, string>> = {
   read_file: { path: "File path (relative or absolute)", offset: "Start line (1-based), optional", limit: "Lines to read, default 2000" },
   edit_file: { replace_all: "Replace all occurrences, default false" },
   bash: { timeout_ms: "Timeout in ms, default 120000" },
+  powershell: { command: "Command to run (PowerShell syntax; the same string is run as cmd syntax when falling back)", timeout_ms: "Timeout in ms, default 120000" },
   glob: { path: "Search root directory, default working dir" },
   grep: { path: "Directory/file to search, default working dir", glob: "Filter by file type, e.g. '*.ts' (optional)" },
   web_search: { query: "Search query" },
@@ -1304,16 +1321,28 @@ const TOOL_PARAM_EN_MODEL: Record<string, Record<string, string>> = {
   brain_forget: { name: "Concept name to remove" },
   brain_read_doc: { ref: "Document relative path or chunk id (the file value returned by brain_recall)" },
   browser_click: { selector: "CSS selector" },
+  ask_user: ASK_USER_PARAM_EN,
 };
-// 深度替换 inputSchema.properties[*].description（仅顶层属性；ask_user 嵌套不译，模型可从字段名推断）
+// 深度替换 inputSchema 里所有层级的 description（ask_user 的选项/问题是嵌套在 items 里的，
+// 只译顶层会让英文用户的模型上下文里混着中文字段说明）
 function localizeSchemaEn(name: string, schema: any): any {
   const pmap = TOOL_PARAM_EN_MODEL[name];
-  if (!pmap || !schema?.properties || typeof schema.properties !== "object") return schema;
-  const props: any = {};
-  for (const [k, v] of Object.entries(schema.properties as Record<string, any>)) {
-    props[k] = pmap[k] ? { ...v, description: pmap[k] } : v;
-  }
-  return { ...schema, properties: props };
+  if (!pmap || !schema || typeof schema !== "object") return schema;
+  const walk = (node: any): any => {
+    if (!node || typeof node !== "object") return node;
+    const out: any = { ...node };
+    if (out.properties && typeof out.properties === "object") {
+      const props: any = {};
+      for (const [k, v] of Object.entries(out.properties as Record<string, any>)) {
+        const child = walk(v);
+        props[k] = pmap[k] ? { ...child, description: pmap[k] } : child;
+      }
+      out.properties = props;
+    }
+    if (out.items) out.items = walk(out.items);
+    return out;
+  };
+  return walk(schema);
 }
 function localizeToolEn(t: Tool): Tool {
   const desc = TOOL_DESC_EN_MODEL[t.name];
@@ -1444,20 +1473,32 @@ async function maybeSmartTitle(id: string) {
   const firstUser = msgs.find((m: any) => m.role === "user");
   const recent = msgs.slice(-6);
   const picked = firstUser && !recent.includes(firstUser) ? [firstUser, ...recent] : recent;
+  const en = process.env.WUWEI_LANG === "en"; // 标题是给用户看的，必须跟随界面语言
   const convo = picked
     .map((m: any) => {
       // 剥掉交接前言只留正文；首条(定主题)多给点字数，确保覆盖到"目标+项目"这几节
       const body = stripHandoffWrapper(msgText(m)).trim().slice(0, m === firstUser ? 500 : 200);
-      return `${m.role === "user" ? "用户" : "助手"}: ${body}`;
+      return `${m.role === "user" ? tt("用户", "User") : tt("助手", "Assistant")}: ${body}`;
     })
     .filter((s: string) => s.length > 3)
     .join("\n");
   try {
     const res = await provider.complete(
-      "你是会话标注器。根据对话(尤其最新内容)输出两项，用竖线分隔：" +
-        "①4-10 个汉字的简短中文标题(概括当前主题)；②2-6 字的项目/产品名或主题域(用于归类，如某系统名/某功能域，若无明显项目就填通用主题)。" +
-        "严格只输出「标题|项目」，不要任何引号、解释、多余空格。",
-      [{ role: "user", content: [{ type: "text", text: `对话:\n${convo}\n\n标题|项目:` }] }] as any,
+      tt(
+        "你是会话标注器。根据对话(尤其最新内容)输出两项，用竖线分隔：" +
+          "①4-10 个汉字的简短中文标题(概括当前主题)；②2-6 字的项目/产品名或主题域(用于归类，如某系统名/某功能域，若无明显项目就填通用主题)。" +
+          "严格只输出「标题|项目」，不要任何引号、解释、多余空格。",
+        "You are a conversation labeler. Read the conversation (weighting the latest turns) and output two fields separated by a vertical bar: " +
+          "(1) a short English title, 2-5 words, summarizing the current topic; (2) a 1-3 word project/product name or topic domain used for grouping " +
+          "(e.g. a system or feature area; if there is no obvious project, give a general topic). " +
+          "Output strictly `Title|Project` in English — no quotes, no explanation, nothing else.",
+      ),
+      [
+        {
+          role: "user",
+          content: [{ type: "text", text: tt(`对话:\n${convo}\n\n标题|项目:`, `Conversation:\n${convo}\n\nTitle|Project:`) }],
+        },
+      ] as any,
       [],
       {},
     );
@@ -1470,9 +1511,12 @@ async function maybeSmartTitle(id: string) {
       .replace(/^\s*<think(?:ing)?>[\s\S]*$/i, "") // 极端情况：只有未闭合的 <think>
       .trim();
     const [rawTitle, rawProject] = raw.split(/[|｜]/);
-    const clean = (t?: string) => (t || "").replace(/[\s"'`。，、：:！!？?（）()【】\[\]<>]/g, "");
-    const title = clean(rawTitle).slice(0, 12);
-    const project = clean(rawProject).slice(0, 8);
+    // 中文标题不留空格；英文必须保留词间空格(否则 "Fix checkout tests" 会被粘成 "Fixcheckouttests")，
+    // 长度上限也要放宽——同样信息量英文字符数是中文的两三倍。
+    const clean = (t?: string) =>
+      (t || "").replace(en ? /["'`。，、：！!？?（）()【】\[\]<>]/g : /[\s"'`。，、：:！!？?（）()【】\[\]<>]/g, "").replace(/\s+/g, " ").trim();
+    const title = clean(rawTitle).slice(0, en ? 40 : 12);
+    const project = clean(rawProject).slice(0, en ? 24 : 8);
     if (title) {
       const a = agents.get(id);
       if (a) {
@@ -1503,29 +1547,41 @@ async function suggestNextAction(id: string) {
     return;
   }
   suggestInFlight.add(id);
+  const en = process.env.WUWEI_LANG === "en"; // 建议会原样填进输入框，必须跟随界面语言
   const recent = msgs.slice(-4);
   const convo = recent
     .map((m: any, i: number) =>
       // 最后一条助手回复取「结尾」(下一步问题/待办常在末尾)，中间几条取开头做背景即可。
-      `${m.role === "user" ? "用户" : "助手"}: ${i === recent.length - 1 ? msgTextTail(m, 600) : msgText(m)}`,
+      `${m.role === "user" ? tt("用户", "User") : tt("助手", "Assistant")}: ${i === recent.length - 1 ? msgTextTail(m, 600) : msgText(m)}`,
     )
     .filter((s: string) => s.length > 3)
     .join("\n");
   const lastReplyTail = msgTextTail(last, 600); // 助手最后回复的结尾——预测下一步只认它
   try {
     const res = await provider.complete(
-      "你是输入建议助手。下面对话里，助手『最后一条回复』的结尾通常会提出一个问题、或建议一个待确认的下一步动作。" +
-        "请【只针对助手最后回复结尾的那个问题/下一步】，用中文写出用户最可能的回应(第一人称或祈使句，像用户自己会打的话，不超过20字)——" +
-        "比如结尾问『要我继续部署吗?』就回『继续部署』/『先本地验证』这类。" +
-        "务必忽略对话中间的其它话题，别自己另起一件事。直接输出这句话，不要引号、解释或前缀。" +
-        "若结尾没有明确的问题或待确认的下一步(助手在等用户自由发挥)，只输出：无",
+      tt(
+        "你是输入建议助手。下面对话里，助手『最后一条回复』的结尾通常会提出一个问题、或建议一个待确认的下一步动作。" +
+          "请【只针对助手最后回复结尾的那个问题/下一步】，用中文写出用户最可能的回应(第一人称或祈使句，像用户自己会打的话，不超过20字)——" +
+          "比如结尾问『要我继续部署吗?』就回『继续部署』/『先本地验证』这类。" +
+          "务必忽略对话中间的其它话题，别自己另起一件事。直接输出这句话，不要引号、解释或前缀。" +
+          "若结尾没有明确的问题或待确认的下一步(助手在等用户自由发挥)，只输出：无",
+        "You suggest what the user will type next. In the conversation below, the END of the assistant's LAST reply usually asks a question " +
+          "or proposes a next step awaiting confirmation. Answer ONLY that question/next step: write, in English, the reply the user is most likely " +
+          "to type (first person or imperative, the way a user actually types, under 12 words) — e.g. if it ends with 'Want me to deploy?', " +
+          "answer 'Go ahead and deploy' or 'Verify locally first'. Ignore other topics earlier in the conversation and do not start something new. " +
+          "Output that single line only — no quotes, no explanation, no prefix. " +
+          "If the ending has no clear question or pending next step (the assistant is waiting for the user to take the lead), output exactly: none",
+      ),
       [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `完整对话(供参考):\n${convo}\n\n【助手最后回复的结尾，就针对它作答】:\n${lastReplyTail}\n\n用户接下来最可能输入:`,
+              text: tt(
+                `完整对话(供参考):\n${convo}\n\n【助手最后回复的结尾，就针对它作答】:\n${lastReplyTail}\n\n用户接下来最可能输入:`,
+                `Full conversation (for context):\n${convo}\n\n[END of the assistant's last reply — answer THIS]:\n${lastReplyTail}\n\nWhat the user most likely types next:`,
+              ),
             },
           ],
         },
@@ -1539,8 +1595,9 @@ async function suggestNextAction(id: string) {
       .join("")
       .trim()
       .replace(/^["'「『]|["'」』]$/g, "")
-      .slice(0, 40);
-    if (raw === "无" || raw === "无。") raw = "";
+      .slice(0, en ? 90 : 40); // 英文同样意思字符数是中文的两三倍，别拦腰截断
+    // "无"/"none" = 没有明确的下一步 → 不显示建议条
+    if (raw === "无" || raw === "无。" || /^none[.!]?$/i.test(raw)) raw = "";
     send("evt:suggest", { sid: id, text: raw });
   } catch {
     send("evt:suggest", { sid: id, text: "" });
@@ -1561,7 +1618,7 @@ function createWindow() {
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     minWidth: 640,
     minHeight: 480,
-    title: APP_NAME,
+    title: appDisplayName(), // 任务栏悬停显示的就是它，跟随界面语言
     backgroundColor: "#16191e", // 无为·玄墨黑，避免加载时白闪
     // 无边框自绘：mac 保留悬浮红绿灯(hiddenInset)，Windows/Linux 全去原生边框+菜单，标题栏自绘
     ...(process.platform === "darwin"
@@ -1803,7 +1860,7 @@ if (!gotLock) {
       const iconFile = join(__dirname, "../../build/tray.ico");
       const img = nativeImage.createFromPath(iconFile);
       tray = new Tray(img);
-      tray.setToolTip(APP_NAME);
+      tray.setToolTip(appDisplayName());
       const showAndFocus = () => {
         if (win?.isVisible()) win.focus();
         else {
@@ -2515,6 +2572,13 @@ ipcMain.on("settings:set-app", (_e, patch: Record<string, boolean | string>) => 
   s.app = { ...(s.app || {}), ...patch } as any;
   saveSettings(s);
   applyEnvFromSettings(s); // 关键：app.lang 变了要刷 WUWEI_LANG，主进程 tt()/工具描述/系统提示默认才跟随界面语言
+  // 语言变了，任务栏标题/托盘提示要当场跟上，不用重启
+  try {
+    win?.setTitle(appDisplayName());
+    tray?.setToolTip(appDisplayName());
+  } catch {
+    /* ignore */
+  }
   syncBrainDocsFlag(s);
   sysPrompt = buildSysPrompt(cwd, modelLabel, s.providerId);
   for (const a of agents.values()) a.setSystem(sysPrompt);
