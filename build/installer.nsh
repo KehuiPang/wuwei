@@ -18,13 +18,20 @@ Var /GLOBAL wwSelfPid
 Var /GLOBAL wwRunning
 Var /GLOBAL wwRetry
 
-# 查 $INSTDIR 下是否有「除安装程序自己以外」的进程在跑。结果写入 $wwRunning（0 = 有）。
+# 查主程序是否在跑。结果写入 $wwRunning（0 = 在跑）。
+#
+# ⚠️只匹配 $INSTDIR\${APP_EXECUTABLE_FILENAME} 这一个可执行文件，不能按「路径在 $INSTDIR 下」筛：
+# 安装目录里还躺着 resources\elevate.exe（装到 Program Files 这类位置时，安装器自己会启动它提权）
+# 和 app.asar.unpacked 里的 esbuild.exe。按目录筛会把安装器自己派生的 elevate.exe 算成「应用在运行」，
+# 而它要等安装结束才退出 —— 于是永远提示「无法关闭」，点多少次重试都过不去。
+# electron-builder 默认实现的 tasklist 分支本来就是按 IMAGENAME 精确匹配的，只有 PowerShell 分支写宽了。
+# Electron 的 GPU/渲染子进程路径与主程序相同，所以精确匹配依然能覆盖到它们。
 !macro WW_FIND_RUNNING
-  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -C "if (@(Get-CimInstance Win32_Process | ? { $$_.Path -and $$_.ProcessId -ne $wwSelfPid -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase') }).Count -gt 0) { exit 0 } else { exit 1 }"`
+  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -C "if (@(Get-CimInstance Win32_Process | ? { $$_.Path -and $$_.ProcessId -ne $wwSelfPid -and $$_.Path -ieq '$INSTDIR\${APP_EXECUTABLE_FILENAME}' }).Count -gt 0) { exit 0 } else { exit 1 }"`
   Pop $wwRunning
 !macroend
 
-# 关掉 $INSTDIR 下的进程（同样排除自己）。_FORCE=1 时强杀。
+# 关掉主程序（同样排除自己、且只针对主 exe，别误杀 elevate.exe 把安装流程打断）。_FORCE=1 时强杀。
 !macro WW_KILL_RUNNING _FORCE
   Push $0
   ${if} ${_FORCE} == 1
@@ -32,7 +39,7 @@ Var /GLOBAL wwRetry
   ${else}
     StrCpy $0 ""
   ${endIf}
-  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -C "Get-CimInstance Win32_Process | ? { $$_.Path -and $$_.ProcessId -ne $wwSelfPid -and $$_.Path.StartsWith('$INSTDIR', 'CurrentCultureIgnoreCase') } | % { Stop-Process -Id $$_.ProcessId $0 -ErrorAction SilentlyContinue }"`
+  nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -C "Get-CimInstance Win32_Process | ? { $$_.Path -and $$_.ProcessId -ne $wwSelfPid -and $$_.Path -ieq '$INSTDIR\${APP_EXECUTABLE_FILENAME}' } | % { Stop-Process -Id $$_.ProcessId $0 -ErrorAction SilentlyContinue }"`
   Pop $0
 !macroend
 
