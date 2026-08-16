@@ -113,7 +113,9 @@ function saveImage(src: string): void {
   a.remove();
 }
 
-const CTX_MAX = 1_000_000; // gpt-5.5 上下文窗口估算，用于占用条
+// 占用条的兜底窗口：仅在主进程还没把 evt:ready 的真实 ctxWindow 送过来时用。
+// 真实值来自 src/config.ts contextWindowFor()(订阅通道另有封顶)，别在这里判断模型。
+const CTX_MAX = 1_000_000;
 
 // 把持久化的 messages 还原成展示用 items
 function messagesToItems(messages: any[]): Item[] {
@@ -154,6 +156,16 @@ function messagesToItems(messages: any[]): Item[] {
   return items;
 }
 
+// 从服务端报错里抠出它真正认的上下文上限（"prompt is too long: 303245 tokens > 200000 maximum"）。
+// 各家订阅通道的实际窗口未必等于模型标称值(如 Claude 订阅给不到 API 的 1M)，与其在客户端猜，
+// 不如报错一次就把真值学下来，回填占用条——从此显示的就是这条链路的真实上限。
+function parseServerCtxLimit(raw: string): number {
+  const m = (raw || "").match(/(?:prompt is too long|too many tokens)[:\s]*[\d,]+\s*tokens\s*>\s*([\d,]+)/i);
+  if (m) return Number(m[1].replace(/,/g, "")) || 0;
+  const m2 = (raw || "").match(/maximum context length is\s*([\d,]+)/i);
+  return m2 ? Number(m2[1].replace(/,/g, "")) || 0 : 0;
+}
+
 // 把后端/SDK 的原始报错（多为英文）归纳成一句中文提示，避免把整段英文甩给用户。
 // 返回值以「出错：」开头，鉴权类务必含 isAuthError 能识别的关键词（未授权/凭证），以便触发一键授权条。
 function friendlyError(raw: string, t: T): string {
@@ -170,7 +182,24 @@ function friendlyError(raw: string, t: T): string {
     return t("err.tokenExpired", "无为账号登录已过期：请重新登录后再用托管模型。");
   if (/authentication method|apiKey or authToken|x-api-key|unauthorized|\b401\b|invalid.*key|api key/i.test(r))
     return t("err.auth", "出错：当前模型未授权或缺少凭证（API Key / 订阅授权），请先完成授权。");
-  if (/rate.?limit|\b429\b|quota|exceed|too many/i.test(r))
+  // 上下文超限：必须排在限流规则之前。服务端原文常含 "exceed"，会被下面的 429 规则误吞成「触发限流」，
+  // 于是用户干等半天也没用——真正的解法是开新会话或删消息。能解析出数字就把「已用/上限」摆出来。
+  const ctxOver = r.match(/(?:prompt is too long|too many tokens)[:\s]*([\d,]+)\s*tokens\s*>\s*([\d,]+)/i);
+  if (
+    ctxOver ||
+    /context[_ ](length|window|limit)|context length|model_context_window_exceeded|input length and max_tokens exceed|maximum context/i.test(r)
+  ) {
+    const head = t("err.ctxOverflow", "出错：这轮对话太长，超出模型的上下文上限。");
+    const tip = t("err.ctxOverflowTip", "开个新对话接着做（可用「交接」把要点带过去），或删掉部分历史消息。");
+    if (ctxOver) {
+      const used = fmtTok(Number(ctxOver[1].replace(/,/g, "")));
+      const max = fmtTok(Number(ctxOver[2].replace(/,/g, "")));
+      return `${head}（${t("err.ctxUsed", "已用")} ${used} / ${t("err.ctxLimit", "上限")} ${max}）${tip}`;
+    }
+    return head + tip;
+  }
+  // 限流：去掉了原先过宽的 exceed/quota——它们把上下文超限也吞进来了，导致提示完全误导。
+  if (/rate.?limit|\b429\b|too many requests|retry.?after|overloaded_error|quota/i.test(r))
     return t("err.rateLimit", "出错：请求过于频繁或额度已用尽（触发限流），请稍后再试。");
   // 长回复被中途切断（undici 的 TypeError: terminated / premature close 等）：
   // 网关已做退避重连+路由兜底，还走到这里说明确实没救回来 → 明确告诉用户「回复继续即可接着做」，别甩英文原文。
@@ -178,8 +207,9 @@ function friendlyError(raw: string, t: T): string {
     return t("err.interrupted", "出错：与模型的连接中断了（长回复被切断）。回复「继续」即可从中断处接着做。");
   if (/timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|network|fetch failed|socket hang/i.test(r))
     return t("err.network", "出错：网络连接失败，请检查网络 / 代理后重试。");
-  if (/\b400\b|invalid_request|bad request|context length|too long|max.*token/i.test(r))
-    return t("err.badRequest", "出错：请求有误（可能是模型名不对或上下文超长）。");
+  // 上下文超长已在上面单独处理，这里只剩真正的请求错误(模型名/参数)
+  if (/\b400\b|invalid_request|bad request/i.test(r))
+    return t("err.badRequest", "出错：请求有误（可能是模型名或参数不对）。");
   if (/\b5\d\d\b|server error|internal error|overloaded/i.test(r))
     return t("err.server", "出错：服务端错误或繁忙，请稍后重试。");
   // 未知错误：只取首行 + 截断，加前缀，不整段英文轰炸
@@ -2372,6 +2402,7 @@ export function App() {
   const atBottomRef = useRef(true); // 用户是否贴着底部：滚上去看历史时暂停自动吸底，滚回底部再恢复
   const forceBottomRef = useRef(false); // 切换会话:内容异步改高，需多帧兜底吸底(否则要点两下)
   const [awayFromBottom, setAwayFromBottom] = useState(false); // 离底(=已暂停吸底)：显示"回到底部"按钮
+  const [serverCtxMax, setServerCtxMax] = useState(0); // 服务端报错里学到的真实上下文上限(0=还没学到)
   const taRef = useRef<HTMLTextAreaElement>(null);
   const history = useRef<string[]>([]);
   const histIdx = useRef<number>(-1);
@@ -2752,6 +2783,7 @@ export function App() {
       switch (ch) {
         case "evt:ready":
           setMeta(payload);
+          setServerCtxMax(0); // 换了模型/平台，上一条链路学到的上限不再适用
           setApiKeyStep("idle"); // 切平台/模型：重置 key 等待态，避免残留
           setOauthStep("idle");
           void runConnCheck(); // 启动 / 切平台切模型后自动检测连通状态
@@ -2905,6 +2937,9 @@ export function App() {
           thinkStartRef.current = null;
           const rawMsg = String(payload.message ?? payload);
           const friendly = friendlyError(rawMsg, t);
+          // 服务端报了真实上限就记下来，占用条改按它算(比客户端按模型名猜准)
+          const realLimit = parseServerCtxLimit(rawMsg);
+          if (realLimit > 0) setServerCtxMax(realLimit);
           if (isCoinShortage(rawMsg) || isCoinShortage(friendly)) {
             setShowAcctMenu(false);
             void refreshWuweiForShortage(friendly);
@@ -3397,7 +3432,8 @@ export function App() {
     return () => window.removeEventListener("keydown", h);
   }, [pending, busy]);
 
-  const ctxWin = meta.ctxWindow || CTX_MAX;
+  // 优先用服务端亲口报过的上限(实测值)，其次主进程按模型算的值，最后才是兜底常量
+  const ctxWin = serverCtxMax || meta.ctxWindow || CTX_MAX;
   const ctxPct = Math.min(100, Math.round((usage.lastInput / ctxWin) * 100));
   const ctxWinLabel = ctxWin >= 1_000_000 ? (ctxWin / 1_000_000).toFixed(1) + "M" : Math.round(ctxWin / 1000) + "k";
 

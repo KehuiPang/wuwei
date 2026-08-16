@@ -561,6 +561,10 @@ const DICT_EN: Record<string, string> = {
   "win.close": "Close",
   "side.expand": "Expand sidebar",
   "stream.toBottom": "Jump to latest",
+  "err.ctxOverflow": "Error: this conversation is too long for the model's context window.",
+  "err.ctxOverflowTip": "Start a new conversation (use Handoff to carry the key points over), or delete some earlier messages.",
+  "err.ctxUsed": "used",
+  "err.ctxLimit": "limit",
   // 欢迎页（wc.*）
   "wc.eyebrow": "One intention, everything done",
   "wc.h1pre": "Just set your intention,",

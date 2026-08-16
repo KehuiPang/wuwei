@@ -115,6 +115,10 @@ export function loadConfig(): Config {
   let ctxWindow = Number(pick("MINICC_CONTEXT_WINDOW")) || contextWindowFor(model);
   // Codex 订阅通道对 gpt-5.x 封顶 400k(OpenAI Codex 自身限制，模型本身支持 1M 需走 API key)
   if (provider === "codex" && ctxWindow > 400_000) ctxWindow = 400_000;
+  // Claude 订阅(OAuth)通道同理封顶 200k：1M 是 API key 通道的能力，订阅端给不到。
+  // 不封的话占用条按 1M 算，用户看着「才 30 万、远没到 100 万」却一直报错，还会被误读成限流。
+  // 实测上限以服务端报错为准(prompt is too long: X > Y)；要覆盖用 MINICC_CONTEXT_WINDOW。
+  if (provider === "anthropic" && authMode === "oauth" && ctxWindow > 200_000) ctxWindow = 200_000;
 
   return {
     provider,
