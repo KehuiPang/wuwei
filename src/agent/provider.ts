@@ -254,8 +254,15 @@ class OpenAIProvider implements Provider {
     // 谁也想不到是客户端把图丢了（claude 就这么漏了很久，直连正常、走托管就瞎）。
     // 黑名单漏一个的代价只是「报一次 400」，看得见、补一条就好。
     // 何况现在新模型默认都是多模态，纯文本才是少数派，名单该维护少数派。
+    // 已知纯文本（按各家官方文档核实过，2026-08）：
+    //  · 智谱 GLM-4/GLM-5 非 v 版 —— 官方明确写「输入/输出模态：文本」；GLM-4v/4.6v 才是视觉版
+    //  · DeepSeek 全系 —— 官方特性列表(Json Output/Tool Calls/FIM…)没有视觉，V3/R1 一贯纯文本；
+    //    若哪天出了 deepseek-vl 之类，含 vl 会自动放行
+    //  · Moonshot 老的 moonshot-v1-*k（Kimi K2.6 起支持图片，K3 官方写明「1M 上下文与视觉理解」，故不列入）
+    // ⚠️这些模型收到图片不一定报错——GLM-5.2 实测是「收下然后没反应」，比报 400 更难排查，
+    //    所以宁可保守列进来，也别让用户对着空白等半天。
     const NON_VISION =
-      /deepseek-(chat|coder|reasoner)|moonshot-v1-\d+k$|glm-4(?!.*v)|qwen-?(max|plus|turbo)|embedding|\bbge\b/i;
+      /deepseek(?!.*vl)|moonshot-v1-\d+k$|glm-[45](?!.*v)|qwen-?(max|plus|turbo)|embedding|\bbge\b/i;
     const vision =
       this.cfg.vision === true
         ? true // 强制开：自建端点模型名不含 vl 但其实支持
