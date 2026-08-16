@@ -1,0 +1,44 @@
+# minicc 版独立打包配置：与 wuwei 完全隔离（不同 appId / 数据目录 / 安装包名）。
+# 用法: npx electron-builder --config electron-builder.minicc.yml
+appId: com.minicc.app
+productName: minicc
+directories:
+  output: release-minicc
+files:
+  - out/**/*
+  - build/icon.png
+  - build/tray.ico
+  - package.json
+asarUnpack:
+  - build/icon.png
+  - build/tray.ico
+  - "**/node_modules/@anthropic-ai/**"
+  - "**/node_modules/onnxruntime-node/**"
+  - "**/node_modules/@xenova/**"
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+dmg:
+  title: "minicc ${version}"
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  icon: build/icon.png
+  category: Development
+  maintainer: minicc
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "minicc-${version}-setup.${ext}"
+npmRebuild: false

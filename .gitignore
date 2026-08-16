@@ -2,6 +2,7 @@ node_modules/
 dist/
 out/
 release/
+release-minicc/
 *.log
 *.tgz
 .DS_Store
