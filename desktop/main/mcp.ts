@@ -150,14 +150,16 @@ class McpClient {
       readOnly: false, // MCP 工具可能有副作用 → 走权限确认(手动模式)
       inputSchema: t.inputSchema || { type: "object", properties: {} },
       async run(input): Promise<ToolResult> {
+        // 这两条会进工具卡片和模型上下文 → 跟随界面语言（在调用处判定，切语言即时生效）
+        const en = process.env.WUWEI_LANG === "en";
         try {
           const r = await client.request("tools/call", { name: t.name, arguments: input });
           const content = (r?.content || [])
             .map((c: any) => (c.type === "text" ? c.text : JSON.stringify(c)))
             .join("\n");
-          return { content: content || "(无输出)", isError: !!r?.isError };
+          return { content: content || (en ? "(no output)" : "(无输出)"), isError: !!r?.isError };
         } catch (e: any) {
-          return { content: `MCP 调用失败: ${e.message}`, isError: true };
+          return { content: `${en ? "MCP call failed:" : "MCP 调用失败:"} ${e.message}`, isError: true };
         }
       },
     };

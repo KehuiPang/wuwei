@@ -14,6 +14,10 @@ export const MEMORY_FILE = join(homedir(), ".wuwei", "memory.md");
 const pexec = promisify(exec);
 const pexecFile = promisify(execFile);
 
+// 工具结果文案跟随界面语言（WUWEI_LANG 由桌面端设置写入环境变量；CLI 同样可用）。
+// ⚠️ 必须在调用时求值：绝不能把 tt(...) 的结果放进模块顶层常量，否则加载那一刻语言就被焊死，切换语言不生效。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 // 跨平台 shell 解析：POSIX 用 /bin/bash；Windows 优先 Git Bash（自带 grep/head/find，能原样兼容工具的 bash 语法与管道）。
 // ⚠️ 绝不能用 System32\bash.exe（那是 WSL，Windows 路径映射会乱、cwd 也不对），故从 PATH 上的 git 反推 Git 根目录定位。
 let _shellCache: string | undefined;
@@ -115,9 +119,11 @@ const readTool: Tool = {
       const body = slice
         .map((l, i) => `${String(offset + i).padStart(6)}\t${l}`)
         .join("\n");
-      return { content: body || "(空文件)" };
+      // 空文件的兜底要看 raw：""  split 出的是 [""]，加完行号变成 "     1\t"，body 并不为空，
+      // 原来的 `body ||` 永远命中不了，空文件一直显示成一个孤零零的行号。
+      return { content: raw === "" || !body ? tt("(空文件)", "(empty file)") : body };
     } catch (e: any) {
-      return { content: `读取失败: ${e.message}`, isError: true };
+      return { content: tt(`读取失败: ${e.message}`, `Read failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -140,9 +146,9 @@ const writeTool: Tool = {
       const target = abs(ctx, String(input.path));
       await fs.mkdir(resolve(target, ".."), { recursive: true });
       await fs.writeFile(target, String(input.content), "utf8");
-      return { content: `已写入 ${target}` };
+      return { content: tt(`已写入 ${target}`, `Wrote ${target}`) };
     } catch (e: any) {
-      return { content: `写入失败: ${e.message}`, isError: true };
+      return { content: tt(`写入失败: ${e.message}`, `Write failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -169,19 +175,24 @@ const editTool: Tool = {
       const oldStr = String(input.old_string);
       const newStr = String(input.new_string);
       const count = raw.split(oldStr).length - 1;
-      if (count === 0) return { content: "未找到 old_string，未修改", isError: true };
+      if (count === 0)
+        return { content: tt("未找到 old_string，未修改", "old_string not found; no changes made"), isError: true };
       if (count > 1 && !input.replace_all)
         return {
-          content: `old_string 出现 ${count} 次不唯一；请加长上下文或设 replace_all`,
+          content: tt(
+            `old_string 出现 ${count} 次不唯一；请加长上下文或设 replace_all`,
+            `old_string occurs ${count} times (not unique); add more context or set replace_all`,
+          ),
           isError: true,
         };
       const next = input.replace_all
         ? raw.split(oldStr).join(newStr)
         : raw.replace(oldStr, newStr);
       await fs.writeFile(target, next, "utf8");
-      return { content: `已编辑 ${target}（替换 ${input.replace_all ? count : 1} 处）` };
+      const n = input.replace_all ? count : 1;
+      return { content: tt(`已编辑 ${target}（替换 ${n} 处）`, `Edited ${target} (${n} replacement(s))`) };
     } catch (e: any) {
-      return { content: `编辑失败: ${e.message}`, isError: true };
+      return { content: tt(`编辑失败: ${e.message}`, `Edit failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -211,10 +222,10 @@ const bashTool: Tool = {
         env: ctx.env ? { ...process.env, ...ctx.env } : process.env,
       });
       const out = [stdout, stderr].filter(Boolean).join("\n").trim();
-      return { content: out || "(无输出)" };
+      return { content: out || tt("(无输出)", "(no output)") };
     } catch (e: any) {
       const out = [e.stdout, e.stderr, e.message].filter(Boolean).join("\n").trim();
-      return { content: out || `执行失败: ${e.message}`, isError: true };
+      return { content: out || tt(`执行失败: ${e.message}`, `Command failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -252,10 +263,10 @@ const powershellTool: Tool = {
       try {
         const { stdout, stderr } = await pexec(command, { ...baseOpts, shell: resolveShell() });
         const out = [stdout, stderr].filter(Boolean).join("\n").trim();
-        return { content: out || "(无输出)" };
+        return { content: out || tt("(无输出)", "(no output)") };
       } catch (e: any) {
         const out = [e.stdout, e.stderr, e.message].filter(Boolean).join("\n").trim();
-        return { content: out || `执行失败: ${e.message}`, isError: true };
+        return { content: out || tt(`执行失败: ${e.message}`, `Command failed: ${e.message}`), isError: true };
       }
     }
 
@@ -270,11 +281,14 @@ const powershellTool: Tool = {
           baseOpts,
         );
         const out = [stdout, stderr].filter(Boolean).join("\n").trim();
-        return { content: out || "(无输出)" };
+        return { content: out || tt("(无输出)", "(no output)") };
       } catch (e: any) {
         // 被用户主动中止：直接抛，不做无谓回退。
         if (e?.name === "AbortError" || ctx.signal?.aborted) {
-          return { content: [e.stdout, e.stderr, "已中止"].filter(Boolean).join("\n").trim(), isError: true };
+          return {
+            content: [e.stdout, e.stderr, tt("已中止", "Aborted")].filter(Boolean).join("\n").trim(),
+            isError: true,
+          };
         }
         psErr = e;
       }
@@ -288,12 +302,13 @@ const powershellTool: Tool = {
         baseOpts,
       );
       const out = [stdout, stderr].filter(Boolean).join("\n").trim();
-      const prefix = ps ? "(PowerShell 失败，已回退 cmd)\n" : "";
-      return { content: (prefix + (out || "(无输出)")).trim() };
+      const prefix = ps ? tt("(PowerShell 失败，已回退 cmd)\n", "(PowerShell failed, fell back to cmd)\n") : "";
+      return { content: (prefix + (out || tt("(无输出)", "(no output)"))).trim() };
     } catch (e: any) {
-      const psPart = psErr ? `PowerShell 失败: ${[psErr.stdout, psErr.stderr, psErr.message].filter(Boolean).join(" ")}\n` : "";
+      const psDetail = psErr ? [psErr.stdout, psErr.stderr, psErr.message].filter(Boolean).join(" ") : "";
+      const psPart = psErr ? tt(`PowerShell 失败: ${psDetail}\n`, `PowerShell failed: ${psDetail}\n`) : "";
       const cmdPart = [e.stdout, e.stderr, e.message].filter(Boolean).join("\n").trim();
-      return { content: (psPart + `cmd 也失败: ${cmdPart}`).trim(), isError: true };
+      return { content: (psPart + tt(`cmd 也失败: ${cmdPart}`, `cmd also failed: ${cmdPart}`)).trim(), isError: true };
     }
   },
 };
@@ -322,9 +337,9 @@ const globTool: Tool = {
         .map((p) => p.slice(root.length + 1))
         .filter((rel) => rx.test(rel))
         .slice(0, 500);
-      return { content: matched.join("\n") || "(无匹配)" };
+      return { content: matched.join("\n") || tt("(无匹配)", "(no matches)") };
     } catch (e: any) {
-      return { content: `glob 失败: ${e.message}`, isError: true };
+      return { content: tt(`glob 失败: ${e.message}`, `glob failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -355,11 +370,11 @@ const grepTool: Tool = {
         shell: resolveShell(),
         signal: ctx.signal, // 用户停止→杀子进程
       });
-      return { content: stdout.trim() || "(无命中)" };
+      return { content: stdout.trim() || tt("(无命中)", "(no matches)") };
     } catch (e: any) {
       // grep 无命中返回码 1，不算错误
-      if (e.code === 1 && !e.stderr) return { content: "(无命中)" };
-      return { content: e.stderr || `grep 失败: ${e.message}`, isError: true };
+      if (e.code === 1 && !e.stderr) return { content: tt("(无命中)", "(no matches)") };
+      return { content: e.stderr || tt(`grep 失败: ${e.message}`, `grep failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -413,7 +428,8 @@ const rememberTool: Tool = {
   async run(input): Promise<ToolResult> {
     try {
       const text = String(input.text || "").trim();
-      if (!text) return { content: "记忆内容为空，未写入", isError: true };
+      if (!text)
+        return { content: tt("记忆内容为空，未写入", "Memory text is empty; nothing written"), isError: true };
       await fs.mkdir(dirname(MEMORY_FILE), { recursive: true });
       let cur = "";
       try {
@@ -425,9 +441,9 @@ const rememberTool: Tool = {
       const seedHeader = process.env.WUWEI_LANG === "en" ? "# Memory" : "# 记忆";
       const next = cur.trim() ? cur.trimEnd() + "\n" + line + "\n" : seedHeader + "\n\n" + line + "\n";
       await fs.writeFile(MEMORY_FILE, next, "utf8");
-      return { content: "已记住：" + text };
+      return { content: tt("已记住：" + text, "Remembered: " + text) };
     } catch (e: any) {
-      return { content: `写入记忆失败: ${e.message}`, isError: true };
+      return { content: tt(`写入记忆失败: ${e.message}`, `Failed to save memory: ${e.message}`), isError: true };
     }
   },
 };
@@ -499,19 +515,26 @@ const webSearchTool: Tool = {
   async run(input, ctx): Promise<ToolResult> {
     try {
       const q = String(input.query || "").trim();
-      if (!q) return { content: "搜索词为空", isError: true };
+      if (!q) return { content: tt("搜索词为空", "Search query is empty"), isError: true };
       const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), {
-        headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8" },
+        // 搜索结果语言跟随界面语言
+        headers: { "User-Agent": UA, "Accept-Language": tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9") },
         signal: ctx.signal,
       });
       const html = await res.text();
       const results = parseDDG(html).slice(0, 8);
-      if (!results.length) return { content: "(无结果，或搜索源暂时不可用，可改用 web_fetch 直接抓已知 URL)" };
+      if (!results.length)
+        return {
+          content: tt(
+            "(无结果，或搜索源暂时不可用，可改用 web_fetch 直接抓已知 URL)",
+            "(No results, or the search source is temporarily unavailable; try web_fetch on a known URL)",
+          ),
+        };
       return {
         content: results.map((r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.snippet}`).join("\n\n"),
       };
     } catch (e: any) {
-      return { content: `搜索失败: ${e.message}`, isError: true };
+      return { content: tt(`搜索失败: ${e.message}`, `Search failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -528,7 +551,11 @@ const webFetchTool: Tool = {
   async run(input, ctx): Promise<ToolResult> {
     try {
       const url = String(input.url || "");
-      if (!/^https?:\/\//i.test(url)) return { content: "URL 必须以 http:// 或 https:// 开头", isError: true };
+      if (!/^https?:\/\//i.test(url))
+        return {
+          content: tt("URL 必须以 http:// 或 https:// 开头", "URL must start with http:// or https://"),
+          isError: true,
+        };
       const res = await fetch(url, {
         headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*" },
         redirect: "follow",
@@ -539,10 +566,12 @@ const webFetchTool: Tool = {
       if (/html|xml/i.test(ct) || /^\s*</.test(body)) body = htmlToText(body);
       else body = body.trim();
       const max = 12000;
-      const text = body.length > max ? body.slice(0, max) + `\n…(已截断，共 ${body.length} 字符)` : body;
-      return { content: `# ${url}（HTTP ${res.status}）\n\n${text || "(空)"}` };
+      const tail = tt(`\n…(已截断，共 ${body.length} 字符)`, `\n…(truncated, ${body.length} chars total)`);
+      const text = body.length > max ? body.slice(0, max) + tail : body;
+      const head = tt(`# ${url}（HTTP ${res.status}）`, `# ${url} (HTTP ${res.status})`);
+      return { content: `${head}\n\n${text || tt("(空)", "(empty)")}` };
     } catch (e: any) {
-      return { content: `抓取失败: ${e.message}`, isError: true };
+      return { content: tt(`抓取失败: ${e.message}`, `Fetch failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -566,9 +595,16 @@ const brainRecallTool: Tool = {
   async run(input): Promise<ToolResult> {
     try {
       const r = await brain.recall(String(input.query || ""), Number(input.limit) || 6);
-      return { content: r.text || "(知识网络中暂无相关概念；可用 brain_learn 记住新发现的知识)" };
+      return {
+        content:
+          r.text ||
+          tt(
+            "(知识网络中暂无相关概念；可用 brain_learn 记住新发现的知识)",
+            "(No related concepts in the knowledge graph yet; use brain_learn to record new findings)",
+          ),
+      };
     } catch (e: any) {
-      return { content: `检索失败: ${e.message}`, isError: true };
+      return { content: tt(`检索失败: ${e.message}`, `Recall failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -602,9 +638,14 @@ const brainLearnTool: Tool = {
         aliases: Array.isArray(input.aliases) ? (input.aliases as string[]) : undefined,
         attrs: (input.attrs as Record<string, string>) || undefined,
       });
-      return { content: `${r.created ? "已记住新概念" : "已更新概念"}：${r.name}` };
+      return {
+        content: tt(
+          `${r.created ? "已记住新概念" : "已更新概念"}：${r.name}`,
+          `${r.created ? "Learned new concept" : "Updated concept"}: ${r.name}`,
+        ),
+      };
     } catch (e: any) {
-      return { content: `写入失败: ${e.message}`, isError: true };
+      return { content: tt(`写入失败: ${e.message}`, `Write failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -628,7 +669,7 @@ const brainLinkTool: Tool = {
       const r = await brain.link(String(input.from), String(input.relation), String(input.to));
       return { content: r.msg, isError: !r.ok };
     } catch (e: any) {
-      return { content: `建立关系失败: ${e.message}`, isError: true };
+      return { content: tt(`建立关系失败: ${e.message}`, `Link failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -645,9 +686,13 @@ const brainForgetTool: Tool = {
   async run(input): Promise<ToolResult> {
     try {
       const ok = brain.forget(String(input.name));
-      return { content: ok ? `已忘记：${input.name}` : `未找到概念：${input.name}` };
+      return {
+        content: ok
+          ? tt(`已忘记：${input.name}`, `Forgot: ${input.name}`)
+          : tt(`未找到概念：${input.name}`, `Concept not found: ${input.name}`),
+      };
     } catch (e: any) {
-      return { content: `删除失败: ${e.message}`, isError: true };
+      return { content: tt(`删除失败: ${e.message}`, `Delete failed: ${e.message}`), isError: true };
     }
   },
 };
@@ -668,7 +713,7 @@ const brainReadDocTool: Tool = {
     try {
       return { content: brain.readDoc(String(input.ref || "")) };
     } catch (e: any) {
-      return { content: `读取失败: ${e.message}`, isError: true };
+      return { content: tt(`读取失败: ${e.message}`, `Read failed: ${e.message}`), isError: true };
     }
   },
 };

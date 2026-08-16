@@ -241,7 +241,8 @@ export function upsertNode(g: BrainGraph, input: NodeInput): [BrainNode, boolean
     id: normId(input.name),
     name: input.name.trim(),
     aliases: (input.aliases || []).filter((a) => normId(a) !== normId(input.name)),
-    type: input.type || "概念",
+    // 概念类型会显示在知识网络列表里，缺省值跟界面语言走
+    type: input.type || (process.env.WUWEI_LANG === "en" ? "concept" : "概念"),
     summary: input.summary || "",
     attrs: input.attrs || {},
     weight: 1,

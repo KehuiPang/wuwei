@@ -33,6 +33,10 @@ export const DOCS_JSONL = join(BRAIN_DIR, "docs.jsonl");
 export const DOCS_VEC = join(BRAIN_DIR, "docs.vec");
 export const DOCS_META = join(BRAIN_DIR, "docs.meta.json");
 
+// brain_read_doc 的返回会显示在工具卡片里并进模型上下文，占位/截断提示要跟界面语言。
+// 语言可运行时切换，所以调用时才求值，别固化成模块常量。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 const MAX_CHARS = 1100; // 单块目标上限：太长稀释语义、太短割裂上下文
 const MIN_CHARS = 60; // 太短的碎块（单标题行等）并入相邻，不单独成块
 
@@ -403,7 +407,7 @@ export async function searchDocs(query: string, limit = 4, preVec?: number[]): P
 // 读原文：按 chunkId 或文件相对路径，返回整块/整文件（供 brain_read_doc 按需路由）
 export function readDoc(idOrFile: string): string {
   const idx = loadDocIndex();
-  if (!idx.dir) return "(尚未建立文档索引)";
+  if (!idx.dir) return tt("(尚未建立文档索引)", "(no document index built yet)");
   // 优先当 chunkId
   const chunk = idx.chunks.find((c) => c.id === idOrFile);
   if (chunk) {
@@ -414,7 +418,7 @@ export function readDoc(idOrFile: string): string {
   // 当文件路径
   const byFile = readFullFile(idx.dir, idOrFile);
   if (byFile != null) return byFile;
-  return `(未找到：${idOrFile})`;
+  return tt(`(未找到：${idOrFile})`, `(not found: ${idOrFile})`);
 }
 
 function readFullFile(dir: string, relPath: string): string | null {
@@ -425,7 +429,13 @@ function readFullFile(dir: string, relPath: string): string | null {
     statSync(full);
     const raw = readFileSync(full, "utf8");
     const MAX = 16000;
-    return raw.length > MAX ? raw.slice(0, MAX) + `\n…(已截断，全文 ${raw.length} 字符，路径 ${relPath})` : raw;
+    return raw.length > MAX
+      ? raw.slice(0, MAX) +
+          tt(
+            `\n…(已截断，全文 ${raw.length} 字符，路径 ${relPath})`,
+            `\n…(truncated — full text is ${raw.length} chars, at ${relPath})`,
+          )
+      : raw;
   } catch {
     return null;
   }

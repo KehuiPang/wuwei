@@ -9,6 +9,10 @@ import type {
   ToolContext,
 } from "../types.js";
 
+// 会显示给用户的文案跟随界面语言(WUWEI_LANG 由桌面端 applyEnvFromSettings 写入，CLI 侧同样可用)。
+// ⚠ 必须在「调用时」求值，绝不能把 tt(...) 的结果存进模块顶层 const——那会在模块加载那刻把语言焊死，切语言不生效。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 export type PermissionDecision = "allow" | "deny";
 
 export interface AgentOptions {
@@ -157,7 +161,8 @@ export class Agent {
       const hasText = kept.some((b) => b.type === "text" && ((b as any).text || "").trim());
       this.messages[this.messages.length - 1] = {
         role: "assistant",
-        content: hasText ? kept : [{ type: "text", text: "（已停止）" }], // 极少数「纯工具无正文」才占位，但这是完整边界非截断
+        // 占位符跟随界面语言，且字面量与 desktop/main/sessions.ts 修复历史时注入的完全一致(半角括号)，两边才对得上
+        content: hasText ? kept : [{ type: "text", text: tt("(已停止)", "(stopped)") }], // 极少数「纯工具无正文」才占位，但这是完整边界非截断
         ts: last.ts,
         usage: last.usage,
       };
@@ -285,7 +290,8 @@ export class Agent {
         this.pendingInject = []; // 停止即停干净:丢掉还没并入的注入消息
         const last = this.messages[this.messages.length - 1];
         if (last && last.role === "user") {
-          this.messages.push({ role: "assistant", content: [{ type: "text", text: "（已停止）" }], ts: Date.now() });
+          // 同上：与 sessions.ts 的占位字面量保持一致，并跟随界面语言
+          this.messages.push({ role: "assistant", content: [{ type: "text", text: tt("(已停止)", "(stopped)") }], ts: Date.now() });
           hooks.onStep?.();
         }
         hooks.onAssistantDone?.();
@@ -398,7 +404,7 @@ export class Agent {
           resultsBlocks[idx] = {
             type: "tool_result",
             tool_use_id: call.id,
-            content: `未知工具: ${call.name}`,
+            content: tt(`未知工具: ${call.name}`, `Unknown tool: ${call.name}`), // 会显示在工具卡片里，跟随界面语言
             is_error: true,
           };
           continue;
@@ -408,7 +414,7 @@ export class Agent {
           resultsBlocks[idx] = {
             type: "tool_result",
             tool_use_id: call.id,
-            content: "(已停止)",
+            content: tt("(已停止)", "(stopped)"), // 会显示在工具卡片里，跟随界面语言
             is_error: true,
           };
           continue;
@@ -420,7 +426,7 @@ export class Agent {
             resultsBlocks[idx] = {
               type: "tool_result",
               tool_use_id: call.id,
-              content: "用户拒绝了该操作。",
+              content: tt("用户拒绝了该操作。", "The user denied this action."), // 手动模式下高频出现，跟随界面语言
               is_error: true,
             };
             continue;
@@ -448,7 +454,7 @@ export class Agent {
           resultsBlocks[idx] = {
             type: "tool_result",
             tool_use_id: toolUses[idx].id,
-            content: "(已停止)",
+            content: tt("(已停止)", "(stopped)"),
             is_error: true,
           };
         }
@@ -473,14 +479,25 @@ export class Agent {
         const parts = (m.content || [])
           .map((b: any) => {
             if (b.type === "text") return b.text;
-            if (b.type === "tool_use") return `[调用 ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`;
-            if (b.type === "tool_result") return `[结果: ${String(b.content).slice(0, 500)}]`;
-            if (b.type === "image") return "[图片]";
+            // 摘录标签也跟随界面语言：喂给模型的原文全英，产出的英文摘要/交接文档才不会中英夹杂
+            if (b.type === "tool_use")
+              return tt(
+                `[调用 ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`,
+                `[call ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`,
+              );
+            if (b.type === "tool_result")
+              return tt(
+                `[结果: ${String(b.content).slice(0, 500)}]`,
+                `[result: ${String(b.content).slice(0, 500)}]`,
+              );
+            if (b.type === "image") return tt("[图片]", "[image]");
             return "";
           })
           .filter(Boolean)
           .join("\n");
-        return parts ? `${m.role === "user" ? "用户" : "助手"}：${parts}` : "";
+        return parts
+          ? tt(`${m.role === "user" ? "用户" : "助手"}：${parts}`, `${m.role === "user" ? "User" : "Assistant"}: ${parts}`)
+          : "";
       })
       .filter((s) => s.length > 3)
       .join("\n\n");
@@ -488,20 +505,53 @@ export class Agent {
     // 太长则掐头留尾(目标通常在开头、最新进展在结尾)，防喂给模型时超上下文
     const MAX = 80000;
     if (transcript.length > MAX) {
-      transcript = transcript.slice(0, 6000) + "\n\n…(中间大段略去)…\n\n" + transcript.slice(-(MAX - 6000));
+      transcript =
+        transcript.slice(0, 6000) +
+        tt("\n\n…(中间大段略去)…\n\n", "\n\n…(large middle section omitted)…\n\n") +
+        transcript.slice(-(MAX - 6000));
     }
+    // 交接文档正文整篇会作为新会话的第一条消息显示给用户 → 必须跟随界面语言(中英各小节一一对应)
     const res = await this.provider.complete(
-      "你是「工作交接文档」整理器。下面是一段可能很长、甚至跑题或被无关内容污染的工作对话。" +
-        "请只抽取真正有价值的信息，产出一份结构清晰的中文交接文档，让接手者(另一个 AI 助手)不看原对话也能直接继续干活。" +
-        "务必分节输出：\n" +
-        "1) 目标/任务：用户到底要做什么；\n" +
-        "2) 关键背景与决策：涉及的项目/仓库/机器/服务/文件路径/命令/参数/配置，已敲定的方案及理由；\n" +
-        "3) 已完成：具体做了什么、改了哪些文件、验证结果；\n" +
-        "4) 当前进展 / 未完成：正卡在哪、还差什么；\n" +
-        "5) 下一步：接手者应立刻执行的具体动作(有序列出)；\n" +
-        "6) 坑与注意事项：踩过的坑、红线、易错点。\n" +
-        "要求：条目式、带具体名字(别泛泛而谈)、剔除跑题闲聊与噪音、不要复述无关内容。只输出交接文档本身。",
-      [{ role: "user", content: [{ type: "text", text: `工作对话原文：\n${transcript}\n\n请输出交接文档：` }] }],
+      tt(
+        "你是「工作交接文档」整理器。下面是一段可能很长、甚至跑题或被无关内容污染的工作对话。" +
+          "请只抽取真正有价值的信息，产出一份结构清晰的中文交接文档，让接手者(另一个 AI 助手)不看原对话也能直接继续干活。" +
+          "务必分节输出：\n" +
+          "1) 目标/任务：用户到底要做什么；\n" +
+          "2) 关键背景与决策：涉及的项目/仓库/机器/服务/文件路径/命令/参数/配置，已敲定的方案及理由；\n" +
+          "3) 已完成：具体做了什么、改了哪些文件、验证结果；\n" +
+          "4) 当前进展 / 未完成：正卡在哪、还差什么；\n" +
+          "5) 下一步：接手者应立刻执行的具体动作(有序列出)；\n" +
+          "6) 坑与注意事项：踩过的坑、红线、易错点。\n" +
+          "要求：条目式、带具体名字(别泛泛而谈)、剔除跑题闲聊与噪音、不要复述无关内容。只输出交接文档本身。",
+        "You turn messy work sessions into a handoff document. Below is a work conversation that may be very long, " +
+          "off-topic, or polluted with unrelated content. Pull out only what actually matters and write a clearly " +
+          "structured handoff document **in English**, so whoever picks this up (another AI assistant) can keep working " +
+          "without ever reading the original conversation. " +
+          "You must output these sections:\n" +
+          "1) Goal / task: what the user is actually trying to get done;\n" +
+          "2) Key context & decisions: the projects/repos/machines/services/file paths/commands/flags/config involved, " +
+          "plus what has already been decided and why;\n" +
+          "3) Done: what was actually built or changed, which files, and how it was verified;\n" +
+          "4) Current state / not done: where it is stuck, what is still missing;\n" +
+          "5) Next steps: the concrete actions whoever takes over should run right now (numbered, in order);\n" +
+          "6) Gotchas & warnings: traps already hit, hard limits, easy mistakes.\n" +
+          "Rules: use bullet points, name real things (no vague hand-waving), drop the off-topic chatter and noise, " +
+          "don't restate anything irrelevant. Output only the handoff document itself.",
+      ),
+      [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: tt(
+                `工作对话原文：\n${transcript}\n\n请输出交接文档：`,
+                `Raw conversation:\n${transcript}\n\nNow write the handoff document:`,
+              ),
+            },
+          ],
+        },
+      ],
       [],
       {},
     );
@@ -523,13 +573,13 @@ export class Agent {
         const keptText = last.content.filter((b) => b.type === "text" && (b as any).text?.trim());
         this.messages[this.messages.length - 1] = {
           role: "assistant",
-          content: keptText.length ? keptText : [{ type: "text", text: "(已停止)" }],
+          content: keptText.length ? keptText : [{ type: "text", text: tt("(已停止)", "(stopped)") }],
         };
       }
       return;
     }
     // 末尾是 user(被中断未应答 / tool_result 结尾)→ 补一条占位 assistant 维持 user/assistant 交替
-    this.messages.push({ role: "assistant", content: [{ type: "text", text: "(已停止)" }] });
+    this.messages.push({ role: "assistant", content: [{ type: "text", text: tt("(已停止)", "(stopped)") }] });
   }
 
   // —— 上下文压缩 ——
@@ -552,25 +602,57 @@ export class Agent {
         const parts = (m.content || [])
           .map((b: any) => {
             if (b.type === "text") return b.text;
-            if (b.type === "tool_use") return `[调用 ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`;
-            if (b.type === "tool_result") return `[结果: ${String(b.content).slice(0, 500)}]`;
-            if (b.type === "image") return "[图片]";
+            // 摘录标签也跟随界面语言：喂给模型的原文全英，产出的英文摘要/交接文档才不会中英夹杂
+            if (b.type === "tool_use")
+              return tt(
+                `[调用 ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`,
+                `[call ${b.name}: ${JSON.stringify(b.input).slice(0, 300)}]`,
+              );
+            if (b.type === "tool_result")
+              return tt(
+                `[结果: ${String(b.content).slice(0, 500)}]`,
+                `[result: ${String(b.content).slice(0, 500)}]`,
+              );
+            if (b.type === "image") return tt("[图片]", "[image]");
             return "";
           })
           .filter(Boolean)
           .join("\n");
-        return parts ? `${m.role === "user" ? "用户" : "助手"}：${parts}` : "";
+        return parts
+          ? tt(`${m.role === "user" ? "用户" : "助手"}：${parts}`, `${m.role === "user" ? "User" : "Assistant"}: ${parts}`)
+          : "";
       })
       .filter((s) => s.length > 3)
       .join("\n\n");
 
     let summaryText = "";
     try {
+      // 摘要会在会话切换/重启后作为一条用户消息重新显示 → 跟随界面语言
       const res = await this.provider.complete(
-        "你是对话摘要器。把下面这段对话历史压缩成简洁但具体的中文要点摘要，务必保留：用户目标、" +
-          "已完成的关键操作、涉及的文件/命令/参数/机器、关键结论与数据、当前进展、未决事项与下一步。" +
-          "条列式，带上具体名字(别泛泛而谈)。只输出摘要本身。",
-        [{ role: "user", content: [{ type: "text", text: `对话历史：\n${transcript}\n\n请输出要点摘要：` }] }],
+        tt(
+          "你是对话摘要器。把下面这段对话历史压缩成简洁但具体的中文要点摘要，务必保留：用户目标、" +
+            "已完成的关键操作、涉及的文件/命令/参数/机器、关键结论与数据、当前进展、未决事项与下一步。" +
+            "条列式，带上具体名字(别泛泛而谈)。只输出摘要本身。",
+          "You are a conversation summarizer. Compress the conversation history below into a short but specific " +
+            "bullet-point summary **in English**. You must keep: the user's goal, the key actions already taken, " +
+            "the files/commands/flags/machines involved, key conclusions and numbers, where things stand now, " +
+            "open questions and next steps. Use bullets and name real things (no vague hand-waving). " +
+            "Output only the summary itself.",
+        ),
+        [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: tt(
+                  `对话历史：\n${transcript}\n\n请输出要点摘要：`,
+                  `Conversation history:\n${transcript}\n\nNow write the bullet-point summary:`,
+                ),
+              },
+            ],
+          },
+        ],
         [],
         {},
       );
@@ -595,7 +677,16 @@ export class Agent {
     if (!summaryText) return;
 
     this.messages = [
-      { role: "user", content: [{ type: "text", text: `【之前对话摘要】\n${summaryText}` }] },
+      // 这条会被原样渲染成一条用户消息 → 标题跟随界面语言
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: tt(`【之前对话摘要】\n${summaryText}`, `[Summary of earlier conversation]\n${summaryText}`),
+          },
+        ],
+      },
       ...recent,
     ];
     // 压缩后当前上下文变小，重置 lastInput 让下轮重新度量

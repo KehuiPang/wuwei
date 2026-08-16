@@ -470,9 +470,11 @@ export function autoPurgeTrash(now = Date.now()) {
 // 交接会话的首条消息 = 固定套话前言 + "----" 分隔 + 真正的交接文档。
 // 派生/智能标题若直接吃首条文本，标题永远是"【工作交接（来自上一个对话）】…"这段套话。
 // 这里剥掉前言，只留分隔线之后的文档正文，让标题基于当下项目/内容来命名。
+// ⚠️ 前言现在有中英两版(见 index.ts 的 firstMsg)，两个开头都要认——
+//    只认中文的话，英文交接会话的标题会退回成那段套话前言。
 export function stripHandoffWrapper(text: string): string {
   const t = text || "";
-  if (t.startsWith("【工作交接")) {
+  if (t.startsWith("【工作交接") || t.startsWith("[Handoff from")) {
     const i = t.indexOf("\n----\n");
     if (i >= 0) {
       const body = t.slice(i + 6).trim();

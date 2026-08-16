@@ -24,6 +24,10 @@ export { BRAIN_DIR, GRAPH_FILE } from "./store.js";
 export { readDoc, docStats, DOCS_FILE, loadDocIndex } from "./docs.js";
 export type { BuildProgress } from "./docs.js";
 
+// 界面语言（WUWEI_LANG 由主进程 applyEnvFromSettings 写入，CLI 同样可用）。
+// 必须在调用处求值：放模块顶层 const 会在加载那刻把语言焊死，切语言不生效。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 // 文档冷存储扫描开关：主进程按设置 setDocsEnabled(...) 同步；关掉后 recall 不再连带扫『相关文档』。
 let docsEnabled = true;
 export function setDocsEnabled(on: boolean) {
@@ -75,7 +79,8 @@ function renderNode(n: BrainNode, edgesOut: { relation: string; to: string }[]):
   if (edgesOut.length) {
     const grp: Record<string, string[]> = {};
     for (const e of edgesOut) (grp[e.relation] ||= []).push(e.to);
-    for (const [rel, tos] of Object.entries(grp)) lines.push(`   → ${rel}: ${tos.join("、")}`);
+    // 顿号是中文标点，英文界面下用逗号，避免混排
+    for (const [rel, tos] of Object.entries(grp)) lines.push(`   → ${rel}: ${tos.join(tt("、", ", "))}`);
   }
   return lines.join("\n");
 }
@@ -139,7 +144,8 @@ export async function recall(query: string, limit = 6): Promise<RecallResult> {
       blocks.push(renderNode(n, outs));
     }
     reinforce(g, [...chosen.keys()], hitEdgeIds); // 内部对命中实体各落一条增量日志
-    conceptText = `【本地知识网络 · 命中】\n${blocks.join("\n")}`;
+    // 这段既进模型上下文也显示在工具卡片里 → 跟随界面语言
+    conceptText = `${tt("【本地知识网络 · 命中】", "[Local Knowledge Network · Matches]")}\n${blocks.join("\n")}`;
     hitNames.push(...seeds.map((s) => s.n.name));
   }
 
@@ -149,7 +155,11 @@ export async function recall(query: string, limit = 6): Promise<RecallResult> {
   const docs = docsEnabled ? await searchDocs(query, 4, qv ? qv[0] : undefined) : [];
   if (docs.length) {
     docText =
-      "【相关文档 · 需要细节用 brain_read_doc 读全文】\n" +
+      tt(
+        "【相关文档 · 需要细节用 brain_read_doc 读全文】",
+        "[Related Docs · use brain_read_doc for the full text]",
+      ) +
+      "\n" +
       docs
         .map((d) => `· ${d.file}${d.headingPath ? "  〖" + d.headingPath + "〗" : ""}\n  ${d.snippet}`)
         .join("\n");
@@ -176,7 +186,7 @@ export async function link(
   if (!findNode(g, fromName)) upsertNode(g, { name: fromName });
   if (!findNode(g, toName)) upsertNode(g, { name: toName });
   const e = upsertEdge(g, fromName, relation, toName); // 节点/边均已增量落盘
-  if (!e) return { ok: false, msg: "关系两端相同或无法建立" };
+  if (!e) return { ok: false, msg: tt("关系两端相同或无法建立", "Both ends are the same, or the relation could not be created") };
   await ensureEmbeddings(g.nodes.filter((n) => !n.embedding));
   return { ok: true, msg: `${fromName} ──${relation}→ ${toName}` };
 }

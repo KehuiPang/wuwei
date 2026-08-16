@@ -13,6 +13,11 @@ import type {
   ToolSpec,
 } from "../types.js";
 
+// 界面语言（WUWEI_LANG 由主进程 applyEnvFromSettings 写入，CLI 同样可用）。
+// 下面这些 throw 的 message 会被主进程原样 send("evt:error") 到聊天里的红色错误条，所以要跟随语言。
+// 必须在调用处求值：放模块顶层 const 会在加载那刻把语言焊死，切语言不生效。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 // Claude Code 订阅版(OAuth) 请求时，服务端要求 system 首段是官方身份，否则拒绝。
 const CLAUDE_CODE_IDENTITY =
   "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -308,7 +313,9 @@ class OpenAIProvider implements Provider {
       signal: handlers.signal,
     });
     if (!res.ok || !res.body) {
-      throw new Error(`OpenAI 兼容端点报错 ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `${tt("OpenAI 兼容端点报错", "OpenAI-compatible endpoint error")} ${res.status}: ${await res.text()}`,
+      );
     }
 
     const reader = res.body.getReader();
@@ -493,8 +500,8 @@ function toOpenAIMessages(system: string, messages: Message[], vision: boolean):
           for (const im of images) parts.push({ type: "image_url", image_url: { url: im.dataUrl } });
           out.push({ role: "user", content: parts });
         } else if (images.length) {
-          // 纯文本模型：图片转占位文本，避免 image_url 报 400 卡死历史
-          const note = images.map(() => "[图片]").join(" ");
+          // 纯文本模型：图片转占位文本，避免 image_url 报 400 卡死历史（占位词跟随界面语言，别给英文用户塞中文）
+          const note = images.map(() => tt("[图片]", "[Image]")).join(" ");
           out.push({ role: "user", content: text ? `${text}\n${note}` : note });
         } else {
           out.push({ role: "user", content: text });
@@ -557,7 +564,9 @@ class CodexProvider implements Provider {
     });
 
     if (!res.ok || !res.body) {
-      throw new Error(`Codex 端点 ${res.status}: ${(await res.text()).slice(0, 400)}`);
+      throw new Error(
+        `${tt("Codex 端点", "Codex endpoint")} ${res.status}: ${(await res.text()).slice(0, 400)}`,
+      );
     }
 
     // 订阅额度：从响应头读取（primary=5小时窗口，secondary=周窗口）
@@ -626,7 +635,9 @@ class CodexProvider implements Provider {
               cacheMissTokens: Math.max(0, inTok - cached), // 真正新增的输入
             };
           } else if (ev.type === "error" || ev.type === "response.failed") {
-            throw new Error(`Codex 流错误: ${JSON.stringify(ev).slice(0, 300)}`);
+            throw new Error(
+              `${tt("Codex 流错误:", "Codex stream error:")} ${JSON.stringify(ev).slice(0, 300)}`,
+            );
           }
         }
       }

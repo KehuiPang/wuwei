@@ -229,13 +229,29 @@ const HOSTED_BRAND: Record<string, string> = {
   claude: "Claude",
   gpt: "GPT",
 };
+// 平台名的英文（只列中文项；纯英文品牌名两边通用，不必重复）。
+// 渲染层通常按 providerId 查自己的 PRESET_EN 显示，这里是预设里查不到时的兜底，同样得跟语言。
+const PROVIDER_LABELS_EN: Record<string, string> = {
+  codex: "Codex subscription",
+  "claude-oauth": "Claude subscription",
+  qwen: "Qwen",
+  doubao: "Doubao",
+  zhipu: "Zhipu GLM",
+  hunyuan: "Tencent Hunyuan",
+  custom: "Custom endpoint",
+};
+function providerLabel(pid: string): string | undefined {
+  const en = process.env.WUWEI_LANG === "en";
+  return (en && PROVIDER_LABELS_EN[pid]) || PROVIDER_LABELS[pid];
+}
 function labelFor(cfg: ReturnType<typeof loadConfig>, providerId?: string): string {
-  if (providerId && PROVIDER_LABELS[providerId]) return PROVIDER_LABELS[providerId];
+  if (providerId && PROVIDER_LABELS[providerId]) return providerLabel(providerId)!;
   // 无为托管：显示「无为托管 · 品牌」，别露出底层 openai
   if (providerId && providerId.startsWith("wuwei-")) {
-    if (providerId === "wuwei-free") return "无为 · 免费体验";
+    if (providerId === "wuwei-free") return tt("无为 · 免费体验", "Wuwei · Free trial");
     const base = providerId.slice("wuwei-".length);
-    return `无为托管 · ${HOSTED_BRAND[base] || PROVIDER_LABELS[base] || base}`;
+    // providerLabel 优先：HOSTED_BRAND 里的 zhipu 是中文「智谱 GLM」，英文得走 PROVIDER_LABELS_EN
+    return `${tt("无为托管", "Wuwei Hosted")} · ${providerLabel(base) || HOSTED_BRAND[base] || base}`;
   }
   return cfg.provider === "anthropic" ? `anthropic/${cfg.authMode}` : cfg.provider;
 }
@@ -772,7 +788,7 @@ async function emitAccount() {
     log("claudeAcct", "用户=", nick || "无", "套餐=", plan || "无", "(来源 ~/.claude.json)");
     send("evt:account", {
       providerId: pid,
-      label: plan ? `Claude 订阅 · ${plan}` : "Claude 订阅",
+      label: plan ? `${tt("Claude 订阅", "Claude subscription")} · ${plan}` : tt("Claude 订阅", "Claude subscription"),
       loggedIn,
       email: acct?.email || null,
       nickname: nick,
@@ -791,7 +807,7 @@ async function emitAccount() {
     const expired = u?.expired;
     send("evt:account", {
       providerId: pid,
-      label: expired ? "Kimi Code 订阅 · 额度登录已过期" : "Kimi Code 订阅",
+      label: expired ? tt("Kimi Code 订阅 · 额度登录已过期", "Kimi Code subscription · quota login expired") : tt("Kimi Code 订阅", "Kimi Code subscription"),
       loggedIn,
       email: null,
       nickname,
@@ -842,7 +858,7 @@ async function emitAccount() {
     );
     send("evt:account", {
       providerId: pid,
-      label: expired ? "智谱 GLM · 登录已过期" : "智谱 GLM",
+      label: expired ? tt("智谱 GLM · 登录已过期", "Zhipu GLM · login expired") : tt("智谱 GLM", "Zhipu GLM"),
       loggedIn,
       email: null,
       nickname: nick,
@@ -2164,7 +2180,12 @@ ipcMain.on("ask:answer", (_e, id: number, answers: any) => {
     if (imgs.length) {
       const sid = pendingAskSid.get(id);
       const agent = sid ? getAgent(sid) : null;
-      if (agent) agent.injectUser("（用户在回答上面的问题时附带了以下截图）", imgs);
+      // 这句会作为用户消息显示在对话里，跟随界面语言
+      if (agent)
+        agent.injectUser(
+          tt("（用户在回答上面的问题时附带了以下截图）", "(The user attached these screenshots along with their answer above.)"),
+          imgs,
+        );
     }
     r(answers);
     pendingAsk.delete(id);
@@ -3150,7 +3171,10 @@ async function finishWuweiSignin(
   const me = await wuweiFetchMe(r.accessToken);
   if (me === "unauthorized" || !me) {
     return {
-      error: action === "register" ? "注册成功，但拉取账号失败，请重开登录" : "登录成功，但拉取账号失败，请重试",
+      error:
+        action === "register"
+          ? tt("注册成功，但拉取账号失败，请重开登录", "Signed up, but we couldn't load your account — please sign in again.")
+          : tt("登录成功，但拉取账号失败，请重试", "Signed in, but we couldn't load your account — please try again."),
     };
   }
   applyProFromMe(me);
