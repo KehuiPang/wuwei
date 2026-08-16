@@ -2371,6 +2371,7 @@ export function App() {
   const streamRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true); // 用户是否贴着底部：滚上去看历史时暂停自动吸底，滚回底部再恢复
   const forceBottomRef = useRef(false); // 切换会话:内容异步改高，需多帧兜底吸底(否则要点两下)
+  const [awayFromBottom, setAwayFromBottom] = useState(false); // 离底(=已暂停吸底)：显示"回到底部"按钮
   const taRef = useRef<HTMLTextAreaElement>(null);
   const history = useRef<string[]>([]);
   const histIdx = useRef<number>(-1);
@@ -2786,6 +2787,7 @@ export function App() {
           setCurrentId(payload.id);
           atBottomRef.current = true; // 打开/切换会话：定位到最新(底部)，不用手滚
           forceBottomRef.current = true; // 切换会话：多帧兜底吸底，一次点击就到最新
+          setAwayFromBottom(false);
           setItems(messagesToItems(payload.messages));
           break;
         case "evt:assistant-delta":
@@ -3019,6 +3021,7 @@ export function App() {
       setGroups(r.groups || []);
       if (r.currentId) setCurrentId(r.currentId);
       atBottomRef.current = true; // 初次打开：定位到最新(底部)
+      setAwayFromBottom(false);
       setItems(messagesToItems(r.messages || []));
       if (r.usage) setUsage(r.usage);
       if (r.rateLimits) setRate(r.rateLimits);
@@ -3103,6 +3106,7 @@ export function App() {
     push({ type: "user", text, images: imgs.length ? imgs : undefined, ts: Date.now() });
     atBottomRef.current = true; // 发新消息=想看这轮回复：重新贴底,后续流式自动吸底(哪怕刚才滚上去看历史)
     forceBottomRef.current = true; // 多帧兜底吸底：AI 回复开始撑高度/异步渲染时也稳稳落到最新，不用手滚一下
+    setAwayFromBottom(false);
     setRunningSet((s) => new Set(s).add(currentId)); // 乐观置为运行中(主进程随后 evt:tasks 校准)
     thinkStartRef.current = Date.now();
     charsRef.current = 0;
@@ -4326,9 +4330,11 @@ export function App() {
           ref={streamRef}
           onScroll={(e) => {
             const el = e.currentTarget;
-            // 距底 ≤ 一屏(clientHeight) 都算"还在跟读"→继续自动吸底；
-            // 只有向上滚超过一整屏(明显要回看历史/长回复)才暂停吸底，避免流式时轻轻一滚就断、还得手动滚到底。
-            atBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight;
+            // 只认"真的贴着底"(留 48px 容差抵消行高取整/惯性回弹)。
+            // 早先按"距底一屏"算贴底，结果往上滚半屏看历史会被下一段流式输出硬拽回底部，上面的内容就看不成了。
+            const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 48;
+            if (atBottomRef.current !== atBottom) setAwayFromBottom(!atBottom); // 只在跨越边界时 setState，滚动中不空转渲染
+            atBottomRef.current = atBottom;
           }}
         >
           {items.length === 0 && (
@@ -4575,6 +4581,26 @@ export function App() {
             <ThinkingBar startRef={thinkStartRef} charsRef={charsRef} textRef={turnTextRef} items={items} />
           )}
         </div>
+
+        {/* 离底时才出现：一键回到最新并恢复自动跟随(不点就一直停在你正看的位置) */}
+        {awayFromBottom && (
+          <button
+            className="to-bottom"
+            title={t("stream.toBottom", "回到最新")}
+            onClick={() => {
+              const el = streamRef.current;
+              if (!el) return;
+              el.scrollTo({ top: el.scrollHeight });
+              atBottomRef.current = true;
+              setAwayFromBottom(false);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14" />
+              <path d="m19 12-7 7-7-7" />
+            </svg>
+          </button>
+        )}
 
         <div className="composer" ref={composerRef}>
           {/* 鉴权提示条：检测到缺授权后常驻，直到授权成功或用户手动 × 关闭 */}

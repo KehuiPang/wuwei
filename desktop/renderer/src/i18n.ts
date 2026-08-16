@@ -560,6 +560,7 @@ const DICT_EN: Record<string, string> = {
   "win.maximize": "Maximize",
   "win.close": "Close",
   "side.expand": "Expand sidebar",
+  "stream.toBottom": "Jump to latest",
   // 欢迎页（wc.*）
   "wc.eyebrow": "One intention, everything done",
   "wc.h1pre": "Just set your intention,",
