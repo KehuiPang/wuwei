@@ -579,7 +579,7 @@ type PayOrder = { kind: "pack"; pack: CoinPack } | { kind: "plan"; plan: ProPlan
 // 支付宝图标：官方矢量 logo(蓝底+白色变形"支"，来源 Simple Icons)。.ico 仅 32px 高分屏会糊，用 SVG 保清晰
 function AlipayMark() {
   return (
-    <svg width="34" height="34" viewBox="0 0 24 24" style={{ borderRadius: 9, flex: "0 0 auto", display: "block" }} role="img" aria-label="支付宝">
+    <svg width="34" height="34" viewBox="0 0 24 24" style={{ borderRadius: 9, flex: "0 0 auto", display: "block" }} role="img" aria-label={getLang() === "en" ? "Alipay" : "支付宝"}>
       <rect width="24" height="24" rx="4" fill="#fff" />
       <path fill="#1677FF" d="M19.695 15.07c3.426 1.158 4.203 1.22 4.203 1.22V3.846c0-2.124-1.705-3.845-3.81-3.845H3.914C1.808.001.102 1.722.102 3.846v16.31c0 2.123 1.706 3.845 3.813 3.845h16.173c2.105 0 3.81-1.722 3.81-3.845v-.157s-6.19-2.602-9.315-4.119c-2.096 2.602-4.8 4.181-7.607 4.181-4.75 0-6.361-4.19-4.112-6.949.49-.602 1.324-1.175 2.617-1.497 2.025-.502 5.247.313 8.266 1.317a16.796 16.796 0 0 0 1.341-3.302H5.781v-.952h4.799V6.975H4.77v-.953h5.81V3.591s0-.409.411-.409h2.347v2.84h5.744v.951h-5.744v1.704h4.69a19.453 19.453 0 0 1-1.986 5.06c1.424.52 2.702 1.011 3.654 1.333m-13.81-2.032c-.596.06-1.71.325-2.321.869-1.83 1.608-.735 4.55 2.968 4.55 2.151 0 4.301-1.388 5.99-3.61-2.403-1.182-4.438-2.028-6.637-1.809" />
     </svg>
@@ -588,7 +588,7 @@ function AlipayMark() {
 // 微信支付图标：清晰矢量微信标（用户 .ico 仅 16px 会糊，改用 SVG）
 function WechatMark() {
   return (
-    <svg width="34" height="34" viewBox="0 0 48 48" style={{ borderRadius: 9, flex: "0 0 auto", display: "block" }} role="img" aria-label="微信支付">
+    <svg width="34" height="34" viewBox="0 0 48 48" style={{ borderRadius: 9, flex: "0 0 auto", display: "block" }} role="img" aria-label={getLang() === "en" ? "WeChat Pay" : "微信支付"}>
       <rect width="48" height="48" rx="12" fill="#07C160" />
       <path d="M20 12.5C12.8 12.5 7 17.2 7 23c0 3.3 1.9 6.2 4.9 8.1l-1.2 3.7 4.4-2.2c1.4.4 2.9.6 4.5.6.4 0 .9 0 1.3-.06-.3-1-.5-2-.5-3.1 0-6 5.6-10.8 12.6-10.8.5 0 1 .01 1.5.07C32.9 16.1 27 12.5 20 12.5z" fill="#fff" />
       <circle cx="15.5" cy="20.5" r="1.7" fill="#07C160" />
@@ -1156,13 +1156,13 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
         <div className="paych-pays">
           <button className={"paych-pay" + (method === "ali" ? " sel-ali" : "")} onClick={() => setMethod("ali")}>
             <AlipayMark />
-            <span className="paych-pay-nm">支付宝</span>
+            <span className="paych-pay-nm">{en ? "Alipay" : "支付宝"}</span>
             <span className="paych-rd" />
           </button>
           {WECHAT_PAY_ENABLED && (
             <button className={"paych-pay" + (method === "wx" ? " sel-wx" : "")} onClick={() => setMethod("wx")}>
               <WechatMark />
-              <span className="paych-pay-nm">微信支付</span>
+              <span className="paych-pay-nm">{en ? "WeChat Pay" : "微信支付"}</span>
               <span className="paych-rd" />
             </button>
           )}
@@ -7312,18 +7312,24 @@ interface Preset {
 // 用户自定义中转站
 type Station = { id: string; label: string; baseUrl: string; relay?: boolean };
 // 自定义供应商/中转站 → 伪预设(OpenAI 兼容)，并入平台下拉。relay=true 才加「（中转）」后缀
+// 模块级函数拿不到组件里的 lang，直接读 getLang()
 function stationToPreset(s: Station): Preset {
+  const en = getLang() === "en";
   return {
     id: s.id,
-    label: s.relay ? s.label + "（中转）" : s.label,
+    label: s.relay ? s.label + (en ? " (relay)" : "（中转）") : s.label,
     kind: "openai",
     baseUrl: s.baseUrl,
     keyUrl: "",
     keyHint: "sk-...",
     models: [],
     note: s.relay
-      ? "自定义中转站（OpenAI 兼容，一个 key 直连多平台）。模型名按该站文档填，可自定义输入。"
-      : "自建/自定义供应商（OpenAI 兼容端点，如公司 vLLM/Ollama）。模型名可自定义输入。",
+      ? en
+        ? "Custom relay (OpenAI-compatible — one key, many platforms). Enter the model name from the relay's docs; free text is fine."
+        : "自定义中转站（OpenAI 兼容，一个 key 直连多平台）。模型名按该站文档填，可自定义输入。"
+      : en
+        ? "Self-hosted / custom provider (OpenAI-compatible endpoint, e.g. your own vLLM or Ollama). Model name is free text."
+        : "自建/自定义供应商（OpenAI 兼容端点，如公司 vLLM/Ollama）。模型名可自定义输入。",
     fixedBaseUrl: true,
     custom: true,
   };
@@ -8610,7 +8616,8 @@ function SettingsModal({
   const credsRef = useRef(creds); // 镜像最新 creds，避免切换时读到过时闭包(会误显示空 key→保存覆盖)
   // ── 文档冷存储（知识宫殿等）──
   const [docStat, setDocStat] = useState<{ chunks: number; files: number; dir: string; builtAt: number }>({ chunks: 0, files: 0, dir: "", builtAt: 0 });
-  const [docDir, setDocDir] = useState("~/Documents/tanxun/知识宫殿");
+  // 默认目录跟随界面语言：英文界面别塞中文路径
+  const [docDir, setDocDir] = useState(lang === "en" ? "~/Documents/knowledge" : "~/Documents/tanxun/知识宫殿");
   const [docBuilding, setDocBuilding] = useState(false);
   const [docProg, setDocProg] = useState("");
   credsRef.current = creds;
@@ -9232,7 +9239,7 @@ function SettingsModal({
       if (tok) {
         setOauthToken(tok);
         save(tok);
-      } else alert("授权未完成（已取消/超时/失败），请重试。");
+      } else alert(lang === "en" ? "Authorization didn't go through (cancelled, timed out, or failed). Please try again." : "授权未完成（已取消/超时/失败），请重试。");
     } finally {
       setClaudeBusy(false);
     }
@@ -9253,7 +9260,7 @@ function SettingsModal({
       let code = sCode.trim();
       if (!code) code = (await window.wuwei.readClipboard()).trim();
       if (!code) {
-        alert("没读到授权码：请先在浏览器复制授权码，或粘贴进输入框。");
+        alert(lang === "en" ? "No authorization code found. Copy it from the browser first, or paste it into the box." : "没读到授权码：请先在浏览器复制授权码，或粘贴进输入框。");
         return;
       }
       const tok = await window.wuwei.claudeOauthExchange(code);
@@ -9261,7 +9268,7 @@ function SettingsModal({
         setSAwaitCode(false);
         setOauthToken(tok);
         save(tok);
-      } else alert("授权码无效或已过期，请重新点「用浏览器登录」。");
+      } else alert(lang === "en" ? "The code is invalid or expired — click \"Sign in via browser\" and try again." : "授权码无效或已过期，请重新点「用浏览器登录」。");
     } finally {
       setClaudeBusy(false);
     }
@@ -9323,7 +9330,7 @@ function SettingsModal({
     const label = newStName.trim();
     let url = newStUrl.trim();
     if (!label || !url) {
-      alert("请填写中转站名称和 Base URL。");
+      alert(lang === "en" ? "Please fill in both the relay name and the Base URL." : "请填写中转站名称和 Base URL。");
       return;
     }
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
@@ -9386,7 +9393,7 @@ function SettingsModal({
   function saveStationEdit() {
     const label = newStName.trim();
     if (!label) {
-      alert("请填写名称。");
+      alert(lang === "en" ? "Please fill in a name." : "请填写名称。");
       return;
     }
     if (editIsBuiltin) {
@@ -9407,7 +9414,7 @@ function SettingsModal({
     }
     let url = newStUrl.trim();
     if (!url) {
-      alert("请填写 Base URL。");
+      alert(lang === "en" ? "Please fill in the Base URL." : "请填写 Base URL。");
       return;
     }
     if (!/^https?:\/\//i.test(url)) url = "https://" + url;
@@ -10268,7 +10275,7 @@ function SettingsModal({
                 {lang === "zh"
                   ? "你对模型说「记住…」时它会自动往这里追加；也可在此手动增删。保存后下一条消息即生效。存于 "
                   : "When you tell the model “remember…”, it appends here; you can also edit manually. Takes effect on the next message. Stored at "}
-                <code>~/.wuwei/memory.md</code>。
+                <code>~/.wuwei/memory.md</code>{lang === "zh" ? "。" : "."}
               </p>
             </div>
           )}

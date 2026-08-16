@@ -5,6 +5,25 @@ interface State {
 }
 
 /**
+ * 语言判断内联实现：ErrorBoundary 是崩溃后的兜底，不能依赖 context/hook，
+ * 也不引入 i18n.ts（避免其副作用在已崩溃的环境里再次抛错）。
+ * 直接读 i18n.ts 用的同一个 key（wuwei_lang，值 "zh"/"en"），读不到看时区/系统语言，出错兜底中文。
+ */
+function isEn(): boolean {
+  try {
+    const saved = localStorage.getItem("wuwei_lang");
+    if (saved === "en") return true;
+    if (saved === "zh") return false;
+    // 没手选过：跟 getLang() 同一套猜法，免得崩溃页语言和主界面对不上
+    const tz = (Intl.DateTimeFormat().resolvedOptions().timeZone || "").toLowerCase();
+    if (/shanghai|chongqing|harbin|urumqi|kashgar|hong_kong|macau|taipei/.test(tz)) return false;
+    return !/^zh/i.test(navigator.language || "");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 渲染层最后一道保险：组件运行时异常时显示可操作提示，避免整窗白屏。
  * 详细堆栈仍通过 console.error 进入主进程日志 ~/.wuwei/logs/minicc.log。
  */
@@ -21,14 +40,19 @@ export class RendererErrorBoundary extends React.Component<React.PropsWithChildr
 
   render(): React.ReactNode {
     if (!this.state.error) return this.props.children;
+    const en = isEn();
     return (
       <main style={styles.page}>
         <section style={styles.card}>
-          <div style={styles.mark}>无为</div>
-          <h1 style={styles.title}>界面加载失败</h1>
-          <p style={styles.text}>客户端遇到渲染异常，没有丢失你的会话数据。请先重启；若仍失败，可把下方错误发给开发者。</p>
+          <div style={styles.mark}>{en ? "Wuwei" : "无为"}</div>
+          <h1 style={styles.title}>{en ? "The interface failed to load" : "界面加载失败"}</h1>
+          <p style={styles.text}>
+            {en
+              ? "Something went wrong while rendering, but none of your conversations were lost. Try reloading first; if that keeps failing, send the error below to the developers."
+              : "客户端遇到渲染异常，没有丢失你的会话数据。请先重启；若仍失败，可把下方错误发给开发者。"}
+          </p>
           <pre style={styles.error}>{this.state.error.message || String(this.state.error)}</pre>
-          <button style={styles.button} onClick={() => window.location.reload()}>重新加载</button>
+          <button style={styles.button} onClick={() => window.location.reload()}>{en ? "Reload" : "重新加载"}</button>
         </section>
       </main>
     );

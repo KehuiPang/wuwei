@@ -18,6 +18,10 @@ const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 const REDIRECT_URI = "https://platform.claude.com/oauth/code/callback";
 const SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers";
 
+// 界面语言（settings.ts 的 applyEnvFromSettings 写入）。授权窗标题是用户能看见的，得跟界面语言走。
+// 语言可运行时切换，所以只在调用时求值，不做模块常量。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 function b64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -193,7 +197,7 @@ export async function claudeOAuthLogin(): Promise<ClaudeOAuthResult | null> {
   const w = new BrowserWindow({
     width: 520,
     height: 720,
-    title: "无为 · 登录授权",
+    title: tt("无为 · 登录授权", "Wuwei · Authorize"),
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),
     autoHideMenuBar: true,
     webPreferences: { partition: "persist:claude-oauth" }, // 持久分区：登录态可复用

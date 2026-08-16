@@ -23,6 +23,10 @@ const PORT = 1455;
 const REDIRECT_URI = `http://localhost:${PORT}/auth/callback`;
 const SCOPES = "openid profile email offline_access";
 
+// 界面语言（settings.ts 的 applyEnvFromSettings 写入）。回调页 HTML 是用户在浏览器里看的，得跟界面语言走。
+// 语言可运行时切换，所以只在调用时求值，不做模块常量。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 function b64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -130,7 +134,10 @@ export async function codexOAuthLogin(): Promise<CodexOAuthResult | null> {
         const st = u.searchParams.get("state") || "";
         if (!code || st !== state) {
           res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" }).end(
-            "<h2>授权失败</h2><p>state 不匹配或缺少 code，请回到 minicc 重试。</p>",
+            tt(
+              "<h2>授权失败</h2><p>state 不匹配或缺少 code，请回到 minicc 重试。</p>",
+              "<h2>Authorization failed</h2><p>The state didn't match or the code was missing. Head back to the app and try again.</p>",
+            ),
           );
           finish(null);
           return;
@@ -138,7 +145,10 @@ export async function codexOAuthLogin(): Promise<CodexOAuthResult | null> {
         const tok = await exchangeCode(code, verifier);
         if (!tok) {
           res.writeHead(500, { "Content-Type": "text/html; charset=utf-8" }).end(
-            "<h2>换取令牌失败</h2><p>请回到 minicc 重试。</p>",
+            tt(
+              "<h2>换取令牌失败</h2><p>请回到 minicc 重试。</p>",
+              "<h2>Couldn't get a token</h2><p>Head back to the app and try again.</p>",
+            ),
           );
           finish(null);
           return;
@@ -146,7 +156,10 @@ export async function codexOAuthLogin(): Promise<CodexOAuthResult | null> {
         const { accountId, planType } = tok.id_token ? parseIdToken(tok.id_token) : {};
         writeAuthJson(tok, accountId);
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(
-          "<h2>✓ 授权成功</h2><p>已完成 Codex(ChatGPT) 登录，可以关闭此页，回到 minicc 使用。</p>",
+          tt(
+            "<h2>✓ 授权成功</h2><p>已完成 Codex(ChatGPT) 登录，可以关闭此页，回到 minicc 使用。</p>",
+            "<h2>✓ You're authorized</h2><p>Codex (ChatGPT) sign-in is done. You can close this page and head back to the app.</p>",
+          ),
         );
         finish({ accountId, planType });
       } catch (e) {

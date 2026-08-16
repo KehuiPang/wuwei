@@ -20,6 +20,10 @@ const TDIR = join(DIR, "trash"); // 回收站:软删除的会话正文文件挪�
 const TRASH = join(DIR, "trash.json"); // 回收站元信息(含 deletedAt),独立于 sessions.json
 const TRASH_TTL = 7 * 24 * 3600 * 1000; // 回收站保留 7 天,过期自动彻底清除
 
+// 界面语言（settings.ts 的 applyEnvFromSettings 写入）。修历史时注入的占位文案会显示在对话里，得跟界面语言走。
+// 语言可运行时切换，所以只在调用时求值，不做模块常量。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 export interface SessionMeta {
   id: string;
   title: string;
@@ -251,10 +255,11 @@ function isValidHistory(msgs: any[]): boolean {
 function repairHistory(msgs: any[]): any[] {
   const out: any[] = [];
   const ph = (t: string) => ({ type: "text", text: t });
+  const stopped = tt("(已停止)", "(stopped)");
   for (const m of msgs) {
     const prev = out[out.length - 1];
     if (m.role === "assistant") {
-      if (prev && prev.role === "assistant") out.push({ role: "user", content: [ph("继续")] });
+      if (prev && prev.role === "assistant") out.push({ role: "user", content: [ph(tt("继续", "continue"))] });
       out.push(m);
       continue;
     }
@@ -267,17 +272,17 @@ function repairHistory(msgs: any[]): any[] {
       out.push({
         role: "user",
         content: ids.map(
-          (id: string) => byId.get(id) || { type: "tool_result", tool_use_id: id, content: "(已停止)", is_error: true },
+          (id: string) => byId.get(id) || { type: "tool_result", tool_use_id: id, content: stopped, is_error: true },
         ),
       });
       if (others.length) {
-        out.push({ role: "assistant", content: [ph("(已停止)")] });
+        out.push({ role: "assistant", content: [ph(stopped)] });
         out.push({ role: "user", content: others });
       }
     } else {
-      if (prev && prev.role === "user") out.push({ role: "assistant", content: [ph("(已停止)")] });
+      if (prev && prev.role === "user") out.push({ role: "assistant", content: [ph(stopped)] });
       // 落单 tool_result(前面不是 tool_use)会致 400 → 丢弃，只保留其它内容
-      out.push({ role: "user", content: others.length ? others : [ph("(已停止)")] });
+      out.push({ role: "user", content: others.length ? others : [ph(stopped)] });
     }
   }
   return out;

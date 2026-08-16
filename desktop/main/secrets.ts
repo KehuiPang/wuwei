@@ -9,6 +9,10 @@ import { randomUUID } from "node:crypto";
 
 const VAULT_PATH = join(homedir(), ".wuwei", "secrets.json");
 
+// 界面语言（settings.ts 的 applyEnvFromSettings 写入）。下面这些报错/掩码文案会直接显示在密钥面板上，得跟界面语言走。
+// 语言可运行时切换，所以只在调用时求值，不做模块常量。
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 // 占位符：用不常见的括号包裹，模型极少会去改写它，回填走精确匹配
 const PH_OPEN = "⟦secret:";
 const PH_CLOSE = "⟧";
@@ -62,7 +66,12 @@ function persist() {
 function encrypt(plain: string): string {
   if (!safeStorage.isEncryptionAvailable()) {
     // 极端兜底：系统钥匙串不可用时不明文落盘，宁可报错
-    throw new Error("系统加密不可用(safeStorage)，无法安全存储密钥");
+    throw new Error(
+      tt(
+        "系统加密不可用(safeStorage)，无法安全存储密钥",
+        "System encryption (safeStorage) isn't available, so secrets can't be stored safely",
+      ),
+    );
   }
   return safeStorage.encryptString(plain).toString("base64");
 }
@@ -93,7 +102,7 @@ export function listSecrets(): SecretView[] {
       name: e.name,
       envVar: e.envVar,
       // 默认全打码:不露首尾、不泄露长度。真实值仅解锁后可见。
-      masked: plain != null ? "••••••••" : "⚠ 无法解密",
+      masked: plain != null ? "••••••••" : tt("⚠ 无法解密", "⚠ Can't decrypt"),
       note: e.note,
       createdAt: e.createdAt,
     };
@@ -104,7 +113,7 @@ export function listSecrets(): SecretView[] {
 export function addSecret(input: { name?: string; envVar?: string; value: string; note?: string; force?: boolean }): SecretView {
   const v = load();
   const value = String(input.value ?? "");
-  if (!value) throw new Error("密钥值为空");
+  if (!value) throw new Error(tt("密钥值为空", "Secret value is empty"));
   // 值去重:已存在同一明文→直接返回既有条目(除非 force 强制新增一条)
   if (!input.force) {
     const dup = plaintextMap().byValue.get(value);
@@ -142,7 +151,7 @@ export function addSecret(input: { name?: string; envVar?: string; value: string
 export function updateSecret(id: string, patch: { name?: string; envVar?: string; note?: string; value?: string }): void {
   const v = load();
   const e = v.entries.find((x) => x.id === id);
-  if (!e) throw new Error("密钥不存在");
+  if (!e) throw new Error(tt("密钥不存在", "Secret not found"));
   if (patch.name != null) e.name = normName(patch.name);
   if (patch.envVar != null) e.envVar = normName(patch.envVar).toUpperCase();
   if (patch.note != null) e.note = patch.note.trim() || undefined;
@@ -237,7 +246,7 @@ export function rehydrate(text: string): string {
 export function revealAll(): { id: string; value: string }[] {
   const byId = new Map<string, string>();
   for (const { e, plain } of plaintextMap().entries) byId.set(e.id, plain);
-  return load().entries.map((e) => ({ id: e.id, value: byId.get(e.id) ?? "⚠ 无法解密" }));
+  return load().entries.map((e) => ({ id: e.id, value: byId.get(e.id) ?? tt("⚠ 无法解密", "⚠ Can't decrypt") }));
 }
 
 // ---- 环境变量注入表：给本机 bash 子进程用（走内存缓存，不反复摸钥匙串） ----

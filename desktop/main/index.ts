@@ -505,7 +505,7 @@ async function webLogin(pid: string): Promise<{ name?: string; avatar?: string; 
   const w = new BrowserWindow({
     width: 480,
     height: 700,
-    title: "登录获取账号信息",
+    title: tt("登录获取账号信息", "Sign in to fetch account info"),
     ...(existsSync(join(__dirname, "../../build/icon.png")) ? { icon: join(__dirname, "../../build/icon.png") } : {}),
     webPreferences: { partition: "persist:login-" + pid },
   });
@@ -752,7 +752,7 @@ async function emitAccount() {
     const a = getAccount();
     send("evt:account", {
       providerId: "codex",
-      label: "Codex 订阅",
+      label: tt("Codex 订阅", "Codex subscription"),
       loggedIn: a.loggedIn,
       email: a.email,
       nickname,
@@ -958,7 +958,12 @@ function buildSysPrompt(cwd: string, model: string, providerId?: string): string
     base += typeof st?.brainPrompt === "string" ? st.brainPrompt : (lang === "en" ? DEFAULT_BRAIN_NOTE_EN : DEFAULT_BRAIN_NOTE);
     try {
       const idx = brain.conceptIndex(40);
-      if (idx.length) base += `\n已沉淀的概念（可 brain_recall 展开）：${idx.join("、")}`;
+      // 这段拼在系统提示里，中文会把英文用户的回复语言也带偏，跟着 lang 走
+      if (idx.length)
+        base +=
+          lang === "en"
+            ? `\nConcepts already stored (expand with brain_recall): ${idx.join(", ")}`
+            : `\n已沉淀的概念（可 brain_recall 展开）：${idx.join("、")}`;
     } catch {
       /* brain 不可用不影响主流程 */
     }
@@ -2194,7 +2199,7 @@ ipcMain.handle("codex:reset-credits", async () => {
 });
 ipcMain.handle("codex:consume-reset", async (_e, creditId: string) => {
   const h = codexAuthHeaders();
-  if (!h) return { ok: false, error: "无 Codex 登录" };
+  if (!h) return { ok: false, error: tt("无 Codex 登录", "No Codex login") };
   try {
     const res = await fetch("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume", {
       method: "POST",
@@ -2234,20 +2239,26 @@ ipcMain.on("report:generate", (_e, group: string, sessionIds: string[]) => {
             .map((b: any) => b.text)
             .join(" ")
             .trim();
-          return t ? `${m.role === "user" ? "我" : "助手"}：${t}` : "";
+          return t ? `${m.role === "user" ? tt("我", "Me") : tt("助手", "Assistant")}：${t}` : "";
         })
         .filter(Boolean)
         .join("\n")
         .slice(-2000); // 取末尾(最新进展)，单会话上限约 2000 字
-      return `【${meta?.title || "对话"}】\n${body || "(暂无文字内容)"}`;
+      return `【${meta?.title || tt("对话", "Chat")}】\n${body || tt("(暂无文字内容)", "(no text content yet)")}`;
     })
     .join("\n\n----\n\n");
 
-  const sys =
+  // 日报正文整篇都会显示给用户，语言必须跟界面走
+  const sys = tt(
     `你是工作日报助手。下面是「${group}」分组下今天多个工作会话的内容。当用户要求生成日报时，` +
-    `请按项目/重点条理清晰地梳理成一份精简中文日报，分三部分：` +
-    `✅ 今日进展与成果（按项目/重点一条条罗列）、📌 待办（接下来要做的）、⚠️ 遗留问题/风险。` +
-    `要求：精简概要、突出重点、条目式，不要逐字复述细节。\n\n=== 会话内容 ===\n${digest}`;
+      `请按项目/重点条理清晰地梳理成一份精简中文日报，分三部分：` +
+      `✅ 今日进展与成果（按项目/重点一条条罗列）、📌 待办（接下来要做的）、⚠️ 遗留问题/风险。` +
+      `要求：精简概要、突出重点、条目式，不要逐字复述细节。\n\n=== 会话内容 ===\n${digest}`,
+    `You write daily work reports. Below are today's work sessions from the "${group}" group. When the user asks for a report, ` +
+      `organize it by project/theme into a concise English report with three sections: ` +
+      `✅ Progress & results today (one bullet per project/theme), 📌 Next up (what's still to do), ⚠️ Open issues / risks. ` +
+      `Keep it tight and bulleted — summarize, don't replay the details.\n\n=== Sessions ===\n${digest}`,
+  );
 
   // 新开会话并切过去
   const sid = randomUUID();
@@ -2255,7 +2266,8 @@ ipcMain.on("report:generate", (_e, group: string, sessionIds: string[]) => {
   getAgent(sid);
   send("evt:session-loaded", { id: sid, messages: [] });
   sendUsageFor(sid);
-  void startTurn(sid, `请生成「${group}」今天的工作日报。`, undefined, sys);
+  // 这句会当成用户气泡显示出来，同样跟随语言
+  void startTurn(sid, tt(`请生成「${group}」今天的工作日报。`, `Write today's work report for "${group}".`), undefined, sys);
 });
 
 // 一键工作交接:把某会话有价值的内容总结成交接文档 → 开一个干净的新会话(继承当前平台/模型)
@@ -2264,7 +2276,7 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
   const srcId = sid || currentId;
   const srcAgent = getAgent(srcId);
   if (!srcAgent) {
-    send("evt:error", { sid: srcId, message: "交接失败：源会话未初始化。" });
+    send("evt:error", { sid: srcId, message: tt("交接失败：源会话未初始化。", "Handoff failed: the source chat isn't initialized.") });
     return { ok: false };
   }
   send("evt:handoff", { sid: srcId, phase: "summarizing" }); // UI 提示"正在生成交接文档…"
@@ -2274,12 +2286,12 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
   } catch (e: any) {
     log("handoffError", srcId.slice(0, 8), String(e?.message || e).slice(0, 300));
     send("evt:handoff", { sid: srcId, phase: "error" });
-    send("evt:error", { sid: srcId, message: "生成交接文档失败：" + String(e?.message || e).slice(0, 200) });
+    send("evt:error", { sid: srcId, message: tt("生成交接文档失败：", "Failed to build the handoff doc: ") + String(e?.message || e).slice(0, 200) });
     return { ok: false };
   }
   if (!doc.trim()) {
     send("evt:handoff", { sid: srcId, phase: "error" });
-    send("evt:error", { sid: srcId, message: "交接文档为空(该会话暂无可提炼的内容)。" });
+    send("evt:error", { sid: srcId, message: tt("交接文档为空(该会话暂无可提炼的内容)。", "The handoff doc came back empty — nothing to distill from this chat.") });
     return { ok: false };
   }
   // 新会话：沿用当前全局平台/模型(handoff 后 currentId 切到新会话)，让续跑用同一套模型
@@ -2289,10 +2301,16 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
   send("evt:session-loaded", { id: newId, messages: [] });
   sendUsageFor(newId);
   send("evt:handoff", { sid: newId, phase: "done" });
+  // 交接开场白会作为新会话的第一条用户消息显示出来，跟随界面语言
   const firstMsg =
-    "【工作交接（来自上一个对话）】\n" +
-    "上一个对话的上下文比较杂乱/过长，以下是从中整理出的有价值内容与当前进展。" +
-    "请先理解交接内容，然后**接着把未完成的部分继续做完**；有不确定处再问我。\n\n" +
+    tt(
+      "【工作交接（来自上一个对话）】\n" +
+        "上一个对话的上下文比较杂乱/过长，以下是从中整理出的有价值内容与当前进展。" +
+        "请先理解交接内容，然后**接着把未完成的部分继续做完**；有不确定处再问我。\n\n",
+      "[Handoff from the previous chat]\n" +
+        "The previous chat got long and cluttered; below is what was worth keeping, plus where things stand. " +
+        "Read the handoff first, then **pick up and finish what's still open** — ask me if anything is unclear.\n\n",
+    ) +
     "----\n" +
     doc;
   void startTurn(newId, firstMsg);
@@ -2320,7 +2338,10 @@ ipcMain.on("session:resume", (_e, id: string) => {
   send("evt:sessions", listSessions());
   void startTurn(
     sid,
-    "（这个任务上次运行时被强制中断了。请先回顾上面已完成到哪一步，然后接着把没做完的部分继续完成；若已经做完了，简要说明结果即可。）",
+    tt(
+      "（这个任务上次运行时被强制中断了。请先回顾上面已完成到哪一步，然后接着把没做完的部分继续完成；若已经做完了，简要说明结果即可。）",
+      "(This task was force-interrupted on its last run. Look back at how far it got, then finish what's still open — if it's already done, just summarize the result.)",
+    ),
   );
 });
 
@@ -2661,7 +2682,7 @@ ipcMain.handle("brain:delete-edge", (_e, id: string) => brain.deleteEdgeFromUI(S
 ipcMain.handle("dialog:select-folder", async () => {
   const parent = win && !win.isDestroyed() ? win : undefined;
   const r = await dialog.showOpenDialog(parent as BrowserWindow, {
-    title: "选择文件夹",
+    title: tt("选择文件夹", "Choose a folder"),
     properties: ["openDirectory", "createDirectory"],
   });
   if (r.canceled || r.filePaths.length === 0) return null;
@@ -2683,7 +2704,13 @@ let docBuildState: DocBuildState = { building: false, phase: "idle", files: 0, t
 ipcMain.handle("brain:doc-progress", () => docBuildState);
 ipcMain.handle("brain:embed-ready", () => brain.embeddingReady());
 ipcMain.handle("brain:build-docs", async (_e, dir: string) => {
-  if (conceptState.running) throw new Error("正在抽取概念，请先停止或等它完成再重建索引（两者共用向量模型）");
+  if (conceptState.running)
+    throw new Error(
+      tt(
+        "正在抽取概念，请先停止或等它完成再重建索引（两者共用向量模型）",
+        "Concept extraction is running — stop it or let it finish before rebuilding the index (they share the embedding model).",
+      ),
+    );
   const abs = String(dir).replace(/^~(?=\/|$)/, homedir());
   docBuildState = { building: true, phase: "scan", files: 0, total: 0, done: 0 };
   send("evt:brain-docs", docBuildState);
@@ -2753,15 +2780,28 @@ ipcMain.handle("brain:extract-concepts", (_e, opts: { all?: boolean }) => {
 });
 
 async function extractOneFile(file: string, body: string): Promise<number> {
-  const sys =
-    "你是知识图谱抽取器。从给定的中文文档片段中，抽取值得长期记住的【概念节点】与它们之间的【关系】。" +
-    "概念 = 项目/服务器/服务/脚本/工具/命令/注意事项/偏好/抽象概念 等有信息量的实体。" +
-    "只输出一个 JSON 对象，禁止任何解释、禁止代码围栏，格式严格为：" +
-    '{"concepts":[{"name":"规范短名","type":"类型","summary":"一句话摘要","aliases":["别名"]}],"relations":[{"from":"概念A","relation":"关系","to":"概念B"}]}。' +
-    "name 用最规范简短的名字；没有可抽的就返回 {\"concepts\":[],\"relations\":[]}。最多 12 个概念。";
+  // 抽出来的概念名/类型/摘要会显示在知识网络列表里，还会拼进系统提示 → 跟随界面语言。
+  // 另注：原文写死「中文文档片段」，英文文档也会被当中文处理，这里一并改成不限定语种。
+  const sys = tt(
+    "你是知识图谱抽取器。从给定的文档片段中，抽取值得长期记住的【概念节点】与它们之间的【关系】。" +
+      "概念 = 项目/服务器/服务/脚本/工具/命令/注意事项/偏好/抽象概念 等有信息量的实体。" +
+      "只输出一个 JSON 对象，禁止任何解释、禁止代码围栏，格式严格为：" +
+      '{"concepts":[{"name":"规范短名","type":"类型","summary":"一句话摘要","aliases":["别名"]}],"relations":[{"from":"概念A","relation":"关系","to":"概念B"}]}。' +
+      "name 用最规范简短的名字；没有可抽的就返回 {\"concepts\":[],\"relations\":[]}。最多 12 个概念。",
+    "You extract knowledge graphs. From the given document excerpt, pull out the [concept nodes] worth remembering long-term and the [relations] between them. " +
+      "A concept = an informative entity: project / server / service / script / tool / command / caveat / preference / abstract concept, etc. " +
+      "Output a single JSON object — no explanation, no code fences — strictly in this shape: " +
+      '{"concepts":[{"name":"canonical short name","type":"type","summary":"one-line summary","aliases":["alias"]}],"relations":[{"from":"concept A","relation":"relation","to":"concept B"}]}. ' +
+      'Use the most canonical short name; if there is nothing to extract, return {"concepts":[],"relations":[]}. At most 12 concepts. Write names and summaries in English.',
+  );
   const res = await provider!.complete(
     sys,
-    [{ role: "user", content: [{ type: "text", text: `文档《${file}》片段：\n${body}\n\nJSON:` }] }] as any,
+    [
+      {
+        role: "user",
+        content: [{ type: "text", text: tt(`文档《${file}》片段：\n${body}\n\nJSON:`, `Excerpt from "${file}":\n${body}\n\nJSON:`) }],
+      },
+    ] as any,
     [],
     {},
   );
@@ -2783,7 +2823,7 @@ async function extractOneFile(file: string, body: string): Promise<number> {
     if (!c?.name) continue;
     await brain.learn({
       name: String(c.name).slice(0, 60),
-      type: c.type ? String(c.type).slice(0, 20) : "概念",
+      type: c.type ? String(c.type).slice(0, 20) : tt("概念", "concept"),
       summary: c.summary ? String(c.summary).slice(0, 200) : "",
       aliases: Array.isArray(c.aliases) ? c.aliases.slice(0, 8).map((a: any) => String(a).slice(0, 40)) : [],
     });
@@ -2991,7 +3031,7 @@ ipcMain.on("browser:detach", () => {
     browserPopWin = new BrowserWindow({
       width: 1040,
       height: 780,
-      title: "无为 浏览器",
+      title: tt("无为 浏览器", "Wuwei Browser"),
       ...(existsSync(join(__dirname, "../../build/icon.png")) ? { icon: join(__dirname, "../../build/icon.png") } : {}),
     });
     const fit = () => {
