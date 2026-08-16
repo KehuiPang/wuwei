@@ -2004,6 +2004,8 @@ body {
   padding: 6px 10px 4px;
   letter-spacing: 0.3px;
 }
+/* 思考档位菜单的样式挪到 .mq-item 之后声明（见文件下方），
+   否则同为单类选择器时会被 .mq-item 的 align-items/flex-direction 覆盖。 */
 .mq-empty {
   font-size: 12px;
   color: var(--text-dim);
@@ -2035,6 +2037,37 @@ body {
 .mq-item.on {
   color: var(--accent);
   font-weight: 600;
+}
+/* ── 思考档位菜单 ──
+   与切换模型菜单同一套视觉：等宽字、左对齐、选中项 accent + ✓。
+   差别只在多一行灰色说明——档位名（快/平衡/深入）本身说不清代价，得给一句人话。
+   用 .mq-item.mq-item-col 双类提权：单类会被上面的 .mq-item 覆盖掉 flex 方向。 */
+.mq-menu-eff {
+  min-width: 230px;
+}
+.mq-item.mq-item-col {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 1px;
+  padding: 7px 10px 8px;
+  white-space: normal; /* 说明允许折行，不然被 .mq-item 的 nowrap 撑破菜单 */
+}
+.mq-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  white-space: nowrap;
+}
+.mq-item-sub {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+  font-family: var(--sans, inherit); /* 说明用正文字体，跟等宽的档位名拉开层次 */
+}
+.mq-item.mq-item-col.on .mq-item-sub {
+  color: var(--text-dim); /* 选中态只让标题变 accent，说明保持淡色，避免整块过艳 */
 }
 .mq-check {
   color: var(--accent);

@@ -247,11 +247,21 @@ class OpenAIProvider implements Provider {
     tools: ToolSpec[],
     handlers: ProviderStreamHandlers,
   ): Promise<ProviderResult> {
-    // 视觉模型才发真图片，否则图片转文本占位(如 deepseek 纯文本模型不认 image_url)
+    // 默认按「支持图片」发送，只有已知的纯文本模型才降级成 [图片] 占位。
+    //
+    // 之前是反过来的——白名单列多模态模型。但白名单漏一个的代价是「永久静默降级」：
+    // 用户贴了图，这里判成非视觉 → 图片被换成「[图片]」文本发出去，模型只能回「我看不见图」，
+    // 谁也想不到是客户端把图丢了（claude 就这么漏了很久，直连正常、走托管就瞎）。
+    // 黑名单漏一个的代价只是「报一次 400」，看得见、补一条就好。
+    // 何况现在新模型默认都是多模态，纯文本才是少数派，名单该维护少数派。
+    const NON_VISION =
+      /deepseek-(chat|coder|reasoner)|moonshot-v1-\d+k$|glm-4(?!.*v)|qwen-?(max|plus|turbo)|embedding|\bbge\b/i;
     const vision =
-      /gpt-4o|gpt-4\.1|gpt-5|\bo3\b|\bo4|vl\b|vision|omni|internvl|qwen3?-?vl|glm-[\d.]*v|grok-4|kimi-latest|hunyuan-vision|minicpm-v/i.test(
-        this.cfg.model,
-      ) || this.cfg.vision === true;
+      this.cfg.vision === true
+        ? true // 强制开：自建端点模型名不含 vl 但其实支持
+        : this.cfg.vision === false
+          ? false // 强制关：黑名单没覆盖到的纯文本模型，用 MINICC_VISION=0 兜底
+          : !NON_VISION.test(this.cfg.model);
     const oaMessages = toOpenAIMessages(system, messages, vision);
     // 某些自建 vLLM 未开 --enable-auto-tool-choice，一带 tools 就 400；可用 disableTools 退化为纯对话
     const noTools = this.cfg.disableTools === true;
@@ -284,6 +294,9 @@ class OpenAIProvider implements Provider {
         tools: oaTools.length ? oaTools : undefined,
         stream: true, // SSE 流式：文字实时逐字打印
         stream_options: { include_usage: true }, // 末尾块带 usage
+        // 思考档位：OpenAI 系与 OpenRouter 都认 reasoning.effort；无为托管网关会把它翻成
+        // Anthropic 的 output_config.effort。未选档位就不带该字段，用服务端默认。
+        reasoning: this.cfg.effort ? { effort: this.cfg.effort } : undefined,
       }),
       signal: handlers.signal,
     });

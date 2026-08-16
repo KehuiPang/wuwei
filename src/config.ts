@@ -20,6 +20,7 @@ export interface Config {
   baseUrl?: string;
   vision?: boolean; // 强制按多模态处理(自建端点模型名不含 vl 时用)；MINICC_VISION=1
   disableTools?: boolean; // 不发工具(某些自建 vLLM 未开 --enable-auto-tool-choice 会 400)；MINICC_NO_TOOLS=1
+  effort?: "low" | "medium" | "high" | "xhigh" | "max"; // 思考档位；MINICC_EFFORT，未设=用服务端默认
   maxTokens: number;
   anthropicBeta: string;
   // Codex 订阅
@@ -127,7 +128,17 @@ export function loadConfig(): Config {
     apiKey,
     oauthToken,
     baseUrl: pick("MINICC_BASE_URL") || undefined,
-    vision: /^(1|true|yes)$/i.test(pick("MINICC_VISION", "")),
+    // 三态：未设置=undefined(交给模型名判断) / 1|true|yes=强制开 / 其余(如 0)=强制关。
+    // 不能简写成 test(...) —— 那样「没设置」会等于 false，被下游当成「强制关」，图片全被丢掉。
+    vision: pick("MINICC_VISION", "").trim()
+      ? /^(1|true|yes)$/i.test(pick("MINICC_VISION", ""))
+      : undefined,
+    // 思考档位：低=快而省，高=深而慢。未设则不带该参数，由服务端/模型用自己的默认值。
+    effort: (["low", "medium", "high", "xhigh", "max"] as const).includes(
+      pick("MINICC_EFFORT", "").toLowerCase() as never,
+    )
+      ? (pick("MINICC_EFFORT", "").toLowerCase() as "low" | "medium" | "high" | "xhigh" | "max")
+      : undefined,
     disableTools: /^(1|true|yes)$/i.test(pick("MINICC_NO_TOOLS", "")),
     maxTokens: Number(pick("MINICC_MAX_TOKENS", "8192")),
     anthropicBeta: pick("MINICC_ANTHROPIC_BETA", "oauth-2025-04-20"),

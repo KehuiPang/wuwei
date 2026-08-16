@@ -176,6 +176,8 @@ export interface Settings {
   streamMode?: "typewriter" | "stream" | "instant"; // 输出方式：打字机(匀速)/流式(一下出)/回完一次性
   streamSpeed?: number; // 打字机速度(字符/秒)，默认 400
   keepRecent?: number; // 上下文压缩时保留最近多少条原始消息(默认 12)
+  effort?: "low" | "medium" | "high" | "xhigh" | "max"; // 思考档位：越高越深入也越慢越贵(默认 medium)
+  showEffortPicker?: boolean; // 是否在底栏显示思考档位选择器(默认显示)
   askToastAutoDismiss?: boolean; // 别的会话「在等你选择」的右上角提醒是否自动消失(默认开=undefined 视为 true)
   askToastDismissSec?: number; // 自动消失倒计时秒数(默认 30)
 }
@@ -235,6 +237,7 @@ export function applyEnvFromSettings(s: Settings | null) {
     "ANTHROPIC_API_KEY",
     "MINICC_VISION",
     "MINICC_NO_TOOLS",
+    "MINICC_EFFORT",
   ]) {
     delete process.env[k];
   }
@@ -249,6 +252,7 @@ export function applyEnvFromSettings(s: Settings | null) {
   const caps = slot.modelCaps?.[s.model || ""] || {};
   if (caps.vision ?? slot.vision) process.env.MINICC_VISION = "1";
   if (caps.noTools ?? slot.noTools) process.env.MINICC_NO_TOOLS = "1";
+  if (s.effort) process.env.MINICC_EFFORT = s.effort; // 思考档位 → 请求里的 reasoning.effort
   switch (s.kind) {
     case "codex":
       process.env.MINICC_PROVIDER = "codex";

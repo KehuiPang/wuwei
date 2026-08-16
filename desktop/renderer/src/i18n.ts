@@ -561,6 +561,12 @@ const DICT_EN: Record<string, string> = {
   "win.close": "Close",
   "side.expand": "Expand sidebar",
   "stream.toBottom": "Jump to latest",
+  "eff.title": "Thinking level — higher means deeper, slower and pricier",
+  "eff.head": "Thinking level",
+  "set.g.effortGroup": "Thinking level",
+  "set.g.effortPicker": "Show the level picker in the bottom bar",
+  "set.g.effortPickerHint":
+    "Switch between Fast / Balanced / Deep right under the input box. Higher levels think harder but run slower and cost more — if a task keeps dying halfway, dropping one level often gets it through in one go. Only shown for models that support it (Claude 4.5+, GPT-5 family).",
   "err.ctxOverflow": "Error: this conversation is too long for the model's context window.",
   "err.ctxOverflowTip": "Start a new conversation (use Handoff to carry the key points over), or delete some earlier messages.",
   "err.ctxUsed": "used",

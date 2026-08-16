@@ -383,6 +383,26 @@ const COIN_PACKS: CoinPack[] = [
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, priceUsd: 1, desc: "测试专用 · 小额验证", descEn: "Test · small verification", badge: "测试", badgeEn: "Test", badgeType: "val" };
 // 月付阶梯（价/币量/签到 对齐库 coin_catalog）：CN plan_pro/5x/50x = ¥29/99/899；EN pro/plus/max = $6.99/19.99/199。
 type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
+// ── 思考档位（effort）──────────────────────────────────────────────
+// 档位越高，模型思考越深、工具调用越多、前言越长，也就越慢越贵；降档能明显缩短单步耗时，
+// 在服务端有函数时长上限时，这是「一次跑完 vs 中途被掐断」的关键开关。
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+// 认这个参数的模型：Claude 4.5 以后（含 Sonnet 4.6/5、Opus 4.5~5、Fable/Mythos）与 GPT-5 / o 系。
+// 其它模型不显示选择器，免得给了个按了没反应的开关。
+const EFFORT_MODELS = /claude-(opus-4-[5-9]|opus-[5-9]|sonnet-[5-9]|sonnet-4-6|fable|mythos)|gpt-5|\bo3\b|\bo4\b/i;
+const EFFORT_OPTIONS: { id: Effort; zh: string; en: string; zhDesc: string; enDesc: string }[] = [
+  { id: "low", zh: "快", en: "Fast", zhDesc: "最快最省，适合简单改动和问答", enDesc: "Fastest and cheapest — simple edits and Q&A" },
+  { id: "medium", zh: "平衡", en: "Balanced", zhDesc: "推荐。多数任务够用，不容易超时", enDesc: "Recommended. Enough for most tasks, less likely to time out" },
+  { id: "high", zh: "深入", en: "Deep", zhDesc: "复杂任务更靠谱，但明显更慢", enDesc: "Better on complex work, noticeably slower" },
+  { id: "xhigh", zh: "很深", en: "Deeper", zhDesc: "长链路重构、疑难排查", enDesc: "Long refactors and hard debugging" },
+  { id: "max", zh: "极致", en: "Max", zhDesc: "最强也最慢，容易触发超时", enDesc: "Strongest and slowest — prone to timeouts" },
+];
+function effortLabel(e: Effort, lang: string): string {
+  const o = EFFORT_OPTIONS.find((x) => x.id === e);
+  if (!o) return e;
+  return lang === "en" ? o.en : o.zh;
+}
+
 // 订阅版模型显示名(Claude/Codex 订阅是硬编码 preset，无 catalog label)：统一格式，避免下拉里
 // 一会儿 "GPT-5.6 Terra"(空格) 一会儿 "gpt-5.6-sol"(连字符) 混着显示。优先级高于 catalog label。
 const MODEL_LABEL_OVERRIDES: Record<string, string> = {
@@ -2049,6 +2069,13 @@ export function App() {
   const [streamMode, setStreamMode] = useState<"typewriter" | "stream" | "instant">("stream"); // 输出方式
   const [streamSpeed, setStreamSpeed] = useState(400); // 打字机速度(字符/秒)
   const [keepRecent, setKeepRecent] = useState(12); // 上下文压缩保留最近N条
+  const [effort, setEffort] = useState<Effort>("medium"); // 思考档位：越高越深入也越慢越贵
+  const [showEffortPicker, setShowEffortPicker] = useState(true); // 底栏是否显示档位选择器
+  const [showEffortMenu, setShowEffortMenu] = useState(false);
+  // 底栏三个下拉(平台/模型/档位)共用一个定位值：菜单都挂在 .model-quick(relative) 上，
+  // 若固定 left:0 就会全部贴容器最左，离点击的按钮很远。点谁就记谁的 offsetLeft，菜单据此对齐。
+  const [mqMenuLeft, setMqMenuLeft] = useState(0);
+  const openMqMenu = (e: React.MouseEvent<HTMLElement>) => setMqMenuLeft(e.currentTarget.offsetLeft);
   const [askToastAuto, setAskToastAuto] = useState(true); // 别的会话提醒是否自动消失
   const [askToastSec, setAskToastSec] = useState(30); // 自动消失秒数
   const askToastAutoRef = useRef(askToastAuto); // 事件回调里读最新值(避免闭包旧值)
@@ -2476,6 +2503,8 @@ export function App() {
       setStreamMode((r?.settings as any)?.streamMode || "stream");
       setStreamSpeed((r?.settings as any)?.streamSpeed || 400);
       setKeepRecent((r?.settings as any)?.keepRecent || 12);
+      setEffort((r?.settings as any)?.effort || "medium");
+      setShowEffortPicker((r?.settings as any)?.showEffortPicker !== false); // 默认显示
       setAskToastAuto((r?.settings as any)?.askToastAutoDismiss !== false); // 默认开
       setAskToastSec((r?.settings as any)?.askToastDismissSec || 30);
       // 应用主题(深色已下线，默认白色；存量 dark 回退白色)
@@ -3376,6 +3405,14 @@ export function App() {
   function changeKeepRecent(n: number) {
     setKeepRecent(n);
     window.wuwei.setKeepRecent(n);
+  }
+  function changeShowEffortPicker(v: boolean) {
+    setShowEffortPicker(v);
+    if (!v) setShowEffortMenu(false); // 关掉显示时顺手收起已展开的菜单
+    void (async () => {
+      const r = await window.wuwei.getSettings();
+      window.wuwei.setSettings({ ...((r?.settings as any) || {}), showEffortPicker: v });
+    })();
   }
   function changeAskToast(auto: boolean, sec: number) {
     setAskToastAuto(auto);
@@ -4934,7 +4971,10 @@ export function App() {
               <button
                 className="mq-btn mq-prov"
                 title={curPreset ? pLabel(curPreset, lang) : meta.backend}
-                onClick={() => setShowProviderMenu((v) => !v)}
+                onClick={(e) => {
+                  openMqMenu(e);
+                  setShowProviderMenu((v) => !v);
+                }}
               >
                 <span className="mq-txt">{(curPreset ? pLabel(curPreset, lang) : meta.backend).replace(/（.*$/, "").replace(/\s*\(.*$/, "")}</span>
                 <span className="mq-caret">▾</span>
@@ -4943,19 +4983,66 @@ export function App() {
               <button
                 className="mq-btn mq-mod"
                 title={meta.model}
-                onClick={() => {
+                onClick={(e) => {
                   // 访客门禁：未登录且当前不是免费体验 → 点模型也引导登录
                   if (!wuwei && !curPreset?.anon) { setShowLoginIntro(true); return; }
+                  openMqMenu(e);
                   setShowModelMenu((v) => !v);
                 }}
               >
                 <span className="mq-txt">{MODEL_LABEL_OVERRIDES[meta.model] || modelLabels.get(meta.model) || meta.model}</span>
                 <span className="mq-caret">▾</span>
               </button>
+              {/* 思考档位：只对支持 effort 的模型出现（Claude 4.5+/Sonnet 5、GPT-5、o 系）。
+                  档位越高思考越深，也越慢越贵；时长受限时降档能明显提高「一次跑完」的概率。 */}
+              {showEffortPicker && EFFORT_MODELS.test(meta.model) && (
+                <>
+                  <span className="mq-mid">·</span>
+                  <button
+                    className="mq-btn mq-eff"
+                    title={t("eff.title", "思考档位：越高越深入，也越慢越贵")}
+                    onClick={(e) => {
+                      openMqMenu(e);
+                      setShowEffortMenu((v) => !v);
+                    }}
+                  >
+                    <span className="mq-txt">{effortLabel(effort, lang)}</span>
+                    <span className="mq-caret">▾</span>
+                  </button>
+                </>
+              )}
+              {showEffortMenu && (
+                <>
+                  <div className="mq-overlay" onClick={() => setShowEffortMenu(false)} />
+                  <div className="mq-menu mq-menu-eff" style={{ left: mqMenuLeft }}>
+                    <div className="mq-head">{t("eff.head", "思考档位")}</div>
+                    {EFFORT_OPTIONS.map((o) => (
+                      <button
+                        key={o.id}
+                        className={"mq-item mq-item-col" + (o.id === effort ? " on" : "")}
+                        onClick={() => {
+                          setEffort(o.id);
+                          setShowEffortMenu(false);
+                          void (async () => {
+                            const r = await window.wuwei.getSettings();
+                            window.wuwei.setSettings({ ...((r?.settings as any) || {}), effort: o.id });
+                          })();
+                        }}
+                      >
+                        <span className="mq-item-main">
+                          {lang === "en" ? o.en : o.zh}
+                          {o.id === effort && <span className="mq-check">✓</span>}
+                        </span>
+                        <span className="mq-item-sub">{lang === "en" ? o.enDesc : o.zhDesc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
               {showProviderMenu && (
                 <>
                   <div className="mq-overlay" onClick={() => setShowProviderMenu(false)} />
-                  <div className="mq-menu mq-menu-prov">
+                  <div className="mq-menu mq-menu-prov" style={{ left: mqMenuLeft }}>
                     <div className="mq-head">{lang === "en" ? "Switch provider" : "切换平台"}</div>
                     {providerList.map((p) => (
                       <button
@@ -4985,7 +5072,7 @@ export function App() {
               {showModelMenu && (
                 <>
                   <div className="mq-overlay" onClick={() => setShowModelMenu(false)} />
-                  <div className="mq-menu">
+                  <div className="mq-menu" style={{ left: mqMenuLeft }}>
                     <div
                       className="mq-head"
                       style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
@@ -5472,6 +5559,8 @@ export function App() {
           onStream={changeStream}
           keepRecent={keepRecent}
           onKeepRecent={changeKeepRecent}
+          showEffortPicker={showEffortPicker}
+          onShowEffortPicker={changeShowEffortPicker}
           lang={lang}
           onLang={changeLang}
           t={t}
@@ -8393,6 +8482,8 @@ function SettingsModal({
   onStream,
   keepRecent,
   onKeepRecent,
+  showEffortPicker,
+  onShowEffortPicker,
   lang,
   onLang,
   t,
@@ -8412,6 +8503,8 @@ function SettingsModal({
   onStream: (mode: "typewriter" | "stream" | "instant", speed: number) => void;
   keepRecent: number;
   onKeepRecent: (n: number) => void;
+  showEffortPicker: boolean;
+  onShowEffortPicker: (v: boolean) => void;
   lang: Lang;
   onLang: (l: Lang) => void;
   t: T;
@@ -9501,6 +9594,25 @@ function SettingsModal({
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.g.compactionHint")}
               </div>
+              <div className="app-set-group">{t("set.g.effortGroup", "思考档位")}</div>
+              <div className="app-set-row" style={{ cursor: "default" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">{t("set.g.effortPicker", "在底栏显示档位选择器")}</div>
+                  <div className="app-set-hint">
+                    {t(
+                      "set.g.effortPickerHint",
+                      "开启后可在输入框下方随时切换「快 / 平衡 / 深入」。档位越高思考越深，也越慢越贵；任务老是跑到一半中断时，调低一档往往就能一次跑完。只对支持该参数的模型显示（Claude 4.5 以上、GPT-5 系）。",
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={showEffortPicker}
+                  onChange={(e) => onShowEffortPicker(e.target.checked)}
+                />
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "16px" }} />
               <div className="app-set-group">{t("set.g.remindGroup", "会话提醒")}</div>
               <div className="app-set-row" style={{ cursor: "default" }}>
                 <div className="app-set-text">
