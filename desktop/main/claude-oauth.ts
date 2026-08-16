@@ -14,9 +14,9 @@ import { log } from "./logger.js";
 // Claude Code 的公开 OAuth 客户端参数（与官方 CLI 一致；订阅额度，不额外计费）
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const AUTHORIZE_URL = "https://claude.ai/oauth/authorize";
-const TOKEN_URL = "https://console.anthropic.com/v1/oauth/token";
-const REDIRECT_URI = "https://console.anthropic.com/oauth/code/callback";
-const SCOPES = "org:create_api_key user:profile user:inference";
+const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
+const REDIRECT_URI = "https://platform.claude.com/oauth/code/callback";
+const SCOPES = "user:profile user:inference user:sessions:claude_code user:mcp_servers";
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -57,8 +57,8 @@ export async function claudeOAuthRefresh(refreshToken: string): Promise<ClaudeOA
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: refreshToken,
         client_id: CLIENT_ID,
@@ -82,17 +82,13 @@ export async function claudeOAuthRefresh(refreshToken: string): Promise<ClaudeOA
   }
 }
 
-// 从回调 URL 里取出 code 与 state（Claude 有时把 code 拼成 "code#state"）
+// 从回调 URL 里取出 code 与 state。新版平台页复制出的显示码可能是
+// "<authorization_code>#<display_fragment>"；# 后只是展示片段，不是 OAuth state，必须丢弃。
 function parseCallback(rawUrl: string): { code: string; state: string } | null {
   try {
     const u = new URL(rawUrl);
-    let code = u.searchParams.get("code") || "";
-    let state = u.searchParams.get("state") || "";
-    if (code.includes("#")) {
-      const [c, s] = code.split("#");
-      code = c;
-      state = state || s || "";
-    }
+    const code = (u.searchParams.get("code") || "").split("#", 1)[0].trim();
+    const state = u.searchParams.get("state") || "";
     return code ? { code, state } : null;
   } catch {
     return null;
@@ -107,8 +103,8 @@ async function exchangeToken(
 ): Promise<ClaudeOAuthResult | null> {
   const res = await fetch(TOKEN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
       grant_type: "authorization_code",
       code,
       state,
@@ -133,12 +129,11 @@ async function exchangeToken(
   return result;
 }
 
-// 构造一次 PKCE 授权：返回授权 URL、verifier、state
-// 关键：与官方/参考实现一致——state 直接用 verifier（不是另造随机值），否则 claude.ai 授权端点报 Invalid request format
+// 构造一次 PKCE 授权：verifier 与 state 必须分别随机生成，并在换 token 时原样带回。
 function buildAuth(redirectUri: string): { authUrl: string; verifier: string; state: string } {
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash("sha256").update(verifier).digest());
-  const state = verifier;
+  const state = b64url(randomBytes(32));
   const authUrl =
     AUTHORIZE_URL +
     "?" +
@@ -169,22 +164,17 @@ export function claudeOAuthOpenBrowser(): void {
   void shell.openExternal(authUrl);
 }
 
-// 用回调页显示的授权码换 token；code 可能是 "code#state" 形式，自动拆分
+// 用回调页显示的授权码换 token。新版显示码的 # 后部分不是 state，只取 # 前授权码；
+// state 始终使用本轮 buildAuth 保存的随机值，避免 PKCE/state 不匹配。
 export async function claudeOAuthExchange(input: string): Promise<ClaudeOAuthResult | null> {
   if (!pending) {
     log("claudeOAuth", "exchange 无 pending(未先 open 或已超时)");
     return null;
   }
-  let code = (input || "").trim();
-  let state = pending.state;
-  if (code.includes("#")) {
-    const [c, s] = code.split("#");
-    code = c.trim();
-    state = (s || "").trim() || state;
-  }
+  const code = (input || "").trim().split("#", 1)[0].trim();
   if (!code) return null;
   try {
-    const r = await exchangeToken(code, state, pending.verifier, REDIRECT_URI);
+    const r = await exchangeToken(code, pending.state, pending.verifier, REDIRECT_URI);
     return r;
   } catch (e) {
     log("claudeOAuth", "exchange 异常", String(e));

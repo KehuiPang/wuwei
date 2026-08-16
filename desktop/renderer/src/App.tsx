@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { WuweiMe, CatalogProviderDto } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
@@ -5011,36 +5011,6 @@ export function App() {
                 </>
               )}
             </div>
-
-            <button
-              className={"foot-browser" + (showBrowser ? " on" : "")}
-              title={t("foot.browserTitle", "内置浏览器（看/控 AI 打开的网页）")}
-              onClick={() => setShowBrowser((v) => !v)}
-              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
-            >
-              <svg
-                className="fb-ico"
-                width="13"
-                height="13"
-                viewBox="0 0 16 16"
-                fill="none"
-                aria-hidden="true"
-              >
-                <rect
-                  x="1.6"
-                  y="2.6"
-                  width="12.8"
-                  height="10.8"
-                  rx="2"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                />
-                <path d="M1.6 5.7h12.8" stroke="currentColor" strokeWidth="1.3" />
-                <circle cx="4" cy="4.15" r="0.62" fill="currentColor" />
-                <circle cx="6.1" cy="4.15" r="0.62" fill="currentColor" />
-              </svg>
-              <span className="fb-txt">{t("foot.browser")}</span>
-            </button>
 
             <span className="foot-spacer" />
 

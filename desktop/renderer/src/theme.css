@@ -1826,6 +1826,7 @@ body {
   background: var(--bg-raised);
   border-radius: 8px;
   padding: 2px;
+  flex: 0 0 auto; /* 窄窗口时不压缩不换行 */
 }
 .mode-mini button {
   border: none;
@@ -1835,6 +1836,7 @@ body {
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+  white-space: nowrap;
 }
 .mode-mini button.on {
   background: var(--bg);
@@ -1889,9 +1891,12 @@ body {
   align-items: center;
   gap: 0;
 }
-/* 平台名/模型名：不换行，超长省略号，鼠标悬停 title 显示全 */
+/* 平台名/模型名：不换行，超长省略号，鼠标悬停 title 显示全。
+   窄窗口时按钮跟随 flex 收缩，文字随之截断成 …，绝不换行 */
 .mq-txt {
   display: inline-block;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2964,39 +2969,19 @@ body {
   min-height: 0;
   background: #fff; /* 原生视图未加载时的底色 */
 }
-/* 底部浏览器开关 */
-.foot-browser {
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 3px 8px;
-  border-radius: 7px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.foot-browser .fb-ico {
-  flex-shrink: 0;
-}
-.foot-browser:hover {
-  color: var(--text);
-  background: var(--bg-soft);
-}
-.foot-browser.on {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-/* 底栏自适应：空间不够(如分屏变窄)时收起次要信息，别乱套 */
-.composer-foot.compact .fs-extra,
-.composer-foot.compact .fb-txt {
+/* 底栏自适应：空间不够(如分屏变窄)时收起次要信息，别乱套。
+   一律单行：显示不下就把平台/模型名截断成 …，绝不换行 */
+.composer-foot.compact .fs-extra {
   display: none;
 }
 .composer-foot.compact {
   gap: 8px;
+}
+.composer-foot.compact .mq-txt {
+  max-width: 84px; /* 窄窗口下平台/模型名更早打省略号 */
+}
+.composer-foot.compact .mode-mini button {
+  padding: 3px 8px;
 }
 
 /* MCP 管理面板 */
