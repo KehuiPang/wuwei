@@ -618,8 +618,9 @@ const DICT_EN: Record<string, string> = {
   "authbar.keyDetectPh": "Auto-detects after you copy the key; or paste it here",
   "errfix.msg": "The previous message errored (it may block later sends)",
   "errfix.undo": "Delete it and continue",
-  "suggest.title": "Click or press Tab to accept",
-  "suggest.key": "Tab to accept",
+  "suggest.title": "Click to send now · Tab to edit first",
+  "suggest.key": "Tab to edit",
+  "suggest.dismiss": "Dismiss",
   "composer.stop": "Stop",
   "composer.send": "Send (Enter)",
   // 连通状态灯（conn.*）

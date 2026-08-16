@@ -4313,7 +4313,7 @@ body {
 .code-copy:hover { color: var(--text); border-color: var(--accent); }
 .code-copy.ok { color: #5aa469; border-color: #5aa469; opacity: 1; }
 
-/* ===== 下一步建议栏(输入框上方，明显可点，Tab 采纳) ===== */
+/* ===== 下一步建议栏(输入框上方：点击直接发，Tab 填入，右侧叉叉关掉) ===== */
 .suggest-bar {
   display: flex; align-items: center; gap: 8px;
   margin: 0 2px 8px; padding: 7px 12px;
@@ -4328,6 +4328,16 @@ body {
   flex: 0 0 auto; padding: 1px 7px; font-size: 10.5px;
   border: 1px solid var(--border-strong); border-radius: 5px; color: var(--text-muted);
 }
+/* 关闭建议：平时很淡不抢视线，悬停整条时才显形 */
+.suggest-x {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; margin-right: -3px;
+  background: none; border: none; border-radius: 5px;
+  color: var(--text-muted); opacity: 0.45; cursor: pointer;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.suggest-bar:hover .suggest-x { opacity: 0.85; }
+.suggest-x:hover { opacity: 1; color: var(--text); background: var(--border); }
 
 /* ===== 图片放大预览 lightbox ===== */
 .lightbox {

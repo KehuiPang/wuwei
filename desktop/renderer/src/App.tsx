@@ -4815,16 +4815,33 @@ export function App() {
           {suggestion && input === "" && (
             <div
               className="suggest-bar"
-              title={t("suggest.title", "点击或按 Tab 采纳")}
+              title={t("suggest.title", "点击直接发送 · Tab 填入输入框再改")}
               onClick={() => {
-                setInput(suggestion);
+                // 点击=一步到位直接发；想先改的走 Tab 填入输入框
+                const s = suggestion;
                 setSuggestion("");
-                taRef.current?.focus();
+                submit(s);
               }}
             >
-              <span className="suggest-ico">💡</span>
+              <svg className="suggest-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3a6 6 0 0 0-3.4 10.9c.5.4.9 1 1 1.6h4.8c.1-.6.5-1.2 1-1.6A6 6 0 0 0 12 3z" />
+                <path d="M9.6 18.5h4.8M10.5 21h3" />
+              </svg>
               <span className="suggest-text">{suggestion}</span>
-              <span className="suggest-key">{lang === "en" ? "Tab to accept" : "Tab 采纳"}</span>
+              <span className="suggest-key">{t("suggest.key", "Tab 填入")}</span>
+              <button
+                className="suggest-x"
+                title={t("suggest.dismiss", "关闭建议")}
+                aria-label={t("suggest.dismiss", "关闭建议")}
+                onClick={(e) => {
+                  e.stopPropagation(); // 别冒泡到整条(那会直接发送)
+                  setSuggestion("");
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M5 5l14 14M19 5L5 19" />
+                </svg>
+              </button>
             </div>
           )}
           <div className="input-wrap">
