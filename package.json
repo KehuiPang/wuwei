@@ -1,6 +1,6 @@
 {
   "name": "wuwei",
-  "version": "1.6.9",
+  "version": "1.6.10",
   "description": "无为 · AI 助手（CLI + 桌面版）。本质 = LLM + 工具执行循环 + 终端/GUI。",
   "license": "MIT",
   "homepage": "https://wuweiai.io",
