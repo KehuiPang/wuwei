@@ -1,168 +1,18 @@
 <div align="center">
 
-# 无为 · Wuwei AI
+# Wuwei AI · 无为
 
-**免费、开源、本地优先的 AI Agent 客户端**
-*A free, open-source, local-first AI agent client*
+**A free, open-source, local-first AI agent client**
+*免费、开源、本地优先的 AI Agent 客户端*
 
-一句话让 AI 替你干活：读写文件、精确编辑、跑命令、联网搜索 —— 每一步都带权限确认。
-接 Claude / OpenAI / 国产大模型一键切换，自带你的 key，或用无为托管。国内直连，无需梯子。
+Tell an AI what you want in one sentence: read/write files, precise edits, run commands, search the web — every step behind a permission prompt.
+Switch between Claude / OpenAI / Chinese LLMs in one click, bring your own key or use Wuwei's hosted credits.
 
-[官网 Website](https://wuweiai.io) · [下载 Download](https://wuweiai.io) · [English](#english)
+[Website](https://wuweiai.io) · [Download](https://wuweiai.io) · [简体中文](./README.zh-CN.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
 <br/>
-
-<!-- 真机录屏演示（中文，高清 GIF 自动播放）。点击看更高清 mp4 -->
-<a href="https://github.com/wuwei-io/wuwei/releases/download/demo-media/demo-zh.mp4"><img src="docs/demo-zh.gif" alt="无为 Wuwei AI 演示：一句话 → 读文件 → 权限确认 → 改代码 → 完成" width="860"></a>
-
-<sub>真机演示 · 点击查看高清 mp4</sub>
-
-</div>
-
----
-
-## 这是什么
-
-无为是一个 **AI Agent**，不是补全、也不是聊天框。本质是：**大模型 + 工具执行循环 + 界面（终端 TUI / 桌面 GUI）**。
-
-你说出目标，它自己去读文件、改代码、执行命令、联网查资料，把一件事从头做完——而模型壳（harness）全部自研、开源可审计，代码和数据留在你自己电脑上。
-
-- 🆓 **真免费**：开箱即用，不订阅、不绑卡
-- 💻 **本地优先**：项目和代码留在你机器上，不上传到你看不见的地方
-- 🔍 **开源可审计（MIT）**：逻辑逐行可看，无隐藏遥测、无地域标记
-- 🔌 **模型自由**：Claude / OpenAI 兼容端点 / 本地模型（vLLM、Ollama）/ 国产大模型，一键切换
-- 🌏 **国内直连**：接国产模型不用梯子
-- 🛡️ **权限确认**：写文件、跑命令前请求确认（`y` / `N` / `a`=以后总是允许该工具）
-- 🧠 **脑网络（Brain）**：本地概念知识网络，沉淀项目 / 部署 / 踩坑等结构化知识，按需 `brain_recall` 检索子图，省 token 不必每次全量翻文档
-
-## 脑网络（Brain · 本地知识网络）
-
-一个跑在你本地的**概念知识网络**：把项目背景、git 路径、测试 / 线上环境、部署脚本位置、踩坑注意事项等**结构化沉淀**下来，需要时按需检索，而不是每次把整份文档塞进上下文。
-
-- `brain_recall` — 按任务检索相关概念子图（+ 命中文档库的原文片段，只给摘要 + 路径）
-- `brain_learn` / `brain_link` — 记住高价值知识、串联关系；同名覆盖纠正旧信息
-- `brain_read_doc` — 需要全文时按路径读，不必全量扫
-
-> 说明：脑网络为**无为托管 / 会员**能力，可在「知识网络」设置里开关、查看 / 覆盖其提示词。关闭后 `brain_*` 工具与说明一并停用。
-
-## 架构
-
-界面（TUI / GUI）→ 自研 Agent 主循环 → 工具执行（带权限确认）↔ 模型后端。
-模型接入两条路：**自带 key 直连** 或 **无为托管网关**。
-
-```mermaid
-flowchart TB
-    User(["你 · 一句话目标"])
-
-    subgraph UI["界面"]
-      TUI["终端 TUI · Ink"]
-      GUI["桌面 GUI · Electron"]
-    end
-
-    subgraph Core["Agent 核心 · 自研 harness（MIT 开源）"]
-      Loop["Agent 主循环<br/>token 计数 · 上下文自动压缩"]
-      Perm{"权限确认<br/>写文件 / 跑命令"}
-      Tools["工具集<br/>read · write · edit · bash · glob · grep"]
-      Brain[("脑网络 Brain<br/>本地知识网络<br/>recall · learn · link")]
-    end
-
-    subgraph Backend["模型后端"]
-      P1["Claude<br/>api-key / 订阅 OAuth"]
-      P2["OpenAI 兼容<br/>DeepSeek·智谱·Kimi·本地 vLLM/Ollama"]
-      P3["Codex<br/>ChatGPT 订阅"]
-    end
-
-    User --> UI --> Loop
-    Loop --> Perm -->|确认后| Tools
-    Tools -->|结果回灌| Loop
-    Loop <-->|brain_recall / learn<br/>按需检索省 token| Brain
-    Loop <-->|自带 key：直连| Backend
-    Loop <-->|无为托管：平台额度| GW["无为网关<br/>wuweiai.io/api/gateway"]
-    GW <--> Backend
-```
-
-## 两种用法
-
-1. **自带 Key（BYOK）** —— 填你自己的 API key 或本地端点，完全免费、数据不经过第三方。
-2. **无为托管** —— 用平台额度，零配置直接用；未登录也能免费体验（详见[官网](https://wuweiai.io)）。
-
-## 快速开始
-
-### 桌面版（推荐）
-
-到 [wuweiai.io](https://wuweiai.io) 下载对应系统的安装包（Windows / macOS / Linux），装好即用。
-
-### 命令行 / 从源码运行
-
-```bash
-git clone https://github.com/wuwei-io/wuwei.git
-cd wuwei
-npm install
-
-# 方式一：接 Claude API
-export ANTHROPIC_API_KEY=sk-ant-...
-export WUWEI_MODEL=claude-sonnet-5        # 可选
-npm run dev
-
-# 方式二：接本地 / OpenAI 兼容端点（vLLM / Ollama 等）
-export WUWEI_BASE_URL=http://localhost:8000/v1
-export WUWEI_MODEL=qwen3-coder
-npm run dev
-```
-
-进入后直接输入需求。常用命令：`/reset` 清空对话 · `/exit` 退出。写文件 / 跑命令类操作会请求确认。
-
-### 桌面版开发 / 打包
-
-```bash
-npm run desktop:dev          # 开发调试
-npm run desktop:build        # 构建
-npm run pack:wuwei           # 打 Windows 安装包
-npm run desktop:pack         # 打 macOS 安装包
-```
-
-## 支持的模型后端
-
-`anthropic`（API key）· `anthropic` + OAuth（Claude 订阅 / Claude Code）· `openai` 兼容（DeepSeek / 智谱 GLM / Kimi / MiniMax / 豆包 / 通义千问 / 腾讯混元 / Grok / 本地 vLLM·Ollama）· `codex`（ChatGPT 订阅）。各平台凭证分槽保存，底栏一键切换供应商 / 模型。
-
-## 项目结构
-
-```
-src/                CLI（终端 TUI）
-  index.tsx           入口：构造 Agent 并渲染 Ink 界面
-  config.ts           从环境变量决定模型后端
-  agent/
-    loop.ts           Agent 主循环 + token 计数 + 上下文自动压缩
-    provider.ts       多后端：anthropic / openai 兼容 / codex
-    prompt.ts         系统提示词
-  tools/index.ts      工具集：read / write / edit / bash / glob / grep
-  ui/                 Ink TUI 组件
-desktop/            桌面版（Electron）
-  main/               主进程：供应商预设、账号额度、密钥保险箱
-  renderer/           渲染层：多会话、流式、Markdown、图片
-```
-
-## 省额度
-
-长任务不崩：超过模型窗口 `WUWEI_COMPACT_THRESHOLD`（默认窗口的 80%）自动把旧历史压缩成摘要；`WUWEI_KEEP_RECENT`（默认 6）保留最近条数。
-
-## 贡献
-
-欢迎 Issue 和 PR。提交前请跑 `npm run typecheck` 确保类型通过。
-
-## 许可证
-
-[MIT](./LICENSE) © 2026 Wuwei（无为）
-
----
-
-<a name="english"></a>
-
-## English
-
-<div align="center">
 
 <!-- Real screen recording (English), HD GIF autoplays. Click to open the higher-quality mp4 -->
 <a href="https://github.com/wuwei-io/wuwei/releases/download/demo-media/demo-en.mp4"><img src="docs/demo-en.gif" alt="Wuwei AI demo: one prompt → read file → permission prompt → edit code → done" width="860"></a>
@@ -171,29 +21,137 @@ desktop/            桌面版（Electron）
 
 </div>
 
-<br/>
+---
 
-**Wuwei AI** is a free, open-source, local-first **AI agent** — not autocomplete, not a chat box. At its core: a large language model + a tool-execution loop + an interface (terminal TUI / desktop GUI).
+## What is this
 
-Tell it what you want and it reads files, edits code, runs commands, and searches the web to finish the task — every step behind a permission prompt. The harness is fully open source (MIT); your code and data stay on your own machine.
+Wuwei is an **AI agent** — not autocomplete, not a chat box. At its core: a **large language model + a tool-execution loop + an interface** (terminal TUI / desktop GUI).
 
-- 🆓 **Genuinely free** — no subscription, no credit card
-- 💻 **Local-first** — your code stays on your machine
-- 🔍 **Open source (MIT)** — auditable line by line, no hidden telemetry
-- 🔌 **Bring any model** — Claude, any OpenAI-compatible endpoint, local models (vLLM / Ollama), and more
-- 🛡️ **Permission prompts** — confirm before writing files or running commands
+You state a goal and it reads files, edits code, runs commands, and searches the web to finish the task from start to end — while the harness is fully self-built, open source and auditable, with your code and data staying on your own machine.
 
-**Two ways to use it:** bring your own API key (BYOK, fully free, data stays local), or use Wuwei's hosted credits (zero config — see [wuweiai.io](https://wuweiai.io)).
+- 🆓 **Genuinely free** — works out of the box, no subscription, no credit card
+- 💻 **Local-first** — your project and code stay on your machine, never uploaded somewhere you can't see
+- 🔍 **Open source (MIT)** — auditable line by line, no hidden telemetry, no region tagging
+- 🔌 **Bring any model** — Claude / any OpenAI-compatible endpoint / local models (vLLM, Ollama) / Chinese LLMs, one-click switch
+- 🌏 **Direct access in China** — no VPN needed for Chinese models
+- 🛡️ **Permission prompts** — confirm before writing files or running commands (`y` / `N` / `a` = always allow this tool)
+- 🧠 **Brain (local knowledge network)** — a local concept knowledge network that captures project / deployment / gotcha knowledge; recall subgraphs on demand via `brain_recall`, saving tokens instead of re-reading whole docs every time
 
-### Quick start
+## Brain · local knowledge network
 
-Download the desktop app for Windows / macOS / Linux at **[wuweiai.io](https://wuweiai.io)**, or run from source:
+A **concept knowledge network** that runs locally: it **structurally captures** project background, git paths, test / production environments, deploy-script locations, gotchas and more, then recalls them on demand — instead of stuffing the whole doc into context every time.
+
+- `brain_recall` — recall the relevant concept subgraph per task (+ hits from your doc library, returning only summary + path)
+- `brain_learn` / `brain_link` — remember high-value knowledge and wire up relations; same-name overwrite corrects stale info
+- `brain_read_doc` — read the full text by path when you need it, no full scan required
+
+> Note: Brain is a **Wuwei hosted / member** capability. You can toggle it and view / override its prompt in the "Knowledge Network" settings. When off, the `brain_*` tools and their instructions are disabled together.
+
+## Architecture
+
+Interface (TUI / GUI) → self-built agent main loop → tool execution (with permission prompts) ↔ model backend.
+Models connect two ways: **bring-your-own-key direct** or the **Wuwei hosted gateway**.
+
+```mermaid
+flowchart TB
+    User(["You · one-sentence goal"])
+
+    subgraph UI["Interface"]
+      TUI["Terminal TUI · Ink"]
+      GUI["Desktop GUI · Electron"]
+    end
+
+    subgraph Core["Agent core · self-built harness (MIT)"]
+      Loop["Agent main loop<br/>token counting · auto context compaction"]
+      Perm{"Permission prompt<br/>write file / run command"}
+      Tools["Tools<br/>read · write · edit · bash · glob · grep"]
+      Brain[("Brain<br/>local knowledge network<br/>recall · learn · link")]
+    end
+
+    subgraph Backend["Model backends"]
+      P1["Claude<br/>api-key / subscription OAuth"]
+      P2["OpenAI-compatible<br/>DeepSeek·GLM·Kimi·local vLLM/Ollama"]
+      P3["Codex<br/>ChatGPT subscription"]
+    end
+
+    User --> UI --> Loop
+    Loop --> Perm -->|after confirm| Tools
+    Tools -->|feed result back| Loop
+    Loop <-->|brain_recall / learn<br/>recall on demand, save tokens| Brain
+    Loop <-->|BYOK: direct| Backend
+    Loop <-->|Wuwei hosted: platform credits| GW["Wuwei gateway<br/>wuweiai.io/api/gateway"]
+    GW <--> Backend
+```
+
+## Two ways to use it
+
+1. **Bring your own key (BYOK)** — fill in your own API key or local endpoint; fully free, data never goes through a third party.
+2. **Wuwei hosted** — use platform credits with zero config; even works free without login (see the [website](https://wuweiai.io)).
+
+## Quick start
+
+### Desktop (recommended)
+
+Download the installer for your OS (Windows / macOS / Linux) at [wuweiai.io](https://wuweiai.io) and you're ready to go.
+
+### CLI / run from source
 
 ```bash
 git clone https://github.com/wuwei-io/wuwei.git
-cd wuwei && npm install
-export ANTHROPIC_API_KEY=sk-ant-...   # or WUWEI_BASE_URL for a local/OpenAI-compatible endpoint
+cd wuwei
+npm install
+
+# Option 1: Claude API
+export ANTHROPIC_API_KEY=sk-ant-...
+export WUWEI_MODEL=claude-sonnet-5        # optional
+npm run dev
+
+# Option 2: local / OpenAI-compatible endpoint (vLLM / Ollama, etc.)
+export WUWEI_BASE_URL=http://localhost:8000/v1
+export WUWEI_MODEL=qwen3-coder
 npm run dev
 ```
 
-Licensed under [MIT](./LICENSE).
+After it starts, just type your request. Common commands: `/reset` clears the conversation · `/exit` quits. File-write / command-run operations ask for confirmation.
+
+### Desktop dev / packaging
+
+```bash
+npm run desktop:dev          # dev
+npm run desktop:build        # build
+npm run pack:wuwei           # Windows installer
+npm run desktop:pack         # macOS installer
+```
+
+## Supported model backends
+
+`anthropic` (API key) · `anthropic` + OAuth (Claude subscription / Claude Code) · `openai`-compatible (DeepSeek / Zhipu GLM / Kimi / MiniMax / Doubao / Qwen / Hunyuan / Grok / local vLLM·Ollama) · `codex` (ChatGPT subscription). Credentials are saved in separate slots per platform; switch provider / model from the bottom bar in one click.
+
+## Project structure
+
+```
+src/                CLI (terminal TUI)
+  index.tsx           entry: builds the Agent and renders the Ink UI
+  config.ts           picks the model backend from env vars
+  agent/
+    loop.ts           agent main loop + token counting + auto context compaction
+    provider.ts       multi-backend: anthropic / openai-compatible / codex
+    prompt.ts         system prompt
+  tools/index.ts      tools: read / write / edit / bash / glob / grep
+  ui/                 Ink TUI components
+desktop/            desktop (Electron)
+  main/               main process: provider presets, account credits, key vault
+  renderer/           renderer: multi-session, streaming, Markdown, images
+```
+
+## Saving tokens
+
+Long tasks won't break: when the context exceeds `WUWEI_COMPACT_THRESHOLD` (default 80% of the window) old history is auto-compacted into a summary; `WUWEI_KEEP_RECENT` (default 6) keeps the most recent turns.
+
+## Contributing
+
+Issues and PRs welcome. Run `npm run typecheck` before submitting to make sure types pass.
+
+## License
+
+[MIT](./LICENSE) © 2026 Wuwei (无为)
