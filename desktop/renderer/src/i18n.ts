@@ -559,6 +559,7 @@ const DICT_EN: Record<string, string> = {
   "notice.subEntry": "Subscription entry (rolled out). The subscription page/benefits will be wired up later.",
   "menu.subscription": "Subscription",
   "acct.guestInitial": "G",
+  "acct.userInitial": "W",
   // 顶栏 / 窗口（hdr.* win.*）
   "hdr.browserDetached": "Browser (separate window)",
   "hdr.reattachSplit": "Reattach as split",

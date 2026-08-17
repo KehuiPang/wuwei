@@ -3930,7 +3930,11 @@ export function App() {
                 return next;
               })}>
                 <div className={"acct-av" + (wuwei ? "" : " off")}>
-                  <UserAvatar url={wuwei?.user.avatar} fallback={(wuwei?.user.name || wuwei?.user.email || "游").slice(0, 1).toUpperCase()} />
+                  {/* 未登录的头像首字也要跟语言：中文「游」/英文 G，别让英文界面里冒出个汉字 */}
+                  <UserAvatar
+                    url={wuwei?.user.avatar}
+                    fallback={(wuwei?.user.name || wuwei?.user.email || t("acct.guestInitial", "游")).slice(0, 1).toUpperCase()}
+                  />
                 </div>
                 <div
                   className="acct-name"
@@ -3961,7 +3965,8 @@ export function App() {
                         const bal = wuwei.coin.balance;
                         const openPack = () => { setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
                         const openPlan = () => { setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
-                        const initial = (wuwei.user.name || wuwei.user.email || "无").slice(0, 1).toUpperCase();
+                        // 已登录但没昵称/邮箱时的兜底首字：中文取「无」(无为)，英文取 W
+                        const initial = (wuwei.user.name || wuwei.user.email || t("acct.userInitial", "无")).slice(0, 1).toUpperCase();
                         const Spark = () => (
                           <svg className="acct-spark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                             <path d="M8 1.4l1.5 5.1 5.1 1.5-5.1 1.5L8 14.6 6.5 9.5 1.4 8l5.1-1.5z" />
