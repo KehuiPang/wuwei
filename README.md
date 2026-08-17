@@ -14,10 +14,12 @@
 
 <br/>
 
-<!-- 真机录屏演示（中文）。完整视频见 docs/demo-zh.mp4 -->
-<a href="docs/demo-zh.mp4"><img src="docs/demo-zh.gif" alt="无为 Wuwei AI 演示：一句话 → 读文件 → 权限确认 → 改代码 → 完成" width="820"></a>
+<!-- 真机录屏演示（中文）。GitHub 会把下方 video 渲染成播放器；不支持时回退到 GIF -->
+<video src="https://github.com/wuwei-io/wuwei/releases/download/demo-media/demo-zh.mp4" width="820" controls muted playsinline poster="docs/demo-zh.gif">
+  <a href="docs/demo-zh.mp4"><img src="docs/demo-zh.gif" alt="无为 Wuwei AI 演示：一句话 → 读文件 → 权限确认 → 改代码 → 完成" width="820"></a>
+</video>
 
-<sub>真机演示 · 点击查看<a href="docs/demo-zh.mp4">高清视频</a></sub>
+<sub>真机演示 · 点击播放，或看 <a href="docs/demo-zh.mp4">docs/demo-zh.mp4</a></sub>
 
 </div>
 
@@ -164,10 +166,12 @@ desktop/            桌面版（Electron）
 
 <div align="center">
 
-<!-- Real screen recording (English). Full video: docs/demo-en.mp4 -->
-<a href="docs/demo-en.mp4"><img src="docs/demo-en.gif" alt="Wuwei AI demo: one prompt → read file → permission prompt → edit code → done" width="820"></a>
+<!-- Real screen recording (English). GitHub renders the video below as a player; falls back to GIF -->
+<video src="https://github.com/wuwei-io/wuwei/releases/download/demo-media/demo-en.mp4" width="820" controls muted playsinline poster="docs/demo-en.gif">
+  <a href="docs/demo-en.mp4"><img src="docs/demo-en.gif" alt="Wuwei AI demo: one prompt → read file → permission prompt → edit code → done" width="820"></a>
+</video>
 
-<sub>Live demo · click to watch the <a href="docs/demo-en.mp4">HD video</a></sub>
+<sub>Live demo · click to play, or see <a href="docs/demo-en.mp4">docs/demo-en.mp4</a></sub>
 
 </div>
 
