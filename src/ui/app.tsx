@@ -6,6 +6,9 @@ import { Agent, type SessionUsage } from "../agent/loop.js";
 import type { Tool } from "../types.js";
 import { MessageItem, StatusBar, PermissionPrompt, type Item } from "./views.js";
 
+// 终端界面文案跟随语言（WUWEI_LANG 在 src/index.tsx 入口按系统语言定，桌面端由设置写入）
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 interface Pending {
   tool: Tool;
   input: Record<string, unknown>;
@@ -90,10 +93,14 @@ export function App({
             setPending({ tool, input, resolve });
           }),
         onUsage: setUsage,
-        onCompact: (b, a) => push({ type: "notice", text: `上下文已压缩：${b} → ${a} 条消息` }),
+        onCompact: (b, a) =>
+          push({
+            type: "notice",
+            text: tt(`上下文已压缩：${b} → ${a} 条消息`, `Context compacted: ${b} → ${a} messages`),
+          }),
       });
     } catch (e: any) {
-      push({ type: "notice", text: `出错: ${e.message}` });
+      push({ type: "notice", text: tt(`出错: ${e.message}`, `Error: ${e.message}`) });
     } finally {
       setBusy(false);
     }
@@ -111,7 +118,10 @@ export function App({
     if (text === "/help") {
       push({
         type: "notice",
-        text: "命令：/reset 清空对话 · /exit 退出。直接输入需求即可；写文件/命令会请求确认。",
+        text: tt(
+          "命令：/reset 清空对话 · /exit 退出。直接输入需求即可；写文件/命令会请求确认。",
+          "Commands: /reset clears the chat · /exit quits. Just type what you need; writing files or running commands asks for confirmation.",
+        ),
       });
       return;
     }
@@ -129,14 +139,17 @@ export function App({
 
       {busy && !pending && (
         <Box marginTop={1}>
-          <Spinner label="思考中…" />
+          <Spinner label={tt("思考中…", "Thinking…")} />
         </Box>
       )}
 
       {!busy && !pending && (
         <Box marginTop={1}>
           <Text color="green">› </Text>
-          <TextInput placeholder="输入需求，回车发送（/help 查看命令）" onSubmit={onSubmit} />
+          <TextInput
+            placeholder={tt("输入需求，回车发送（/help 查看命令）", "Type what you need, Enter to send (/help for commands)")}
+            onSubmit={onSubmit}
+          />
         </Box>
       )}
 

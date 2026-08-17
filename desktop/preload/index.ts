@@ -36,9 +36,16 @@ const EVENTS = [
 ] as const;
 
 // 把当前 edition(wuwei/minicc)暴露给渲染层，供动态设置窗口/文档标题。
+// ⚠️ appName 在 preload 加载时就定死了：渲染进程的 env 是启动时从主进程继承的快照，
+//    用户之后在设置里切语言，这里不会跟着变。渲染层要显示品牌名请用 i18n 的 splash.brand。
 contextBridge.exposeInMainWorld("wuweiEdition", {
   edition: process.env.WUWEI_EDITION || "wuwei",
-  appName: (process.env.WUWEI_EDITION || "wuwei") === "minicc" ? "minicc" : "无为",
+  appName:
+    (process.env.WUWEI_EDITION || "wuwei") === "minicc"
+      ? "minicc"
+      : process.env.WUWEI_LANG === "en"
+        ? "Wuwei"
+        : "无为",
 });
 
 const api = {

@@ -3,6 +3,9 @@ import React from "react";
 import { Box, Text } from "ink";
 import type { SessionUsage } from "../agent/loop.js";
 
+// 终端界面文案跟随语言（WUWEI_LANG 在 src/index.tsx 入口按系统语言定，桌面端由设置写入）
+const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
+
 export type Item =
   | { type: "user"; text: string }
   | { type: "assistant"; text: string }
@@ -49,7 +52,7 @@ export function ToolView({ item }: { item: Extract<Item, { type: "tool" }> }) {
       {clipped && (
         <Box marginLeft={2} flexDirection="column">
           <Text dimColor>{clipped.body}</Text>
-          {clipped.clipped && <Text dimColor>…（已截断）</Text>}
+          {clipped.clipped && <Text dimColor>{tt("…（已截断）", "…(truncated)")}</Text>}
         </Box>
       )}
     </Box>
@@ -94,8 +97,9 @@ export function StatusBar({
     <Box marginTop={1}>
       <Text dimColor>
         {busy ? "● " : "○ "}
-        {provider} · {model} │ 本上下文≈{usage.lastInput} · 累计 in {usage.totalInput}/out{" "}
-        {usage.totalOutput} │ /help /reset /exit
+        {provider} · {model} │ {tt("本上下文≈", "context ≈")}
+        {usage.lastInput} · {tt("累计 in ", "total in ")}
+        {usage.totalInput}/out {usage.totalOutput} │ /help /reset /exit
       </Text>
     </Box>
   );
@@ -111,12 +115,14 @@ export function PermissionPrompt({
   return (
     <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="yellow" paddingX={1}>
       <Text color="yellow">
-        需要执行 <Text bold>{name}</Text>
+        {tt("需要执行 ", "Wants to run ")}
+        <Text bold>{name}</Text>
       </Text>
       <Text dimColor>{previewInput(input)}</Text>
       <Text>
-        允许? <Text color="green">y</Text> / <Text color="red">N</Text> /{" "}
-        <Text color="cyan">a</Text>=总是允许该工具
+        {tt("允许? ", "Allow? ")}
+        <Text color="green">y</Text> / <Text color="red">N</Text> / <Text color="cyan">a</Text>
+        {tt("=总是允许该工具", "=always allow this tool")}
       </Text>
     </Box>
   );
