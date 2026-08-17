@@ -14,10 +14,10 @@
 
 <br/>
 
-<!-- 示意动画(SVG，GitHub 会渲染动画)。有真机录屏后可替换为 docs/demo.gif -->
-<img src="docs/demo.svg" alt="Wuwei AI 演示：一句话 → 读文件 → 权限确认 → 改代码 → 完成" width="820">
+<!-- 真机录屏演示（中文）。完整视频见 docs/demo-zh.mp4 -->
+<a href="docs/demo-zh.mp4"><img src="docs/demo-zh.gif" alt="无为 Wuwei AI 演示：一句话 → 读文件 → 权限确认 → 改代码 → 完成" width="820"></a>
 
-<sub>示意动画 · 想换成真机录屏，导出 <code>docs/demo.gif</code> 并把上方 src 改掉即可</sub>
+<sub>真机演示 · 点击查看<a href="docs/demo-zh.mp4">高清视频</a></sub>
 
 </div>
 
@@ -161,6 +161,17 @@ desktop/            桌面版（Electron）
 <a name="english"></a>
 
 ## English
+
+<div align="center">
+
+<!-- Real screen recording (English). Full video: docs/demo-en.mp4 -->
+<a href="docs/demo-en.mp4"><img src="docs/demo-en.gif" alt="Wuwei AI demo: one prompt → read file → permission prompt → edit code → done" width="820"></a>
+
+<sub>Live demo · click to watch the <a href="docs/demo-en.mp4">HD video</a></sub>
+
+</div>
+
+<br/>
 
 **Wuwei AI** is a free, open-source, local-first **AI agent** — not autocomplete, not a chat box. At its core: a large language model + a tool-execution loop + an interface (terminal TUI / desktop GUI).
 
