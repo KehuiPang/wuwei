@@ -1,9 +1,8 @@
 <div align="center">
 
-# Wuwei AI · 无为
+# Wuwei AI
 
 **A free, open-source, local-first AI agent client**
-*免费、开源、本地优先的 AI Agent 客户端*
 
 Tell an AI what you want in one sentence: read/write files, precise edits, run commands, search the web — every step behind a permission prompt.
 Switch between Claude / OpenAI / Chinese LLMs in one click, bring your own key or use Wuwei's hosted credits.
