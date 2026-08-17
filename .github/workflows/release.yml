@@ -43,9 +43,37 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false # 无签名证书：跳过签名，产出未签名 dmg
 
+      # Windows 代码签名：Azure Trusted Signing（electron-builder 26 原生支持，打包时自动 Install-Module TrustedSigning）。
+      # 开关 = 是否配置了 AZURE_TS_ENDPOINT secret：
+      #   · 未配置(默认) → 走原始未签名命令，行为与接入前完全一致，绝不破坏现有发版。
+      #   · 已配置       → 用 -c.win.azureSignOptions.* 注入签名参数（值全部来自 secrets，不落库），
+      #                    产出「发布者=公司名」的已签名 exe，用户不再见 SmartScreen「发布者未知」警告。
+      # 需在仓库 Secrets 配齐 7 项：AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET
+      #   / AZURE_TS_ENDPOINT / AZURE_TS_ACCOUNT / AZURE_TS_PROFILE / AZURE_PUBLISHER_NAME
       - name: Package Windows (exe)
         if: matrix.os == 'windows-latest'
-        run: npx electron-builder --win --config electron-builder.wuwei.yml --publish never
+        shell: pwsh
+        run: |
+          $common = @('--win', '--config', 'electron-builder.wuwei.yml', '--publish', 'never')
+          if ($env:AZURE_TS_ENDPOINT) {
+            Write-Host 'Azure Trusted Signing 已配置 → 打签名包'
+            npx electron-builder @common `
+              "-c.win.azureSignOptions.endpoint=$env:AZURE_TS_ENDPOINT" `
+              "-c.win.azureSignOptions.codeSigningAccountName=$env:AZURE_TS_ACCOUNT" `
+              "-c.win.azureSignOptions.certificateProfileName=$env:AZURE_TS_PROFILE" `
+              "-c.win.azureSignOptions.publisherName=$env:AZURE_PUBLISHER_NAME"
+          } else {
+            Write-Host '未配置 Azure Trusted Signing → 打未签名包（行为同接入前）'
+            npx electron-builder @common
+          }
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TS_ENDPOINT: ${{ secrets.AZURE_TS_ENDPOINT }}
+          AZURE_TS_ACCOUNT: ${{ secrets.AZURE_TS_ACCOUNT }}
+          AZURE_TS_PROFILE: ${{ secrets.AZURE_TS_PROFILE }}
+          AZURE_PUBLISHER_NAME: ${{ secrets.AZURE_PUBLISHER_NAME }}
 
       # 上传安装包 + latest*.yml 到阿里云 OSS（自动更新源 + 官网下载源）。
       # 凭证走仓库 secrets；未配置则脚本内跳过，不影响 GitHub Release。
