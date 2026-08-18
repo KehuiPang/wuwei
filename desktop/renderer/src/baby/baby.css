@@ -1,0 +1,296 @@
+/* ============================================================
+   数字婴儿 · 设计规范（承接 minicc VI：玄墨底 / 月白字 / 靛青导航 / 朱赭一念）
+   ------------------------------------------------------------
+   色  彩：结构色一律取 theme.css 的 VI 变量(--bg/--border/--text/--accent…)，
+           本文件只新增两类专属色——①婴儿本体(肤色/衣服/腮红) ②九种活动状态色。
+           朱赭 --spark 全面板只留给唯一主操作「让它一直活着」，占比不超过一成。
+   间  距：4 的倍数。卡片内 12/14，卡片之间 10，面板边距 14/16。
+   圆  角：--by-r-sm 8 · --by-r-md 12 · --by-r-lg 16 · 胶囊 999。
+   字  号：11 辅助 / 12 次要 / 13 正文 / 15 小标题 / 17 面板标题；数字用等宽 --mono。
+   图  标：全部 SVG(见 icons.tsx)，24 网格、线性描边 1.7、currentColor，界面内不出现 emoji。
+   动  效：交互 .12s / 折叠 .24s / 生命体征呼吸 3~5s；prefers-reduced-motion 下全部静止。
+   ============================================================ */
+:root {
+  --by-r-sm: 8px;
+  --by-r-md: 12px;
+  --by-r-lg: 16px;
+  --by-gap: 10px;
+  --by-pad: 14px;
+  --by-left-w: 384px;
+  /* 婴儿本体(深色底：肤色压一档，免得在玄墨上发光) */
+  --bb-skin: #f0cbb2;
+  --bb-skin-2: #ddb096;
+  --bb-hair: #8a6350;
+  --bb-eye: #241f24;
+  --bb-cheek: #ef8f83;
+  --bb-suit: #4d7f8d;
+  --bb-suit-2: #3d6875;
+  --bb-halo-o: 0.14;
+}
+:root[data-theme="light"],
+:root[data-theme="gold"] {
+  --bb-skin: #fadcc6;
+  --bb-skin-2: #edbfa4;
+  --bb-hair: #7a5342;
+  --bb-eye: #2b2530;
+  --bb-cheek: #f0897c;
+  --bb-suit: #2f6b7d;
+  --bb-suit-2: #245665;
+  --bb-halo-o: 0.1;
+}
+/* 九种活动状态的语义色：状态一换，光晕/胶囊/进度尖端整体换色 */
+.bb-s-sleep,
+.by-s-sleep { --bb-state: #7b86c4; }
+.bb-s-search,
+.by-s-search { --bb-state: #c8933f; }
+.bb-s-read,
+.by-s-read { --bb-state: #5c8a73; }
+.bb-s-think,
+.by-s-think { --bb-state: #6f9fad; }
+.bb-s-wonder,
+.by-s-wonder { --bb-state: #9a7fbe; }
+.bb-s-talk,
+.by-s-talk { --bb-state: #c05f3c; }
+.bb-s-listen,
+.by-s-listen { --bb-state: #4fa39a; }
+.bb-s-daydream,
+.by-s-daydream { --bb-state: #8f9aa6; }
+.bb-s-rest,
+.by-s-rest { --bb-state: #8b949c; }
+
+/* ============ 一、婴儿形象 ============ */
+.bb { display: block; overflow: visible; }
+.bb-head { fill: var(--bb-skin); }
+.bb-ear { fill: var(--bb-skin-2); }
+.bb-hand { fill: var(--bb-skin); }
+.bb-hair { fill: var(--bb-hair); }
+.bb-suit { fill: var(--bb-suit); }
+.bb-suit-2 { fill: var(--bb-suit-2); }
+.bb-eye { fill: var(--bb-eye); }
+.bb-glint { fill: #fff; opacity: 0.9; }
+.bb-lid { fill: none; stroke: var(--bb-eye); stroke-width: 2.6; stroke-linecap: round; }
+.bb-cheek { fill: var(--bb-cheek); }
+.bb-mouth { fill: none; stroke: var(--bb-eye); stroke-width: 2.4; stroke-linecap: round; }
+.bb-mouth-fill { fill: #b4483a; }
+.bb-halo { fill: var(--bb-state); opacity: var(--bb-halo-o); animation: bbHalo 4.2s ease-in-out infinite; transform-origin: 80px 82px; }
+.bb-ring { fill: none; stroke: var(--bb-state); stroke-width: 1.4; opacity: 0; transform-origin: 80px 82px; }
+.bb-alive .bb-ring { animation: bbRing 3.4s ease-out infinite; }
+.bb-acc,
+.bb-acc-line { fill: none; stroke: var(--bb-state); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.bb-z { fill: none; stroke: var(--bb-state); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.bb-dot { fill: var(--bb-state); opacity: 0.85; }
+.bb-wave { fill: none; stroke: var(--bb-state); stroke-width: 2.2; stroke-linecap: round; opacity: 0; }
+.bb-float { animation: bbFloat 4.6s ease-in-out infinite; transform-origin: 80px 90px; }
+.bb-breath { animation: bbBreath 3.4s ease-in-out infinite; transform-origin: 80px 100px; }
+.bb-s-sleep .bb-breath { animation-duration: 5.4s; }
+.bb-blink { transform-box: fill-box; transform-origin: center; animation: bbBlink 6.2s ease-in-out infinite; }
+.bb-scan { animation: bbScan 2.8s ease-in-out infinite; }
+.bb-talkmouth { transform-box: fill-box; transform-origin: center; animation: bbTalk 0.62s ease-in-out infinite; }
+.bb-z-0 { animation: bbZ 3.6s ease-out infinite; }
+.bb-z-1 { animation: bbZ 3.6s ease-out 1.2s infinite; }
+.bb-z-2 { animation: bbZ 3.6s ease-out 2.4s infinite; }
+.bb-orbit { animation: bbOrbit 5s ease-in-out infinite; transform-origin: 80px 66px; }
+.bb-sway { animation: bbSway 3.8s ease-in-out infinite; transform-origin: 118px 30px; }
+.bb-drift { animation: bbDrift 6s ease-in-out infinite; }
+.bb-pop { animation: bbPop 2.4s ease-in-out infinite; transform-origin: 120px 28px; }
+.bb-dot-0 { animation: bbDots 2.2s ease-in-out infinite; }
+.bb-dot-1 { animation: bbDots 2.2s ease-in-out 0.25s infinite; }
+.bb-dot-2 { animation: bbDots 2.2s ease-in-out 0.5s infinite; }
+.bb-wave-0 { animation: bbWave 2.1s ease-out infinite; }
+.bb-wave-1 { animation: bbWave 2.1s ease-out 0.35s infinite; }
+.bb-wave-2 { animation: bbWave 2.1s ease-out 0.7s infinite; }
+@keyframes bbFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3.5px); } }
+@keyframes bbBreath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.022); } }
+@keyframes bbBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.08); } }
+@keyframes bbHalo { 0%, 100% { transform: scale(1); opacity: var(--bb-halo-o); } 50% { transform: scale(1.05); opacity: calc(var(--bb-halo-o) * 1.6); } }
+@keyframes bbRing { 0% { transform: scale(0.86); opacity: 0.5; } 100% { transform: scale(1.16); opacity: 0; } }
+@keyframes bbZ { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 0.95; } 100% { opacity: 0; transform: translateY(-16px); } }
+@keyframes bbScan { 0%, 100% { transform: translateX(-2.4px); } 50% { transform: translateX(2.4px); } }
+@keyframes bbTalk { 0%, 100% { transform: scaleY(0.55); } 50% { transform: scaleY(1.25); } }
+@keyframes bbOrbit { 0%, 100% { transform: rotate(-9deg); } 50% { transform: rotate(9deg); } }
+@keyframes bbSway { 0%, 100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-2px); } }
+@keyframes bbDrift { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-7px); } }
+@keyframes bbPop { 0%, 100% { transform: scale(1) rotate(-4deg); } 50% { transform: scale(1.14) rotate(4deg); } }
+@keyframes bbDots { 0%, 100% { opacity: 0.25; transform: translateY(1.5px); } 50% { opacity: 1; transform: translateY(-1.5px); } }
+@keyframes bbWave { 0% { opacity: 0; } 25% { opacity: 0.9; } 100% { opacity: 0; } }
+
+/* ============ 二、面板骨架 ============ */
+.baby-panel { position: absolute; top: 42px; left: 0; right: 0; bottom: 0; z-index: 30; background: var(--bg); display: flex; flex-direction: column; -webkit-app-region: no-drag; }
+.baby-panel * { -webkit-app-region: no-drag; }
+.baby-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.baby-brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--text); }
+.baby-brand .by-mark { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); }
+.baby-brand-sub { font-size: 11px; font-weight: 400; color: var(--text-muted); margin-left: 2px; }
+.baby-tabs { display: flex; gap: 4px; margin-left: auto; }
+.baby-tab { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); border-radius: var(--by-r-sm); padding: 5px 12px; cursor: pointer; font-size: 13px; transition: color .12s, border-color .12s, background .12s; }
+.baby-tab:hover { color: var(--text); }
+.baby-tab.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.baby-close { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: transparent; color: var(--text-dim); border-radius: var(--by-r-sm); padding: 5px 12px; cursor: pointer; font-size: 13px; }
+.baby-close:hover { color: var(--text); border-color: var(--border-strong); }
+.baby-body { flex: 1; display: flex; gap: var(--by-gap); padding: 12px 16px; overflow: hidden; }
+.baby-left { width: var(--by-left-w); flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--by-gap); overflow-y: auto; overflow-x: hidden; padding-right: 2px; }
+.baby-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* 左栏整体折叠成侧边窄条：只留一个小婴儿 + 展开按钮 */
+.baby-rail { flex: 0 0 auto; width: 46px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px 0; border: 1px solid var(--border); border-radius: var(--by-r-md); background: var(--bg-raised); }
+.baby-rail-btn { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; color: var(--text-dim); border-radius: var(--by-r-sm); cursor: pointer; }
+.baby-rail-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.baby-rail-vert { writing-mode: vertical-rl; font-size: 11px; color: var(--text-muted); letter-spacing: 2px; margin-top: 2px; }
+.baby-rail-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+.baby-rail-dot.live { background: var(--green); animation: byPulse 1.8s infinite; }
+
+/* ============ 三、卡片（可折叠） ============ */
+/* flex: 0 0 auto 是关键：左栏是 flex 列，不写死不收缩的话三张卡会被压扁，
+   卡片 overflow:hidden 再把溢出内容裁掉，整栏 scrollHeight 撑不起来 → 看着有内容却滚不动 */
+.baby-card { flex: 0 0 auto; border: 1px solid var(--border); border-radius: var(--by-r-md); background: var(--bg-raised); min-width: 0; overflow: hidden; }
+.by-card-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; user-select: none; color: var(--text); }
+.by-card-head:hover { background: var(--accent-soft); }
+.by-card-ico { display: flex; color: var(--accent); }
+.by-card-t { font-size: 13px; font-weight: 600; }
+.by-card-meta { margin-left: auto; font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+.by-caret { display: flex; color: var(--text-faint); transition: transform .24s ease; }
+.by-caret.off { transform: rotate(-90deg); }
+.by-card-body { padding: 0 12px 12px; }
+.baby-pre { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; max-width: 100%; font-size: 12px; line-height: 1.6; margin: 0; font-family: inherit; color: var(--text-dim); }
+.baby-scroll { max-height: 230px; overflow-y: auto; overflow-x: hidden; }
+
+/* ============ 四、状态卡：形象 + 生命体征 ============ */
+.by-hero { display: flex; gap: 12px; align-items: center; padding: 4px 0 10px; }
+.by-hero-art { flex: 0 0 auto; }
+.by-hero-info { min-width: 0; flex: 1; }
+.by-name { display: flex; align-items: center; gap: 7px; font-size: 15px; font-weight: 700; color: var(--text); }
+.by-badge { font-size: 10.5px; font-weight: 600; padding: 1.5px 7px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--text-muted); }
+.by-badge.live { border-color: transparent; background: var(--green-bg); color: var(--green); }
+.by-act { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 6px 9px; border-radius: var(--by-r-sm); background: color-mix(in srgb, var(--bb-state) 12%, transparent); color: var(--text); font-size: 12.5px; line-height: 1.45; }
+.by-act-ico { flex: 0 0 auto; display: flex; color: var(--bb-state); }
+.by-act-txt { min-width: 0; word-break: break-word; }
+.by-sub { margin-top: 5px; font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+
+.by-bars { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 10px; }
+.by-bar-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-dim); }
+.by-bar-ico { display: flex; flex: 0 0 auto; }
+.by-bar-lab { flex: 0 0 42px; }
+.by-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; }
+.by-bar span { display: block; height: 100%; border-radius: 999px; transition: width .5s ease; }
+.by-bar-num { flex: 0 0 auto; font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+.by-bar.energy span { background: var(--warn); }
+.by-bar.happy span { background: var(--spark); }
+
+.by-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+.by-stat { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid var(--border); border-radius: var(--by-r-sm); min-width: 0; }
+.by-stat-ico { display: flex; color: var(--text-faint); flex: 0 0 auto; }
+.by-stat-v { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
+.by-stat-k { font-size: 10.5px; color: var(--text-muted); }
+.by-recent { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.by-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 2.5px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+
+/* 唯一主操作：朱赭一念(VI 规定 ≤10% 面积) */
+.by-primary { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border-radius: var(--by-r-md); border: 1px solid var(--spark); background: var(--spark); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: filter .12s; }
+.by-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.by-primary:disabled { opacity: .5; cursor: not-allowed; }
+.by-primary.on { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.by-primary.on:hover { border-color: var(--red); color: var(--red); }
+.by-busy { display: flex; align-items: center; gap: 7px; margin-top: 8px; font-size: 11.5px; color: var(--warn); }
+.by-spin { animation: bySpin 1.1s linear infinite; display: flex; }
+@keyframes bySpin { to { transform: rotate(360deg); } }
+@keyframes byPulse { 0% { box-shadow: 0 0 0 0 rgba(92, 138, 115, .5); } 70% { box-shadow: 0 0 0 6px rgba(92, 138, 115, 0); } 100% { box-shadow: 0 0 0 0 rgba(92, 138, 115, 0); } }
+
+/* ============ 五、聊天（与主对话框同一套气泡/输入） ============ */
+.by-chat-head { display: flex; align-items: center; gap: 7px; padding: 2px 2px 8px; font-size: 13px; font-weight: 600; color: var(--text); }
+.by-chat-head .by-card-ico { color: var(--accent); }
+.by-thread { flex: 1; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--by-r-md); background: var(--bg-raised); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.by-thread .msg.user .body { max-width: 82%; }
+.by-turn { display: flex; flex-direction: column; }
+.by-turn + .by-turn { margin-top: 10px; }
+.by-empty { margin: auto; text-align: center; color: var(--text-muted); font-size: 12.5px; line-height: 1.7; }
+.by-empty-art { display: flex; justify-content: center; margin-bottom: 6px; opacity: .9; }
+.by-composer { padding-top: 10px; }
+.by-composer .input-wrap { align-items: flex-end; }
+.by-typing { display: inline-flex; gap: 3px; padding: 4px 2px; }
+.by-typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--text-faint); animation: bbDots 1.3s ease-in-out infinite; }
+.by-typing i:nth-child(2) { animation-delay: .18s; }
+.by-typing i:nth-child(3) { animation-delay: .36s; }
+
+/* ============ 六、记忆网络 / 金字塔 ============ */
+.baby-brain { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* 全屏看塔/网络：Esc 退出。
+   top:42px 不能省——盖到 titlebar 拖拽带上的元素即使 no-drag，Electron 合成层照样吞点击，
+   工具条上的「退出全屏」会点不动(与 .baby-panel 同一个坑)。 */
+.baby-brain.fs { position: fixed; top: 42px; left: 0; right: 0; bottom: 0; z-index: 60; background: var(--bg); }
+.baby-brain-bar { display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 12.5px; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+.by-seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--by-r-sm); }
+.by-seg button { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; color: var(--text-dim); border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+.by-seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.by-brain-stats { display: flex; gap: 12px; margin-left: 4px; font-family: var(--mono); font-size: 11.5px; color: var(--text-muted); }
+.by-brain-stats b { color: var(--text-dim); font-weight: 600; }
+/* 「重新读取」的结果反馈：数据没变时也让人看得出它确实读了 */
+.by-load-ok { color: var(--green); }
+.by-load-err { color: var(--red); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.by-tidy { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--spark); background: var(--spark); color: #fff; border-radius: var(--by-r-sm); padding: 5px 12px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.by-tidy:hover:not(:disabled) { filter: brightness(1.08); }
+.by-tidy:disabled { opacity: .55; cursor: progress; }
+.by-tidy.ghost { background: transparent; color: var(--text-dim); border-color: var(--border); font-weight: 400; margin-left: 0; }
+.by-tidy.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); filter: none; }
+.baby-brain-canvas { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+.baby-brain-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 13px; pointer-events: none; text-align: center; padding: 0 40px; }
+.baby-brain-tip { display: flex; align-items: center; gap: 6px; padding: 6px 16px 8px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); }
+
+/* 金字塔视图：绝对定位铺满画布 + 自己滚。
+   （原来写 flex:1 是无效的——父容器 .baby-brain-canvas 是 block 不是 flex，
+     内容一多就被父级 overflow:hidden 裁掉，看着有东西却滚不下去。） */
+.byp { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; padding: 0 20px 44px; }
+/* 数量核对条：各层数量 + 合计能否对上它学过的总数；滚动时钉在顶部 */
+.byp-sum { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0 -20px 14px; padding: 9px 20px; background: var(--bg); border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--text-muted); }
+.byp-sum b { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.byp-sum-k { font-weight: 600; color: var(--text-dim); }
+.byp-sum-eq { color: var(--accent); }
+.byp-sum-loose { color: var(--warn); }
+.byp-zoom { margin-left: 0; }
+/* 搜索：命中的描边点亮，当前那个再重一档，并点亮它的整条脉络 */
+.byp-find { margin-left: auto; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--by-r-sm); color: var(--text-faint); }
+.byp-find:focus-within { border-color: var(--accent); color: var(--accent); }
+.byp-find input { width: 168px; border: none; outline: none; background: transparent; color: var(--text); font-size: 12px; font-family: var(--sans); }
+.byp-find input::placeholder { color: var(--text-faint); }
+.byp-find-n { font-family: var(--mono); font-size: 10.5px; color: var(--text-muted); }
+.byp-find button { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 12px; line-height: 1; padding: 2px 3px; }
+.byp-find button:hover { color: var(--accent); }
+.byp-node.hit { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.byp-node.hit-cur { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.byp-node.hit-cur .byp-idx, .byp-node.hit-cur .byp-node-n { color: rgba(255, 255, 255, .8); }
+/* 层内序号：一眼数得清这层有多少个 */
+.byp-idx { font-family: var(--mono); font-size: 9.5px; color: var(--text-faint); }
+/* 三档密度(放大看全名 / 紧凑看全貌) */
+.byp.zoom-sm .byp-node { font-size: 11px; padding: 3px 8px; }
+.byp.zoom-sm .byp-node.leaf { font-size: 10.5px; padding: 2.5px 7px; }
+.byp.zoom-lg .byp-node { font-size: 15px; padding: 9px 16px; }
+.byp.zoom-lg .byp-node.leaf { font-size: 13.5px; padding: 6px 13px; }
+.byp.zoom-lg .byp-node.dao { font-size: 17px; padding: 11px 24px; }
+.byp.zoom-lg .byp-layer-n { font-size: 14px; }
+.byp-layer { margin-bottom: 14px; }
+.byp-layer-h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.byp-layer-n { font-size: 12.5px; font-weight: 700; color: var(--text); }
+.byp-layer-d { font-size: 11px; color: var(--text-muted); }
+.byp-layer-line { flex: 1; height: 1px; background: var(--border); }
+.byp-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.byp-node { max-width: 100%; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-raised); color: var(--text); font-size: 12.5px; cursor: pointer; transition: border-color .12s, background .12s, transform .12s; }
+.byp-node:hover { border-color: var(--accent); transform: translateY(-1px); }
+.byp-node.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.byp-node.dim { opacity: .3; }
+.byp-node-n { font-family: var(--mono); font-size: 10.5px; color: var(--text-muted); }
+.byp-node.dao { border-color: var(--spark); color: var(--spark); font-weight: 700; font-size: 13.5px; padding: 8px 18px; }
+.byp-node.lv1 { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.byp-node.leaf { font-size: 11.5px; padding: 4px 10px; border-color: var(--border); color: var(--text-dim); }
+.byp-node.loose { border-style: dashed; border-color: var(--warn); color: var(--warn); }
+.byp-foot { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+.byp-legend { display: inline-flex; align-items: center; gap: 5px; }
+.byp-swatch { width: 16px; height: 8px; border-radius: 999px; border: 1px solid var(--border-strong); }
+.byp-swatch.dao { border-color: var(--spark); }
+.byp-swatch.loose { border-style: dashed; border-color: var(--warn); }
+.byp-more { border: none; background: transparent; color: var(--accent); font-size: 11.5px; cursor: pointer; padding: 4px 8px; }
+.byp-empty { text-align: center; color: var(--text-muted); font-size: 13px; line-height: 1.8; padding: 40px 20px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bb *,
+  .by-typing i,
+  .by-spin { animation: none !important; }
+}

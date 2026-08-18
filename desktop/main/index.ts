@@ -1948,6 +1948,7 @@ app.on("before-quit", () => {
   } catch {
     /* ignore */
   }
+  stopBabyServer(); // 关掉数字婴儿常驻服务子进程
 });
 
 // —— IPC：渲染 → 主 ——
@@ -3610,3 +3611,165 @@ ipcMain.handle("account:web-login", async (_e, pid: string) => {
   void emitAccount();
   return true;
 });
+
+// ==================== AGI 板块：数字婴儿对接 ====================
+// 用 child_process 调 Python 跑 d1_digital_baby/baby_server.py,把结果返回渲染进程。
+// 路径可配置：python 路径 / baby 目录 / LLM 地址都从 ~/.wuwei/config.json 的 agi 字段读。
+// ⚠ 迁自 minicc(mac 环境),默认值已中性化：babyDir 必须自己在 config.json 填,
+//   python 默认走 PATH 里的 "python"。这套依赖本地 agi-lab/d1_digital_baby + python3.10,
+//   普通发版用户没有这套后端,数字婴儿对他们是隐藏/点了报错的开发者功能。
+function agiCfg() {
+  const s: any = loadSettings() || {};
+  const agi = s.agi || {};
+  return {
+    enabled: agi.enabled !== false, // 默认开
+    python: agi.python || "python", // Win/跨平台默认走 PATH；需要可在 config.json 填绝对路径(mac 常是 /usr/local/bin/python3)
+    babyDir: agi.babyDir || "", // 必填：agi-lab/d1_digital_baby 的绝对路径。留空则启动时给出友好报错
+    llmBase: agi.llmBase || "http://192.168.2.195:8002/v1",
+    llmModel: agi.llmModel || "qwen3.6-35b-a3b",
+  };
+}
+
+// ——— 数字婴儿常驻服务 ———
+// 旧版每次 execFile 冷启动 python，光 import sentence_transformers+加载句向量模型就 ~11s。
+// 改成常驻 HTTP 服务(baby_server.py)：模型只加载一次，之后每次请求秒回。
+let babyProc: any = null;
+let babyPort = 0;
+let babyReady = false;
+let babyStarting: Promise<void> | null = null;
+
+const _sleepBaby = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 找一个空闲端口
+function pickPort(): Promise<number> {
+  return new Promise(async (resolve, reject) => {
+    const netmod = await import("node:net");
+    const srv = netmod.createServer();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const p = (srv.address() as any).port;
+      srv.close(() => resolve(p));
+    });
+  });
+}
+
+// 探活 /health
+function pingHealth(port: number): Promise<boolean> {
+  return new Promise(async (resolve) => {
+    const http = await import("node:http");
+    const req = http.request({ host: "127.0.0.1", port, path: "/health", method: "GET", timeout: 1500 }, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
+
+// 确保常驻服务在跑(懒启动+并发合流)。首次要等模型加载 ~11s。
+function ensureBabyServer(): Promise<void> {
+  if (babyReady && babyProc && !babyProc.killed) return Promise.resolve();
+  if (babyStarting) return babyStarting;
+  const p = (async () => {
+    const cfg = agiCfg();
+    if (!cfg.babyDir) throw new Error("未配置数字婴儿目录：请在 ~/.wuwei/config.json 的 agi.babyDir 填 d1_digital_baby 的绝对路径");
+    if (!existsSync(join(cfg.babyDir, "baby_server.py"))) throw new Error("找不到 baby_server.py（检查 agi.babyDir 路径是否正确）");
+    babyPort = await pickPort();
+    const { spawn } = await import("node:child_process");
+    const env = { HF_HUB_OFFLINE: "1", HF_ENDPOINT: "https://hf-mirror.com", ...process.env, PYTHONIOENCODING: "utf-8", LLM_BASE: cfg.llmBase, LLM_MODEL: cfg.llmModel };
+    babyProc = spawn(cfg.python, ["baby_server.py", "--port", String(babyPort)], { cwd: cfg.babyDir, env });
+    babyProc.stderr?.on("data", (d: any) => log("baby_server", String(d).trim()));
+    babyProc.on("exit", () => { babyReady = false; babyProc = null; });
+    const deadline = Date.now() + 45000; // 给模型加载留足时间
+    while (Date.now() < deadline) {
+      if (babyProc && await pingHealth(babyPort)) { babyReady = true; return; }
+      if (!babyProc) throw new Error("baby_server 进程已退出");
+      await _sleepBaby(500);
+    }
+    throw new Error("baby_server 启动超时");
+  })();
+  babyStarting = p.finally(() => { babyStarting = null; });
+  return babyStarting;
+}
+
+// 向常驻服务发一个请求。body===undefined 走 GET，否则 POST(JSON)。
+function babyHttp(path: string, body: any, timeoutMs: number): Promise<{ ok: boolean; text: string }> {
+  return new Promise(async (resolve) => {
+    const http = await import("node:http");
+    const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body), "utf-8");
+    const req = http.request({
+      host: "127.0.0.1", port: babyPort, path, method: body === undefined ? "GET" : "POST",
+      timeout: timeoutMs,
+      headers: payload ? { "Content-Type": "application/json; charset=utf-8", "Content-Length": String(payload.length) } : {},
+    }, (res) => {
+      let buf = "";
+      res.setEncoding("utf-8");
+      res.on("data", (c) => (buf += c));
+      res.on("end", () => {
+        try { const j = JSON.parse(buf); resolve({ ok: !!j.ok, text: String(j.text ?? "") }); }
+        catch { resolve({ ok: false, text: buf || "空响应" }); }
+      });
+    });
+    req.on("error", (e) => resolve({ ok: false, text: "出错:" + String(e) }));
+    req.on("timeout", () => { req.destroy(); resolve({ ok: false, text: "出错:请求超时" }); });
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+// 停止常驻服务(app 退出时调用)
+function stopBabyServer() {
+  try { babyProc?.kill(); } catch { /* ignore */ }
+  babyProc = null; babyReady = false;
+}
+
+// 兼容旧签名：把 (args, stdin) 映射到常驻服务的 HTTP 接口，IPC handler 无需改动。
+function runBaby(args: string[], stdin?: string, timeoutMs = 600000): Promise<{ ok: boolean; out: string }> {
+  return (async () => {
+    const cmd = args[0];
+    let path: string; let body: any;
+    if (cmd === "status" || cmd === "diary" || cmd === "curious") { path = "/" + cmd; body = undefined; }
+    else if (cmd === "praise" || cmd === "scold") { path = "/" + cmd; body = {}; }
+    else if (cmd === "live") { path = "/live"; body = { n: parseInt(args[1] || "3", 10) || 3 }; }
+    else if (cmd === "seed") { path = "/seed"; body = { concept: args.slice(1).join(" ") }; }
+    else if (cmd === "chat") { path = "/chat"; body = { msg: (stdin || "").replace(/\n?退出\n?$/, "").trim() }; }
+    else if (cmd === "alivestart") { path = "/alive/start"; body = {}; }
+    else if (cmd === "alivestop") { path = "/alive/stop"; body = {}; }
+    else if (cmd === "alivestatus") { path = "/alive/status"; body = undefined; }
+    else if (cmd === "graph") { path = "/graph"; body = undefined; }
+    else if (cmd === "pyramid") { path = "/pyramid"; body = undefined; }
+    else if (cmd === "reorganize") { path = "/reorganize"; body = {}; }
+    else return { ok: false, out: "未知命令:" + cmd };
+    try {
+      await ensureBabyServer();
+    } catch (e) {
+      return { ok: false, out: "数字婴儿服务启动失败:" + String(e) };
+    }
+    const r = await babyHttp(path, body, timeoutMs);
+    return { ok: r.ok, out: r.text };
+  })();
+}
+
+ipcMain.handle("agi:cfg", () => agiCfg());
+ipcMain.handle("agi:baby:status", async () => (await runBaby(["status"], undefined, 60000)).out);
+ipcMain.handle("agi:baby:diary", async () => (await runBaby(["diary"], undefined, 60000)).out);
+ipcMain.handle("agi:baby:curious", async () => (await runBaby(["curious"], undefined, 60000)).out);
+ipcMain.handle("agi:baby:live", async (_e, n: number) => (await runBaby(["live", String(n || 3)], undefined, 900000)).out);
+ipcMain.handle("agi:baby:praise", async () => (await runBaby(["praise"], undefined, 60000)).out);
+ipcMain.handle("agi:baby:scold", async () => (await runBaby(["scold"], undefined, 60000)).out);
+ipcMain.handle("agi:baby:seed", async (_e, concept: string) => (await runBaby(["seed", String(concept || "")], undefined, 60000)).out);
+// 聊天:baby_server /chat 接口
+ipcMain.handle("agi:baby:chat", async (_e, msg: string) => {
+  const r = await runBaby(["chat"], String(msg || "") + "\n退出\n", 300000);
+  const m = r.out.split("👶 >").slice(1).join("👶 >").trim();
+  return m || r.out;
+});
+// 无限生命循环开关 + 状态
+ipcMain.handle("agi:baby:alivestart", async () => (await runBaby(["alivestart"], undefined, 30000)).out);
+ipcMain.handle("agi:baby:alivestop", async () => (await runBaby(["alivestop"], undefined, 30000)).out);
+ipcMain.handle("agi:baby:alivestatus", async () => (await runBaby(["alivestatus"], undefined, 30000)).out);
+ipcMain.handle("agi:baby:graph", async () => (await runBaby(["graph"], undefined, 30000)).out);
+// 知识金字塔：分层结构(读) + 主动整理一次(重建，要跑聚类+每层起名，给足超时)
+ipcMain.handle("agi:baby:pyramid", async () => (await runBaby(["pyramid"], undefined, 60000)).out);
+ipcMain.handle("agi:baby:reorganize", async () => (await runBaby(["reorganize"], undefined, 900000)).out);

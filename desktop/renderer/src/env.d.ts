@@ -51,6 +51,22 @@ export interface SearchResult {
 }
 
 export interface WuweiApi {
+  // ——— AGI 板块:数字婴儿 ———
+  agiCfg(): Promise<any>;
+  babyStatus(): Promise<string>;
+  babyDiary(): Promise<string>;
+  babyCurious(): Promise<string>;
+  babyLive(n: number): Promise<string>;
+  babyPraise(): Promise<string>;
+  babyScold(): Promise<string>;
+  babySeed(concept: string): Promise<string>;
+  babyChat(msg: string): Promise<string>;
+  babyAliveStart(): Promise<string>;
+  babyAliveStop(): Promise<string>;
+  babyAliveStatus(): Promise<string>;
+  babyGraph(): Promise<string>;
+  babyPyramid(): Promise<string>;
+  babyReorganize(): Promise<string>;
   send(sid: string, text: string, images?: string[]): void;
   inject(sid: string, text: string, images?: string[]): void;
   recallInject(sid: string, text: string): Promise<boolean>;

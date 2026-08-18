@@ -49,6 +49,23 @@ contextBridge.exposeInMainWorld("wuweiEdition", {
 });
 
 const api = {
+  // ——— AGI 板块:数字婴儿 ———
+  agiCfg: () => ipcRenderer.invoke("agi:cfg") as Promise<any>,
+  babyStatus: () => ipcRenderer.invoke("agi:baby:status") as Promise<string>,
+  babyDiary: () => ipcRenderer.invoke("agi:baby:diary") as Promise<string>,
+  babyCurious: () => ipcRenderer.invoke("agi:baby:curious") as Promise<string>,
+  babyLive: (n: number) => ipcRenderer.invoke("agi:baby:live", n) as Promise<string>,
+  babyPraise: () => ipcRenderer.invoke("agi:baby:praise") as Promise<string>,
+  babyScold: () => ipcRenderer.invoke("agi:baby:scold") as Promise<string>,
+  babySeed: (concept: string) => ipcRenderer.invoke("agi:baby:seed", concept) as Promise<string>,
+  babyChat: (msg: string) => ipcRenderer.invoke("agi:baby:chat", msg) as Promise<string>,
+  babyAliveStart: () => ipcRenderer.invoke("agi:baby:alivestart") as Promise<string>,
+  babyAliveStop: () => ipcRenderer.invoke("agi:baby:alivestop") as Promise<string>,
+  babyAliveStatus: () => ipcRenderer.invoke("agi:baby:alivestatus") as Promise<string>,
+  babyGraph: () => ipcRenderer.invoke("agi:baby:graph") as Promise<string>,
+  babyPyramid: () => ipcRenderer.invoke("agi:baby:pyramid") as Promise<string>,
+  babyReorganize: () => ipcRenderer.invoke("agi:baby:reorganize") as Promise<string>,
+
   send: (sid: string, text: string, images?: string[]) =>
     ipcRenderer.send("chat:send", sid, text, images),
   inject: (sid: string, text: string, images?: string[]) =>
