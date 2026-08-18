@@ -64,6 +64,7 @@ import {
   markInterruptedOnStartup,
   flushAllSessionsSync,
 } from "./sessions.js";
+import { ensureFresh as ensureSearchIndex, searchSessions as searchInSessions } from "./search.js";
 import {
   loadSettings,
   saveSettings,
@@ -2392,6 +2393,13 @@ ipcMain.on("session:delete", (_e, id: string) => {
 
 // 回收站:列出(顺带清过期)
 ipcMain.handle("session:list-trash", () => listTrash());
+
+// 全局搜索:跨所有会话搜正文,返回「会话标题 + 关键词上下文摘要 + 跳转锚点」
+ipcMain.handle("session:search", async (_e, q: string) => {
+  const metas = listSessions();
+  await ensureSearchIndex(metas.map((s) => s.id)); // 首次会解析一遍历史(分文件让出主线程)
+  return searchInSessions(q, metas);
+});
 
 // 回收站:恢复某条→回到会话列表
 ipcMain.on("session:restore", (_e, id: string) => {

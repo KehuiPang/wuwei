@@ -29,6 +29,27 @@ export interface TrashItem {
   deletedAt: number;
   group?: string;
 }
+
+// 全局搜索命中：一条摘要 + 定位锚点（前端据此切会话并滚到那条消息）
+export interface SearchHit {
+  sid: string;
+  title: string;
+  updatedAt: number;
+  role: "user" | "assistant" | "title";
+  mi: number; // 消息序号（标题命中为 -1）
+  anchor: string; // "<消息序号>:u" / "<消息序号>:<块序号>"；标题命中为空
+  pre: string;
+  match: string;
+  post: string;
+  more: number; // 同一条消息里还有多少处匹配
+}
+export interface SearchResult {
+  hits: SearchHit[];
+  total: number;
+  sessions: number;
+  truncated: boolean;
+}
+
 export interface WuweiApi {
   send(sid: string, text: string, images?: string[]): void;
   inject(sid: string, text: string, images?: string[]): void;
@@ -42,6 +63,7 @@ export interface WuweiApi {
   resumeSession(id: string): void;
   dismissInterrupted(id: string): void;
   deleteSession(id: string): void;
+  searchSessions(q: string): Promise<SearchResult>; // 全局搜所有对话正文
   listTrash(): Promise<TrashItem[]>;
   restoreSession(id: string): void;
   purgeTrash(id: string): void;

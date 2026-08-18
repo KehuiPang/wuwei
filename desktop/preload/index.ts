@@ -65,6 +65,8 @@ const api = {
   resumeSession: (id: string) => ipcRenderer.send("session:resume", id), // 崩溃恢复:继续中断的任务
   dismissInterrupted: (id: string) => ipcRenderer.send("session:dismiss-interrupted", id), // 崩溃恢复:忽略
   deleteSession: (id: string) => ipcRenderer.send("session:delete", id),
+  // 全局搜索:跨所有会话搜正文,返回标题+上下文摘要+跳转锚点
+  searchSessions: (q: string) => ipcRenderer.invoke("session:search", q) as Promise<any>,
   // 回收站:软删除的会话可恢复,7 天后自动彻底清除
   listTrash: () => ipcRenderer.invoke("session:list-trash") as Promise<any[]>,
   restoreSession: (id: string) => ipcRenderer.send("session:restore", id),

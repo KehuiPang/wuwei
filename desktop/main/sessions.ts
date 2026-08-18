@@ -11,6 +11,7 @@ import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "../../src/types.js";
+import { noteSessionSaved, dropFromIndex } from "./search.js";
 
 const DIR = join(homedir(), ".wuwei");
 const SDIR = join(DIR, "sessions");
@@ -344,6 +345,7 @@ export function saveSession(
   ensure();
   pendingBody.set(id, messages); // 正文异步合并写(不阻塞事件循环)
   if (!savingBody.has(id)) void flushBody(id);
+  noteSessionSaved(id, messages); // 搜索索引增量更新(拿现成 messages,省得以后解析大文件)
   const all = listSessions(); // 元信息小(~KB)，保持同步，列表即时更新
   const prev = all.find((s) => s.id === id); // 保留已设的分组/优先级，别被每轮落盘抹掉
   const l = all.filter((s) => s.id !== id);
@@ -407,6 +409,7 @@ export function listTrash(now = Date.now()): TrashMeta[] {
 // 软删除:正文文件挪进 trash/,元信息进 trash.json(带 deletedAt),从会话列表摘掉。可恢复。
 export function deleteSession(id: string, now = Date.now()) {
   pendingBody.delete(id); // 取消未落盘的正文写,避免挪走后又被重建
+  dropFromIndex(id); // 搜索索引同步摘掉(恢复时下次搜索会自动重建)
   ensureTrash();
   try {
     const src = join(SDIR, id + ".json");

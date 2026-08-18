@@ -8,9 +8,11 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 
+// anchor：搜索定位锚点 "<消息序号>:u"(用户) / "<消息序号>:<内容块序号>"(助手)，
+// 与主进程搜索索引里的锚点一一对应；渲染成 data-anchor，搜索结果点进来靠它滚到位。
 type Item =
-  | { type: "user"; text: string; images?: string[]; ts?: number }
-  | { type: "assistant"; text: string; ts?: number; usage?: UsageSnap }
+  | { type: "user"; text: string; images?: string[]; ts?: number; anchor?: string }
+  | { type: "assistant"; text: string; ts?: number; usage?: UsageSnap; anchor?: string }
   | {
       type: "tool";
       id?: string; // 工具调用 id：并行时用来精确匹配 start/end(不再靠"最后一个running")
@@ -121,7 +123,8 @@ const CTX_MAX = 1_000_000;
 function messagesToItems(messages: any[]): Item[] {
   const items: Item[] = [];
   const toolById: Record<string, Extract<Item, { type: "tool" }>> = {};
-  for (const m of messages) {
+  for (let mi = 0; mi < messages.length; mi++) {
+    const m = messages[mi];
     if (m.role === "user") {
       let text = "";
       const imgs: string[] = [];
@@ -136,10 +139,18 @@ function messagesToItems(messages: any[]): Item[] {
         }
       }
       if (text || imgs.length)
-        items.push({ type: "user", text, images: imgs.length ? imgs : undefined, ts: m.ts });
+        items.push({
+          type: "user",
+          text,
+          images: imgs.length ? imgs : undefined,
+          ts: m.ts,
+          anchor: `${mi}:u`,
+        });
     } else {
-      for (const b of m.content) {
-        if (b.type === "text" && b.text) items.push({ type: "assistant", text: b.text, ts: m.ts, usage: m.usage });
+      for (let bi = 0; bi < m.content.length; bi++) {
+        const b = m.content[bi];
+        if (b.type === "text" && b.text)
+          items.push({ type: "assistant", text: b.text, ts: m.ts, usage: m.usage, anchor: `${mi}:${bi}` });
         else if (b.type === "tool_use") {
           const it: Extract<Item, { type: "tool" }> = {
             type: "tool",
@@ -154,6 +165,44 @@ function messagesToItems(messages: any[]): Item[] {
     }
   }
   return items;
+}
+
+// —— 搜索命中高亮 ——
+// 用 CSS Custom Highlight API 给关键词上底色：不插 <mark>、不动 DOM 结构，
+// React 之后再重渲染也不会跟它打架（老内核不支持就只留整块闪一下的兜底效果）。
+const SEARCH_HL = "wuwei-search";
+function clearSearchHighlight(): void {
+  try {
+    (CSS as any).highlights?.delete(SEARCH_HL);
+  } catch {
+    /* 不支持就算了 */
+  }
+}
+// 在 root 里找出关键词的所有出现位置并高亮，返回第一处的 Range（用来滚到确切位置）
+function highlightMatches(root: HTMLElement, q: string): Range | null {
+  clearSearchHighlight();
+  const key = (q || "").toLowerCase();
+  if (!key) return null;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const ranges: Range[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const text = (n.nodeValue || "").toLowerCase();
+    for (let p = text.indexOf(key); p >= 0; p = text.indexOf(key, p + key.length)) {
+      const r = document.createRange();
+      r.setStart(n, p);
+      r.setEnd(n, p + key.length);
+      ranges.push(r);
+    }
+  }
+  if (!ranges.length) return null;
+  try {
+    const HL = (window as any).Highlight;
+    if (HL && (CSS as any).highlights) (CSS as any).highlights.set(SEARCH_HL, new HL(...ranges));
+  } catch {
+    /* 不支持高亮 API：照样返回位置，至少能滚到点上 */
+  }
+  return ranges[0];
 }
 
 // 从服务端报错里抠出它真正认的上下文上限（"prompt is too long: 303245 tokens > 200000 maximum"）。
@@ -2062,6 +2111,14 @@ export function App() {
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [trash, setTrash] = useState<import("./env").TrashItem[]>([]); // 回收站:软删除的会话(7天自动清)
   const [showTrash, setShowTrash] = useState(false);
+  // —— 全局搜索(搜所有对话正文) ——
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchRes, setSearchRes] = useState<import("./env").SearchResult | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [searchSel, setSearchSel] = useState(0); // 键盘上下选中的结果行
+  // 待跳转的目标：切会话是异步的(等 evt:session-loaded)，先记下来，会话加载完再滚过去
+  const jumpRef = useRef<{ sid: string; anchor: string; q: string } | null>(null);
   const sessionsRef = useRef<SessionMeta[]>([]); // 事件回调里取会话标题(ask 通知文案)
   sessionsRef.current = sessions;
   const [groups, setGroups] = useState<string[]>([]); // 分组顺序(新组置顶)
@@ -2848,13 +2905,17 @@ export function App() {
         case "evt:browser-detached":
           setBrowserDetached(!!payload);
           break;
-        case "evt:session-loaded":
+        case "evt:session-loaded": {
           setCurrentId(payload.id);
-          atBottomRef.current = true; // 打开/切换会话：定位到最新(底部)，不用手滚
-          forceBottomUntilRef.current = Date.now() + 700; // 切换会话：这段时间无条件吸底，一次点击就到最新
+          // 搜索结果点进来的：目标不是底部而是命中那条 → 别吸底，交给下面的跳转 effect
+          const jumping = jumpRef.current?.sid === payload.id;
+          clearSearchHighlight(); // 上一次搜索的高亮不跨会话残留(要跳转的话下面会重新打)
+          atBottomRef.current = !jumping; // 打开/切换会话：定位到最新(底部)，不用手滚
+          forceBottomUntilRef.current = jumping ? 0 : Date.now() + 700; // 跳转时不吸底(=0)，交给跳转 effect
           setAwayFromBottom(false);
           setItems(messagesToItems(payload.messages));
           break;
+        }
         case "evt:assistant-delta":
           if (payload.sid !== currentIdRef.current) break; // 只画当前可见会话
           charsRef.current += (payload.delta as string).length;
@@ -3027,6 +3088,51 @@ export function App() {
     );
     return () => timers.forEach(clearTimeout);
   }, [items, busy, pending]);
+
+  // 搜索结果点进来：会话渲染好后滚到命中的那条消息，并把关键词高亮出来。
+  // 和上面的「切会话吸底」互斥(session-loaded 里跳转时已把 forceBottomUntil 置 0、atBottom 置 false)。
+  useEffect(() => {
+    const jump = jumpRef.current;
+    if (!jump || jump.sid !== currentId) return;
+    const el = streamRef.current;
+    if (!el || !items.length) return;
+    jumpRef.current = null;
+    atBottomRef.current = false;
+    let stopped = false;
+    let lastH = -1;
+    let stable = 0;
+    const t0 = Date.now();
+    // markdown / 代码高亮 / 图片会连续几帧改高度，反复对齐直到高度稳定或超时
+    const step = () => {
+      if (stopped) return;
+      const target =
+        el.querySelector<HTMLElement>(`[data-anchor="${jump.anchor}"]`) ||
+        el.querySelector<HTMLElement>(`[data-anchor^="${jump.anchor.split(":")[0]}:"]`);
+      if (target) {
+        target.classList.add("search-flash");
+        const first = highlightMatches(target, jump.q); // 关键词整块高亮,返回第一处
+        const box = (first || target).getBoundingClientRect();
+        const cont = el.getBoundingClientRect();
+        const delta = box.top - cont.top - el.clientHeight / 3; // 命中处落在视口上三分之一
+        if (Math.abs(delta) > 2) el.scrollTop += delta;
+        const h = el.scrollHeight;
+        if (h === lastH) stable++;
+        else {
+          stable = 0;
+          lastH = h;
+        }
+        if (stable >= 4) {
+          window.setTimeout(() => target.classList.remove("search-flash"), 2400);
+          return;
+        }
+      }
+      if (Date.now() - t0 < 2000) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    return () => {
+      stopped = true;
+    };
+  }, [items, currentId]);
 
   useEffect(() => {
     setSuggestion(""); // 切换会话清掉上个会话的建议
@@ -3461,6 +3567,7 @@ export function App() {
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
+      if (searchOpen) return; // 搜索框里在打字：y/n/a/Esc 归搜索用，别当权限快捷键
       if (pending) {
         if (e.key === "Escape" || e.key === "n" || e.key === "N") answerPerm("deny");
         if (e.key === "y" || e.key === "Y") answerPerm("allow");
@@ -3471,7 +3578,70 @@ export function App() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [pending, busy]);
+  }, [pending, busy, searchOpen]);
+
+  // —— 全局搜索 ——
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const openSearch = () => {
+    setSearchOpen(true);
+    setSearchSel(0);
+  };
+  // 打开时选中上次的关键词：想接着看就直接回车，想换词直接打字即可覆盖
+  useEffect(() => {
+    if (searchOpen) requestAnimationFrame(() => searchInputRef.current?.select());
+  }, [searchOpen]);
+  // ⌘/Ctrl+F 打开搜索
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        openSearch();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  // 输入防抖 300ms 再去主进程搜（首次会建索引，之后是内存里扫）
+  useEffect(() => {
+    if (!searchOpen) return;
+    const q = searchQ.trim();
+    if (!q) {
+      setSearchRes(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let dead = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const r = await window.wuwei.searchSessions(q);
+        if (dead) return;
+        setSearchRes(r);
+        setSearchSel(0);
+      } catch {
+        if (!dead) setSearchRes({ hits: [], total: 0, sessions: 0, truncated: false });
+      } finally {
+        if (!dead) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      dead = true; // 打字很快时丢掉上一次的结果，避免旧结果盖新结果
+      clearTimeout(t);
+    };
+  }, [searchQ, searchOpen]);
+  // 点某条结果：切到那个会话并滚到命中的位置（同会话则直接滚）
+  const gotoHit = (hit: import("./env").SearchHit) => {
+    setSearchOpen(false);
+    const q = searchQ.trim();
+    if (hit.anchor) jumpRef.current = { sid: hit.sid, anchor: hit.anchor, q };
+    if (hit.sid !== currentIdRef.current) {
+      window.wuwei.switchSession(hit.sid);
+      return;
+    }
+    if (!hit.anchor) return; // 标题命中且就在当前会话：无需跳转
+    // 已经在这个会话：主进程不会再发 session-loaded，自己触发一次跳转
+    setItems((p) => [...p]);
+  };
 
   // 优先用服务端亲口报过的上限(实测值)，其次主进程按模型算的值，最后才是兜底常量
   const ctxWin = serverCtxMax || meta.ctxWindow || CTX_MAX;
@@ -3484,6 +3654,9 @@ export function App() {
       {!collapsed && (
       <div className="sidebar" style={{ width: sidebarW }}>
         <div className="sidebar-top">
+          <button className="icon-btn" title={t("side.search", "搜索所有对话内容（⌘/Ctrl+F）")} onClick={openSearch}>
+            <SearchIcon />
+          </button>
           <button className="icon-btn" title={t("side.collapse", "收起侧栏")} onClick={() => toggleCollapse(true)}>
             «
           </button>
@@ -4406,6 +4579,9 @@ export function App() {
             <button className="icon-btn" title={t("side.expand", "展开侧栏")} onClick={() => toggleCollapse(false)}>
               »
             </button>
+            <button className="icon-btn" title={t("side.search", "搜索所有对话内容（⌘/Ctrl+F）")} onClick={openSearch}>
+              <SearchIcon />
+            </button>
           </div>
         )}
 
@@ -4582,6 +4758,7 @@ export function App() {
                         <AssistantMsg
                           key={j}
                           text={(b.item as Extract<Item, { type: "assistant" }>).text}
+                          anchor={(b.item as Extract<Item, { type: "assistant" }>).anchor}
                           streaming={busy && lastTurn && j === t.blocks.length - 1}
                         />
                       ) : (
@@ -5521,6 +5698,111 @@ export function App() {
           }}
         />
       )}
+      {/* 全局搜索：搜所有对话正文，下拉给「会话标题 + 关键词上下文摘要」，点一下切过去并滚到命中位置 */}
+      {searchOpen && (
+        <>
+          <div className="mq-overlay" onClick={() => setSearchOpen(false)} />
+          <div className="search-modal">
+            <div className="search-bar">
+              <SearchIcon />
+              <input
+                className="search-input"
+                ref={searchInputRef}
+                autoFocus
+                placeholder={lang === "en" ? "Search all conversations…" : "搜索所有对话的内容…"}
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                onKeyDown={(e) => {
+                  const hits = searchRes?.hits || [];
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setSearchOpen(false);
+                  } else if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setSearchSel((i) => Math.min(i + 1, hits.length - 1));
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setSearchSel((i) => Math.max(0, i - 1));
+                  } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    const h = hits[searchSel];
+                    if (h) gotoHit(h);
+                  }
+                }}
+              />
+              {searchQ && (
+                <button
+                  className="search-clear"
+                  title={lang === "en" ? "Clear" : "清空"}
+                  onMouseDown={(e) => e.preventDefault()} // 别把焦点从输入框抢走，清空后接着打字
+                  onClick={() => setSearchQ("")}
+                >
+                  ×
+                </button>
+              )}
+              <button className="search-x" title={lang === "en" ? "Close (Esc)" : "关闭（Esc）"} onClick={() => setSearchOpen(false)}>
+                ×
+              </button>
+            </div>
+            <div className="search-stat">
+              {searching
+                ? lang === "en"
+                  ? "Searching…（first run builds an index, a few seconds）"
+                  : "搜索中…（第一次会先建索引，稍等几秒）"
+                : searchRes
+                  ? searchRes.hits.length
+                    ? lang === "en"
+                      ? `${searchRes.total} matches · ${searchRes.sessions} conversations${searchRes.truncated ? "（showing the most relevant）" : ""} · ↑↓ to select, Enter to jump`
+                      : `共 ${searchRes.total} 处匹配 · ${searchRes.sessions} 个会话${searchRes.truncated ? "（只列出最相关的一部分）" : ""} · ↑↓ 选择，回车跳转`
+                    : lang === "en"
+                      ? `No content matching "${searchQ.trim()}"`
+                      : `没找到包含「${searchQ.trim()}」的内容`
+                  : lang === "en"
+                    ? "Search across all questions and replies; click a result to jump to it"
+                    : "搜所有对话的提问与回复；点结果直接跳到原文位置"}
+            </div>
+            {searchRes && searchRes.hits.length > 0 && (
+              <div className="search-list">
+                {searchRes.hits.map((h, i) => (
+                  <div
+                    key={h.sid + "|" + h.anchor + "|" + i}
+                    className={"search-row" + (i === searchSel ? " sel" : "")}
+                    ref={(el) => {
+                      if (i === searchSel && el) el.scrollIntoView({ block: "nearest" });
+                    }}
+                    onMouseEnter={() => setSearchSel(i)}
+                    onClick={() => gotoHit(h)}
+                  >
+                    <div className="search-row-top">
+                      <span className="search-row-title" title={h.title}>
+                        {h.title || (lang === "en" ? "New chat" : "新对话")}
+                      </span>
+                      <span className={"search-role " + h.role}>
+                        {h.role === "user"
+                          ? lang === "en" ? "Me" : "我"
+                          : h.role === "assistant"
+                            ? "AI"
+                            : lang === "en" ? "Title" : "标题"}
+                      </span>
+                      <span className="search-row-time">{relTime(h.updatedAt, now)}</span>
+                    </div>
+                    <div className="search-snip">
+                      {h.pre}
+                      <mark>{h.match}</mark>
+                      {h.post}
+                      {h.more > 0 && (
+                        <span className="search-more">
+                          {lang === "en" ? `+${h.more} more here` : `本条另有 ${h.more} 处`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
       {showTrash && (
         <>
           <div className="mq-overlay" onClick={() => setShowTrash(false)} />
@@ -6387,7 +6669,7 @@ function ItemView({
 }) {
   if (item.type === "user")
     return (
-      <div className="user-block">
+      <div className="user-block" data-anchor={item.anchor}>
         <div className="msg user">
           <div className="body">
             {item.images && item.images.length > 0 && (
@@ -6445,7 +6727,7 @@ function ItemView({
         </div>
       </div>
     );
-  if (item.type === "assistant") return <AssistantMsg text={item.text} />;
+  if (item.type === "assistant") return <AssistantMsg text={item.text} anchor={item.anchor} />;
   if (item.type === "notice") return <div className="notice">ⓘ {item.text}</div>;
   return <ToolView item={item} />;
 }
@@ -6505,6 +6787,15 @@ function TrashIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
       <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+// 简洁放大镜(全局搜索)：线性描边，随文字色
+function SearchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.6-3.6" />
     </svg>
   );
 }
@@ -6925,15 +7216,17 @@ function ThinkBlock({ content, live }: { content: string; live?: boolean }) {
 const AssistantMsg = React.memo(function AssistantMsg({
   text,
   streaming,
+  anchor,
 }: {
   text: string;
   streaming?: boolean;
+  anchor?: string; // 搜索定位锚点(见 Item.anchor)
 }) {
   const { think, answer, open } = splitThinking(text);
   const thinkEl = (think || (streaming && open)) ? <ThinkBlock content={think} live={streaming && open} /> : null;
   if (!streaming) {
     return (
-      <div className="aimsg">
+      <div className="aimsg" data-anchor={anchor}>
         {thinkEl}
         {answer && <MarkdownView text={answer} highlight={true} />}
       </div>
@@ -6943,7 +7236,7 @@ const AssistantMsg = React.memo(function AssistantMsg({
   const committed = cut >= 0 ? answer.slice(0, cut) : "";
   const tail = cut >= 0 ? answer.slice(cut + 2) : answer;
   return (
-    <div className="aimsg">
+    <div className="aimsg" data-anchor={anchor}>
       {thinkEl}
       {committed && <MarkdownView text={committed} highlight={false} />}
       {tail && <div className="md md-streaming">{maskSecrets(tail)}</div>}
