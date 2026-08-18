@@ -6133,7 +6133,8 @@ function liveStatus(items: Item[], chars: number, elapsed: number): string {
   const running = runningTools(items);
   const en = getLang() === "en";
   if (running.length > 1) return en ? `Running ${running.length} operations in parallel` : `正在并行执行 ${running.length} 个操作`;
-  if (running.length === 1) return (en ? "" : "正在") + toolMeta(running[0]).label;
+  // 前缀「正在」占了 2 个字，标签本身再收紧一点，别顶到右侧的耗时/token
+  if (running.length === 1) return (en ? "" : "正在") + oneLineLabel(toolMetaRaw(running[0]).label, 48);
   if (chars === 0) return en ? (elapsed > 20 ? "Thinking deeply" : "Thinking") : (elapsed > 20 ? "深度思考中" : "思考中");
   return en ? "Generating reply" : "生成回复";
 }
@@ -6164,12 +6165,18 @@ function ThinkingBar({
   const ss = elapsed % 60;
   const time = mm > 0 ? `${mm}m ${ss}s` : `${ss}s`;
   const status = liveStatus(items, chars, elapsed);
-  const running = runningTools(items).length;
+  const runningNow = runningTools(items);
+  const running = runningNow.length;
   const en = getLang() === "en";
+  // 悬停看完整命令：单个工具在跑时给未截断的原文，其余情况就是状态本身
+  const fullStatus = running === 1 ? toolMetaRaw(runningNow[0]).label : status;
   return (
     <div className="thinking">
       <span className="tspark">✳</span>
-      <span className="tstatus">{status}…</span>
+      {/* title 给完整内容：标签已截断，悬停能看全在跑什么 */}
+      <span className="tstatus" title={fullStatus}>
+        {status}…
+      </span>
       <span
         className="tmeta tmeta-hover"
         onMouseEnter={() => setPreviewOn(true)}
@@ -7032,7 +7039,24 @@ function bashIntent(cmd: string): { label: string; category: string } {
 }
 
 // 工具的图标 + 意图描述 + 类别（分组用）+ 行数增删
+// 工具标签压成单行并截断：命令/URL/搜索词可能很长、还可能带换行，
+// 原样拼进标签会把同一行右侧的耗时/token/状态挤掉(甚至撑成多行)。完整内容展开后在 .tcmd 里看。
+function oneLineLabel(s: string, max = 64): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > max ? t.slice(0, max - 1) + "…" : t;
+}
 function toolMeta(item: Extract<Item, { type: "tool" }>): {
+  icon: string;
+  label: string;
+  category: string;
+  add?: number;
+  del?: number;
+} {
+  const m = toolMetaRaw(item);
+  return { ...m, label: oneLineLabel(m.label) };
+}
+// 未截断的原始标签(悬停提示用完整版)
+function toolMetaRaw(item: Extract<Item, { type: "tool" }>): {
   icon: string;
   label: string;
   category: string;
@@ -7139,7 +7163,9 @@ const ToolView = React.memo(function ToolView({ item }: { item: Extract<Item, { 
   return (
     <div className="tool">
       <div className="trow" onClick={() => hasDetail && setOpen((v) => !v)}>
-        <span className="tlabel">{m.label}</span>
+        <span className="tlabel" title={toolMetaRaw(item).label}>
+          {m.label}
+        </span>
         {(m.add != null || m.del != null) && (
           <span
             className="tdelta"

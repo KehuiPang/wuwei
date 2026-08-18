@@ -2288,6 +2288,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0; /* flex 子项要能收缩，省略号才生效 */
   margin: 18px 0 8px; /* 与上面回复文字留足空隙；与正文左对齐(去掉旧 38px 缩进) */
   color: var(--text-dim);
   font-size: 13px;
@@ -2300,11 +2301,19 @@ body {
 }
 .thinking .tstatus {
   color: var(--text);
+  /* 状态里带命令/URL 时可能很长：单行省略，别把右侧耗时/token/任务数挤掉 */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .thinking .tmeta {
   color: var(--text-dim);
   font-family: var(--mono);
   font-size: 12px;
+  flex: 0 0 auto; /* 耗时/token/任务数是关键信息，永远不被压缩 */
+  white-space: nowrap;
 }
 /* 状态栏 token 数悬停→预览已生成正文(instant 模式也能看到实时内容) */
 .thinking .tmeta-hover { position: relative; cursor: help; }
