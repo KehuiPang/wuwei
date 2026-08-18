@@ -2427,7 +2427,11 @@ export function App() {
   autoRef.current = autoMode;
   const streamRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true); // 用户是否贴着底部：滚上去看历史时暂停自动吸底，滚回底部再恢复
-  const forceBottomRef = useRef(false); // 切换会话:内容异步改高，需多帧兜底吸底(否则要点两下)
+  // 强制吸底截止时间戳(0=不强制)。切换会话/发消息后的这段时间里，滚动是"内容异步撑高"引起的，
+  // 不是用户意图：期间无条件吸底，且不让这些程序滚动改写 atBottomRef——
+  // 否则内容刚替换那一帧 scrollTop 还是 0 而 scrollHeight 已很大，会被判成"用户已离底"，
+  // 把后面几次兜底吸底全挡掉，表现就是"要点两下才到底部"。
+  const forceBottomUntilRef = useRef(0);
   const [awayFromBottom, setAwayFromBottom] = useState(false); // 离底(=已暂停吸底)：显示"回到底部"按钮
   const [serverCtxMax, setServerCtxMax] = useState(0); // 服务端报错里学到的真实上下文上限(0=还没学到)
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -2847,7 +2851,7 @@ export function App() {
         case "evt:session-loaded":
           setCurrentId(payload.id);
           atBottomRef.current = true; // 打开/切换会话：定位到最新(底部)，不用手滚
-          forceBottomRef.current = true; // 切换会话：多帧兜底吸底，一次点击就到最新
+          forceBottomUntilRef.current = Date.now() + 700; // 切换会话：这段时间无条件吸底，一次点击就到最新
           setAwayFromBottom(false);
           setItems(messagesToItems(payload.messages));
           break;
@@ -3002,26 +3006,26 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    // 只有用户本来就贴着底部时才自动吸底；往上滚看历史时不打扰
-    if (!atBottomRef.current) return;
+    // 强制窗内(刚切会话/刚发消息)无条件吸底；否则只有用户本来就贴着底部时才吸，往上滚看历史时不打扰
+    const forcing = () => Date.now() < forceBottomUntilRef.current;
+    if (!forcing() && !atBottomRef.current) return;
     const el = streamRef.current;
     if (!el) return;
     const toBottom = () => el.scrollTo({ top: el.scrollHeight });
     toBottom();
     // 二次校正：长会话/代码高亮/图片会在下一帧改变高度，再吸一次确保真到底
     requestAnimationFrame(() => {
-      if (atBottomRef.current) toBottom();
+      if (forcing() || atBottomRef.current) toBottom();
     });
-    // 切换会话：内容(markdown/代码高亮/图片)会在随后几帧持续改变高度，多次兜底吸底，
-    // 保证一次点击就停在最新消息，而不用点两下。
-    if (forceBottomRef.current) {
-      forceBottomRef.current = false;
-      [50, 130, 260, 450].forEach((ms) =>
-        setTimeout(() => {
-          if (atBottomRef.current) toBottom();
-        }, ms),
-      );
-    }
+    // 仅在强制窗内挂多帧兜底：切会话/发消息后内容(markdown/代码高亮/图片)会持续改变高度，
+    // 多吸几次才能稳稳停在最新消息。流式输出时 items 高频变化，这里不能无条件挂定时器。
+    if (!forcing()) return;
+    const timers = [50, 130, 260, 450, 650].map((ms) =>
+      setTimeout(() => {
+        if (forcing() || atBottomRef.current) toBottom();
+      }, ms),
+    );
+    return () => timers.forEach(clearTimeout);
   }, [items, busy, pending]);
 
   useEffect(() => {
@@ -3169,7 +3173,7 @@ export function App() {
     }
     push({ type: "user", text, images: imgs.length ? imgs : undefined, ts: Date.now() });
     atBottomRef.current = true; // 发新消息=想看这轮回复：重新贴底,后续流式自动吸底(哪怕刚才滚上去看历史)
-    forceBottomRef.current = true; // 多帧兜底吸底：AI 回复开始撑高度/异步渲染时也稳稳落到最新，不用手滚一下
+    forceBottomUntilRef.current = Date.now() + 700; // 多帧兜底吸底：AI 回复开始撑高度/异步渲染时也稳稳落到最新，不用手滚一下
     setAwayFromBottom(false);
     setRunningSet((s) => new Set(s).add(currentId)); // 乐观置为运行中(主进程随后 evt:tasks 校准)
     thinkStartRef.current = Date.now();
@@ -4412,6 +4416,9 @@ export function App() {
             const el = e.currentTarget;
             // 只认"真的贴着底"(留 48px 容差抵消行高取整/惯性回弹)。
             // 早先按"距底一屏"算贴底，结果往上滚半屏看历史会被下一段流式输出硬拽回底部，上面的内容就看不成了。
+            // 强制窗内的滚动来自"切会话/发消息后内容异步撑高"，不是用户意图——
+            // 此时若按当帧位置判定，会把 atBottomRef 误写成 false，兜底吸底就全被挡掉了。
+            if (Date.now() < forceBottomUntilRef.current) return;
             const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 48;
             if (atBottomRef.current !== atBottom) setAwayFromBottom(!atBottom); // 只在跨越边界时 setState，滚动中不空转渲染
             atBottomRef.current = atBottom;
