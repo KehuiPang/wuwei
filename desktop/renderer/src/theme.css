@@ -4835,6 +4835,22 @@ body {
   0%, 25% { background: var(--accent-soft); box-shadow: 0 0 0 6px var(--accent-soft); }
   100% { background: transparent; box-shadow: 0 0 0 6px transparent; }
 }
+
+/* ============ AGI 板块侧栏入口（数字婴儿） ============ */
+.agi-panel { flex: 0 0 auto; -webkit-app-region: no-drag; margin: 6px 8px 4px; border: 1px solid var(--border, #e5e5e5); border-radius: 8px; overflow: hidden; }
+.agi-panel * { -webkit-app-region: no-drag; }
+.agi-head { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; cursor: pointer; font-size: 12px; font-weight: 600; opacity: .85; user-select: none; }
+.agi-head:hover { background: rgba(127,127,127,.08); }
+.agi-caret { opacity: .6; }
+.agi-items { padding: 2px 6px 6px; }
+.agi-item { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.agi-item:hover { background: rgba(127,127,127,.1); }
+.agi-item.active { background: var(--accent-soft); }
+.agi-item-name { flex: 1; }
+.agi-item-del { opacity: .4; padding: 0 4px; }
+.agi-item-del:hover { opacity: 1; color: #e5484d; }
+.agi-add { padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; opacity: .7; border: 1px dashed var(--border, #ddd); text-align: center; }
+.agi-add:hover { opacity: 1; background: rgba(127,127,127,.08); }
 .trash-list .empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
 .trash-row {
   display: flex;

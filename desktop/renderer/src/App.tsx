@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { WuweiMe, CatalogProviderDto } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
@@ -7,6 +7,25 @@ import { QRCodeSVG } from "qrcode.react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { BabyAvatar, inferBabyState } from "./baby/BabyAvatar.js";
+import { BabyHero } from "./baby/BabyHero.js";
+import { BabyPyramid } from "./baby/BabyPyramid.js";
+import * as Ic from "./baby/icons.js";
+
+// 数字婴儿生命体征：后端 /alive/status 一次给全，界面状态卡片全靠它渲染
+type BabyVitals = {
+  alive?: boolean;
+  age?: string;
+  ticks?: number;
+  energy?: number;
+  mood?: string;
+  happiness?: number;
+  concepts?: number;
+  curiosity?: number;
+  activity?: string;
+  wakeups?: number;
+  recent?: string[];
+};
 
 // anchor：搜索定位锚点 "<消息序号>:u"(用户) / "<消息序号>:<内容块序号>"(助手)，
 // 与主进程搜索索引里的锚点一一对应；渲染成 data-anchor，搜索结果点进来靠它滚到位。
@@ -2119,6 +2138,40 @@ export function App() {
   const [searchSel, setSearchSel] = useState(0); // 键盘上下选中的结果行
   // 待跳转的目标：切会话是异步的(等 evt:session-loaded)，先记下来，会话加载完再滚过去
   const jumpRef = useRef<{ sid: string; anchor: string; q: string } | null>(null);
+  // —— 数字婴儿(AGI 板块) ——
+  const [agiExpanded, setAgiExpanded] = useState(() => localStorage.getItem("minicc-agi-expanded") !== "0"); // 侧栏 AGI 区展开
+  const [agiView, setAgiView] = useState<null | "baby">(null); // 主区是否显示数字婴儿面板
+  const [babyExists, setBabyExists] = useState(() => localStorage.getItem("minicc-baby-exists") === "1");
+  const [babyDiary, setBabyDiaryState] = useState("");
+  const [babyCurious, setBabyCuriousState] = useState("");
+  const [babyChatLog, setBabyChatLog] = useState<{ role: "you" | "baby"; text: string; ts?: number }[]>([]);
+  const [babyChatInput, setBabyChatInput] = useState("");
+  const [babyBusy, setBabyBusy] = useState<string>(""); // 正在执行的操作描述(禁用按钮)
+  const [babyAlive, setBabyAlive] = useState(false); // 无限生命循环开关(它持续自主活着)
+  const [babyActivity, setBabyActivity] = useState(""); // 它此刻正在干嘛(学习/搜索/睡觉/发呆/对话)
+  const [babyVitals, setBabyVitals] = useState<BabyVitals>({}); // 生命体征(轮询 /alive/status 的结构化字段)
+  // 三张卡片各自折叠 + 左栏整体折叠(都记住上次的选择)
+  const [babyCards, setBabyCards] = useState<Record<string, boolean>>(() => {
+    try { return { status: true, curious: true, diary: true, ...JSON.parse(localStorage.getItem("minicc-baby-cards") || "{}") }; }
+    catch { return { status: true, curious: true, diary: true }; }
+  });
+  const [babyLeftOpen, setBabyLeftOpen] = useState(() => localStorage.getItem("minicc-baby-left") !== "0");
+  const [brainView, setBrainView] = useState<"graph" | "pyramid">("graph"); // 记忆网络:网络图/金字塔
+  const [babyPyramid, setBabyPyramid] = useState<any>(null);
+  const [brainFull, setBrainFull] = useState(false); // 记忆网络/金字塔全屏看
+  const [babyTidy, setBabyTidy] = useState(false); // 正在整理知识(重建金字塔)
+  // 「重新读取」的状态:转圈中 / 上次读成的时间 / 失败原因(以前全吞掉,点了像没反应)
+  const [brainLoad, setBrainLoad] = useState<{ busy: boolean; at: number; err: string }>({ busy: false, at: 0, err: "" });
+  const toggleCard = (k: string) =>
+    setBabyCards((m) => {
+      const n = { ...m, [k]: !m[k] };
+      localStorage.setItem("minicc-baby-cards", JSON.stringify(n));
+      return n;
+    });
+  const babyChatRef = useRef<HTMLDivElement>(null); // 聊天区容器(自动吸底)
+  const babyChatStick = useRef(true); // 是否吸底(用户上滚>60px则暂不吸)
+  const [babyTab, setBabyTab] = useState<"home" | "brain">("home"); // 数字婴儿面板 tab
+  const [babyGraphData, setBabyGraphData] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
   const sessionsRef = useRef<SessionMeta[]>([]); // 事件回调里取会话标题(ask 通知文案)
   sessionsRef.current = sessions;
   const [groups, setGroups] = useState<string[]>([]); // 分组顺序(新组置顶)
@@ -3643,6 +3696,102 @@ export function App() {
     setItems((p) => [...p]);
   };
 
+  // ——— AGI 板块:数字婴儿 操作 ———
+  async function babyRefresh() {
+    try {
+      const [di, cu] = await Promise.all([window.wuwei.babyDiary(), window.wuwei.babyCurious()]);
+      setBabyDiaryState(di || ""); setBabyCuriousState(cu || "");
+    } catch { /* 轮询失败不打扰界面，下一轮再来 */ }
+  }
+  // 读网络图/金字塔。**故意会往外抛错**：要静默的调用点自己 .catch(()=>{})。
+  async function loadBabyGraph() {
+    const g = JSON.parse(await window.wuwei.babyGraph());
+    setBabyGraphData({ nodes: g.nodes || [], edges: g.edges || [] });
+  }
+  async function loadBabyPyramid() {
+    setBabyPyramid(JSON.parse(await window.wuwei.babyPyramid()));
+  }
+  // 「重新读取」：转圈 + 读完报「已更新 时:分:秒」+ 失败把原因显出来。
+  async function reloadBabyBrain() {
+    if (brainLoad.busy) return;
+    setBrainLoad({ busy: true, at: 0, err: "" });
+    try {
+      await Promise.all([loadBabyGraph(), loadBabyPyramid()]);
+      setBrainLoad({ busy: false, at: Date.now(), err: "" });
+    } catch (e: any) {
+      setBrainLoad({ busy: false, at: 0, err: String(e?.message || e).slice(0, 80) });
+    }
+  }
+  // 「整理知识」：让它主动做一次深度整理(自组织重建整座金字塔)，完事刷新两个视图。
+  async function babyTidyUp() {
+    if (babyTidy) return;
+    setBabyTidy(true);
+    try {
+      const note = await window.wuwei.babyReorganize();
+      setBabyChatLog((l) => [...l, { role: "baby", text: `（整理完知识了）${note || ""}`, ts: Date.now() }]);
+      await Promise.all([loadBabyGraph().catch(() => {}), loadBabyPyramid().catch(() => {}), babyRefresh()]);
+    } finally { setBabyTidy(false); }
+  }
+  async function toggleBabyAlive() {
+    if (babyAlive) { setBabyAlive(false); try { await window.wuwei.babyAliveStop(); } catch {} }
+    else { setBabyAlive(true); try { await window.wuwei.babyAliveStart(); } catch {} }
+  }
+  async function babyDoChat() {
+    const msg = babyChatInput.trim(); if (!msg || babyBusy) return;
+    setBabyChatInput("");
+    setBabyChatLog((l) => [...l, { role: "you", text: msg, ts: Date.now() }]);
+    setBabyBusy("它在想…");
+    try {
+      const ans = await window.wuwei.babyChat(msg);
+      setBabyChatLog((l) => [...l, { role: "baby", text: ans || "(没说话)", ts: Date.now() }]);
+      await babyRefresh(); // 聊天可能上网学到新东西(进记忆/日志)，刷新状态区
+    } finally { setBabyBusy(""); }
+  }
+  function createBaby() {
+    setBabyExists(true); localStorage.setItem("minicc-baby-exists", "1");
+    setAgiView("baby"); babyRefresh();
+  }
+  function deleteBaby() {
+    if (!confirm("确定删除这个数字婴儿的对接吗?(不会删它的记忆数据,只从界面移除)")) return;
+    setBabyExists(false); localStorage.setItem("minicc-baby-exists", "0");
+    if (agiView === "baby") setAgiView(null);
+  }
+  function openBaby() {
+    setAgiView("baby"); babyRefresh();
+    // 同步"是否正在持续活着"(重开面板/重启后恢复开关状态)
+    window.wuwei.babyAliveStatus().then((s: string) => { try { setBabyAlive(!!JSON.parse(s).alive); } catch {} }).catch(() => {});
+  }
+  // 聊天区自动吸底(新消息/它在想时滚到最新)，用户主动上滚>60px 时不打断
+  useEffect(() => {
+    const el = babyChatRef.current;
+    if (el && babyChatStick.current) el.scrollTop = el.scrollHeight;
+  }, [babyChatLog, babyBusy]);
+  // 面板打开就每 2 秒轮询：更新"它在干嘛"活动状态 + 进度；活着时每轮刷状态区，歇着每 10 轮刷一次
+  useEffect(() => {
+    if (agiView !== "baby") return;
+    let n = 0;
+    const tick = async () => {
+      try {
+        const j = JSON.parse(await window.wuwei.babyAliveStatus());
+        setBabyActivity(j.activity || "");
+        setBabyAlive(!!j.alive);
+        setBabyVitals(j);
+        if (j.alive || n % 10 === 0) babyRefresh();
+      } catch { /* ignore */ }
+      n++;
+    };
+    tick();
+    const t = setInterval(tick, 2000);
+    return () => clearInterval(t);
+  }, [agiView]);
+  // 记忆网络全屏时 Esc 退出
+  useEffect(() => {
+    if (!brainFull) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setBrainFull(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [brainFull]);
+
   // 优先用服务端亲口报过的上限(实测值)，其次主进程按模型算的值，最后才是兜底常量
   const ctxWin = serverCtxMax || meta.ctxWindow || CTX_MAX;
   const ctxPct = Math.min(100, Math.round((usage.lastInput / ctxWin) * 100));
@@ -3664,6 +3813,25 @@ export function App() {
         <button className="new-session" onClick={() => window.wuwei.newSession()}>
           {t("session.new")}
         </button>
+        {/* AGI 板块：数字婴儿入口(迁自 minicc) */}
+        <div className="agi-panel">
+          <div className="agi-head" onClick={() => { const v = !agiExpanded; setAgiExpanded(v); localStorage.setItem("minicc-agi-expanded", v ? "1" : "0"); }}>
+            <span>🧠 AGI</span>
+            <span className="agi-caret">{agiExpanded ? "▾" : "▸"}</span>
+          </div>
+          {agiExpanded && (
+            <div className="agi-items">
+              {babyExists ? (
+                <div className={"agi-item" + (agiView === "baby" ? " active" : "")}>
+                  <span className="agi-item-name" onClick={openBaby} title={lang === "en" ? "Open digital baby" : "点击进入数字婴儿"}>👶 {lang === "en" ? "Digital Baby" : "数字婴儿"}</span>
+                  <span className="agi-item-del" title={lang === "en" ? "Remove" : "删除对接"} onClick={deleteBaby}>✕</span>
+                </div>
+              ) : (
+                <div className="agi-add" onClick={createBaby} title={lang === "en" ? "Add digital baby" : "新增并对接数字婴儿"}>＋ {lang === "en" ? "Add Digital Baby" : "新增数字婴儿"}</div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="session-list">
           {sessions.length === 0 && <div className="empty">{lang === "en" ? "No conversations yet" : "暂无历史对话"}</div>}
           {(() => {
@@ -4472,6 +4640,230 @@ export function App() {
 
       {/* 主区 */}
       <div className="main">
+        {/* 数字婴儿面板(迁自 minicc)：agiView==="baby" 时占据主区 */}
+        {agiView === "baby" && (
+          <div className="baby-panel">
+            <div className="baby-header">
+              {babyTab === "home" && (
+                <button className="baby-rail-btn" title={babyLeftOpen ? "收起状态面板" : "展开状态面板"}
+                  onClick={() => { const v = !babyLeftOpen; setBabyLeftOpen(v); localStorage.setItem("minicc-baby-left", v ? "1" : "0"); }}>
+                  {babyLeftOpen ? <Ic.IcPanelLeft size={17} /> : <Ic.IcPanelRight size={17} />}
+                </button>
+              )}
+              <span className="baby-brand">
+                <span className="by-mark"><Ic.IcBaby size={17} /></span>
+                数字婴儿
+                <span className="baby-brand-sub">{babyVitals.age || "—"} · {babyVitals.mood || "—"}</span>
+              </span>
+              <div className="baby-tabs">
+                <button className={"baby-tab" + (babyTab === "home" ? " on" : "")} onClick={() => setBabyTab("home")}>
+                  <Ic.IcHome size={15} />主界面
+                </button>
+                <button className={"baby-tab" + (babyTab === "brain" ? " on" : "")}
+                  onClick={() => { setBabyTab("brain"); void reloadBabyBrain(); }}>
+                  <Ic.IcBrain size={15} />记忆网络
+                </button>
+              </div>
+              <button className="baby-close" onClick={() => setAgiView(null)} title="返回对话">
+                <Ic.IcBack size={15} />返回
+              </button>
+            </div>
+            {babyTab === "brain" ? (
+              <div className={"baby-brain" + (brainFull ? " fs" : "")}>
+                <div className="baby-brain-bar">
+                  <div className="by-seg">
+                    <button className={brainView === "graph" ? "on" : ""} onClick={() => { setBrainView("graph"); loadBabyGraph().catch(() => {}); }}>
+                      <Ic.IcNodes size={14} />网络图
+                    </button>
+                    <button className={brainView === "pyramid" ? "on" : ""} onClick={() => { setBrainView("pyramid"); loadBabyPyramid().catch(() => {}); }}>
+                      <Ic.IcPyramid size={14} />金字塔
+                    </button>
+                  </div>
+                  <div className="by-brain-stats">
+                    <span><b>{babyGraphData.nodes.length}</b> 概念</span>
+                    <span><b>{babyGraphData.edges.length}</b> 关联</span>
+                    {!!babyPyramid?.stats && (
+                      <>
+                        <span><b>{babyPyramid.stats.depth}</b> 层</span>
+                        <span><b>{babyPyramid.stats.loose}</b> 没固化</span>
+                      </>
+                    )}
+                    {/* 读取反馈：数字不变时页面看不出差别，靠这行区分"读到了但没变" vs "根本没读到" */}
+                    {brainLoad.err ? (
+                      <span className="by-load-err" title={brainLoad.err}>读取失败：{brainLoad.err}</span>
+                    ) : brainLoad.at > 0 ? (
+                      <span className="by-load-ok">已更新 {new Date(brainLoad.at).toLocaleTimeString()}</span>
+                    ) : null}
+                  </div>
+                  <button className="by-tidy ghost" style={{ marginLeft: "auto" }}
+                    onClick={() => setBrainFull((v) => !v)} title={brainFull ? "退出全屏 (Esc)" : "全屏看"}>
+                    {brainFull ? <Ic.IcShrink size={14} /> : <Ic.IcExpand size={14} />}
+                    {brainFull ? "退出全屏" : "全屏"}
+                  </button>
+                  {brainFull && (
+                    <button className="by-tidy ghost" title="回到对话"
+                      onClick={() => { setBrainFull(false); setAgiView(null); }}>
+                      <Ic.IcBack size={14} />返回对话
+                    </button>
+                  )}
+                  <button className="by-tidy ghost" data-busy-self="1" disabled={babyTidy || brainLoad.busy}
+                    onClick={() => void reloadBabyBrain()} title="重新读一遍当前的网络/金字塔">
+                    <span className={brainLoad.busy ? "by-spin" : ""} style={{ display: "flex" }}><Ic.IcRefresh size={14} /></span>
+                    {brainLoad.busy ? "读取中…" : "重新读取"}
+                  </button>
+                  <button className="by-tidy" data-busy-self="1" disabled={babyTidy} onClick={babyTidyUp}
+                    title="让它把学过的东西重新自组织成一座金字塔(会真的改变塔的形状，要跑一会儿)">
+                    <span className={babyTidy ? "by-spin" : ""} style={{ display: "flex" }}><Ic.IcSparkle size={14} /></span>
+                    {babyTidy ? "整理中…" : "整理知识"}
+                  </button>
+                </div>
+                <div className="baby-brain-canvas">
+                  {brainView === "graph" ? (
+                    <>
+                      <BabyBrainGraph nodes={babyGraphData.nodes} edges={babyGraphData.edges} />
+                      {babyGraphData.nodes.length === 0 && (
+                        <div className="baby-brain-empty">它还没学到概念～让它活着或者跟它聊聊，这里就会长出知识网络</div>
+                      )}
+                    </>
+                  ) : (
+                    <BabyPyramid data={babyPyramid} />
+                  )}
+                </div>
+                <div className="baby-brain-tip">
+                  <Ic.IcSparkle size={12} />
+                  {brainView === "graph"
+                    ? "位置=语义远近(意思相近的自然抱团) · 大小=层级与连接数(睡梦涌现的上层认知更大) · 虚线=抽象自 · 悬停看详情、拖动钉住、滚轮缩放"
+                    : "从上往下：塔尖 → 各层抽象 → 地基(它一个个学来的概念) · 虚线框=还没被收编进任何上层的碎知识"}
+                </div>
+              </div>
+            ) : (
+            <div className="baby-body">
+              {babyLeftOpen ? (
+              <div className="baby-left">
+                <div className="baby-card">
+                  <div className="by-card-head" onClick={() => toggleCard("status")}>
+                    <span className="by-card-ico"><Ic.IcPulse size={15} /></span>
+                    <span className="by-card-t">状态</span>
+                    <span className="by-card-meta">{babyAlive ? "活着" : "歇着"}</span>
+                    <span className={"by-caret" + (babyCards.status ? "" : " off")}><Ic.IcChevron size={15} /></span>
+                  </div>
+                  {babyCards.status && (
+                    <div className="by-card-body">
+                      <BabyHero vitals={babyVitals} alive={babyAlive} activity={babyActivity}
+                        busy={babyBusy} onToggleAlive={toggleBabyAlive} />
+                    </div>
+                  )}
+                </div>
+                <div className="baby-card">
+                  <div className="by-card-head" onClick={() => toggleCard("curious")}>
+                    <span className="by-card-ico"><Ic.IcSprout size={15} /></span>
+                    <span className="by-card-t">它好奇的</span>
+                    <span className="by-card-meta">{babyVitals.curiosity ?? 0}</span>
+                    <span className={"by-caret" + (babyCards.curious ? "" : " off")}><Ic.IcChevron size={15} /></span>
+                  </div>
+                  {babyCards.curious && (
+                    <div className="by-card-body">
+                      <AutoStickPre className="baby-pre baby-scroll" text={babyCurious || "(暂无)"} />
+                    </div>
+                  )}
+                </div>
+                <div className="baby-card">
+                  <div className="by-card-head" onClick={() => toggleCard("diary")}>
+                    <span className="by-card-ico"><Ic.IcJournal size={15} /></span>
+                    <span className="by-card-t">成长日志</span>
+                    <span className="by-card-meta">{babyVitals.ticks ?? 0} 跳</span>
+                    <span className={"by-caret" + (babyCards.diary ? "" : " off")}><Ic.IcChevron size={15} /></span>
+                  </div>
+                  {babyCards.diary && (
+                    <div className="by-card-body">
+                      <AutoStickPre className="baby-pre baby-scroll" text={babyDiary || "(暂无)"} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              ) : (
+              <div className="baby-rail" title="展开状态面板">
+                <button className="baby-rail-btn" onClick={() => { setBabyLeftOpen(true); localStorage.setItem("minicc-baby-left", "1"); }}>
+                  <Ic.IcPanelRight size={17} />
+                </button>
+                <BabyAvatar state={inferBabyState(babyActivity, babyAlive)} happiness={babyVitals.happiness ?? 55}
+                  energy={babyVitals.energy ?? 100} alive={babyAlive} size={32} minimal />
+                <span className={"baby-rail-dot" + (babyAlive ? " live" : "")} />
+                <span className="baby-rail-vert">{babyAlive ? "活着" : "歇着"}</span>
+              </div>
+              )}
+              <div className="baby-right">
+                <div className="by-chat-head">
+                  <span className="by-card-ico"><Ic.IcChat size={15} /></span>跟它聊天
+                </div>
+                <div className="by-thread" ref={babyChatRef}
+                  onScroll={(e) => { const el = e.currentTarget; babyChatStick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
+                  {babyChatLog.length === 0 && (
+                    <div className="by-empty">
+                      <div className="by-empty-art">
+                        <BabyAvatar state={inferBabyState(babyActivity, babyAlive)} happiness={babyVitals.happiness ?? 55}
+                          energy={babyVitals.energy ?? 100} alive={babyAlive} size={88} />
+                      </div>
+                      问问它学了什么、对什么好奇、心情怎么样
+                      <br />
+                      它听不懂的会自己上网去查，然后记住
+                    </div>
+                  )}
+                  {babyChatLog.map((m, i) =>
+                    m.role === "you" ? (
+                      <div className="by-turn user-block" key={i}>
+                        <div className="msg user"><div className="body">{m.text}</div></div>
+                        <div className="turn-foot user">
+                          <div className="tf-actions"><CopyBtn text={m.text} /></div>
+                          {!!m.ts && <span className="tf-time">{relTime(m.ts, now)}</span>}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="by-turn" key={i}>
+                        <AssistantMsg text={m.text} />
+                        <div className="turn-foot">
+                          <div className="tf-actions"><CopyBtn text={m.text} /></div>
+                          {!!m.ts && <span className="tf-time">{relTime(m.ts, now)}</span>}
+                        </div>
+                      </div>
+                    ),
+                  )}
+                  {!!babyBusy && (
+                    <div className="by-turn">
+                      <span className="by-typing"><i /><i /><i /></span>
+                    </div>
+                  )}
+                </div>
+                <div className="by-composer">
+                  <div className="input-wrap">
+                    <textarea
+                      rows={1}
+                      value={babyChatInput}
+                      placeholder="跟它说点什么…（Enter 发送，Shift+Enter 换行）"
+                      onChange={(e) => {
+                        setBabyChatInput(e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                          e.preventDefault();
+                          babyDoChat();
+                          (e.target as HTMLTextAreaElement).style.height = "auto";
+                        }
+                      }}
+                    />
+                    <button className={"send-btn" + (babyChatInput.trim() && !babyBusy ? " active" : "")}
+                      onClick={babyDoChat} disabled={!babyChatInput.trim() || !!babyBusy} title="发送 (Enter)">
+                      <Ic.IcSend size={18} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            )}
+          </div>
+        )}
         <div
           className={
             "titlebar" +
@@ -7210,6 +7602,268 @@ function ThinkBlock({ content, live }: { content: string; live?: boolean }) {
       </summary>
       <div className="tk-body">{content.trim()}</div>
     </details>
+  );
+}
+
+// —— 数字婴儿：自动吸底 pre + 知识网络力导向图(迁自 minicc) ——
+function AutoStickPre({ text, className }: { text: string; className?: string }) {
+  const ref = useRef<HTMLPreElement>(null);
+  const stick = useRef(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [text]);
+  return (
+    <pre
+      ref={ref}
+      className={className}
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      }}
+    >{text}</pre>
+  );
+}
+
+function BabyBrainGraph({ nodes, edges }: { nodes: any[]; edges: any[] }) {
+  // 画布随概念数放大：概念越多铺得越开，节点才不会挤成一坨(看全貌时整体缩放显示，
+  // 滚轮放大读细节)。固定 1400×900 装 200+ 概念必然重叠。
+  const spread = Math.min(3.4, Math.max(1, Math.sqrt(nodes.length / 55)));
+  const W = Math.round(1400 * spread), H = Math.round(900 * spread);
+  // 概念来源 → 固定语义色(不再用哈希随机色)：一眼分清哪些是自己上网学的、哪些是睡梦里涌现的
+  const TYPE_COLOR: Record<string, string> = {
+    "网络学的": "#6f9fad",
+    "聊天学的": "#c05f3c",
+    "知识宫殿": "#5c8a73",
+    "天生好奇": "#c8933f",
+    "睡梦里涌现的": "#9a7fbe",
+    "好奇待学": "#8b949c",
+    "概念": "#8b949c",
+  };
+  const color = (n: any) => {
+    if (typeof n === "string") return TYPE_COLOR[n] || "#8b949c";
+    if (n?.isDao) return "#c05f3c";
+    if (n?.level === "abstract") return ["#9a7fbe", "#8a6fb4", "#7a5faa", "#6a4fa0"][Math.min(3, (n.depth || 1) - 1)];
+    return TYPE_COLOR[n?.type] || "#8b949c";
+  };
+  // 节点大小：层级为主(睡梦涌现的上层认知更大、塔尖最大)，连接数为辅
+  const degree = useMemo(() => {
+    const d = new Map<string, number>();
+    for (const e of edges) { d.set(e.from, (d.get(e.from) || 0) + 1); d.set(e.to, (d.get(e.to) || 0) + 1); }
+    return d;
+  }, [edges]);
+  const radiusOf = (n: any) => {
+    const deg = degree.get(n.id) || 0;
+    if (n.isDao) return 26;
+    if (n.level === "abstract") return 11 + (n.depth || 1) * 3.6 + Math.min(7, (n.children?.length || 0) * 0.45);
+    return 4.2 + Math.min(6.5, deg * 0.75);
+  };
+  // 布局：以「语义坐标」为骨架——后端把概念向量降到 2 维，意思相近的天然在一起、
+  // 不相干的隔得远。力学只做两件事：把上层认知拉到它孩子们中间、把挤在一起的推开，
+  // 不再让弹簧把语义结构揉乱(所以有锚定力把每个点拽回它的语义位置)。
+  const layout = useMemo(() => {
+    const pos = new Map<string, { x: number; y: number }>();
+    const vel = new Map<string, { vx: number; vy: number }>();
+    const anchor = new Map<string, { x: number; y: number }>();
+    const byId = new Map<string, any>(nodes.map((n) => [n.id, n]));
+    const MX = 150, MY = 90;
+    let seed = 20240814;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    const hasSem = nodes.some((n) => typeof n.sx === "number");
+    for (const n of nodes) {
+      const p = typeof n.sx === "number"
+        ? { x: MX + n.sx * (W - 2 * MX), y: MY + n.sy * (H - 2 * MY) }
+        : { x: W / 2 + (rnd() - 0.5) * 700, y: H / 2 + (rnd() - 0.5) * 500 };
+      pos.set(n.id, { ...p });
+      anchor.set(n.id, { ...p });
+      vel.set(n.id, { vx: 0, vy: 0 });
+    }
+    // 上层认知的锚点挪到它收编的那批概念的质心：塔尖自然浮在整片知识的正中
+    for (const n of nodes) {
+      if (n.level !== "abstract" || !n.children?.length) continue;
+      let sx = 0, sy = 0, k = 0;
+      for (const c of n.children) { const p = anchor.get(c); if (p) { sx += p.x; sy += p.y; k++; } }
+      if (k) {
+        const a = anchor.get(n.id)!;
+        a.x = hasSem ? a.x * 0.35 + (sx / k) * 0.65 : sx / k;
+        a.y = hasSem ? a.y * 0.35 + (sy / k) * 0.65 : sy / k;
+        pos.set(n.id, { ...a });
+      }
+    }
+    const ids = nodes.map((n) => n.id);
+    // 每个节点的占位框 = 圆 + 右边那截标签(只算常显标签的)。
+    // 只按圆心距离防重叠是不够的——挤在一起的其实是文字，框算进标签才真的分得开。
+    const box = new Map<string, { w: number; h: number; ox: number }>();
+    for (const n of nodes) {
+      const r = radiusOf(n);
+      const abs = n.level === "abstract";
+      const showLabel = abs || r >= 8.5;
+      const fs = abs ? Math.min(17, 11 + (n.depth || 1) * 1.6) : 10.5;
+      const nm = String(n.name || "").slice(0, 22);
+      let lw = 0;
+      if (showLabel) for (const ch of nm) lw += /[⺀-鿿＀-￯]/.test(ch) ? fs : fs * 0.56;
+      box.set(n.id, {
+        w: 2 * r + (lw ? lw + 8 : 0),
+        h: Math.max(2 * r, showLabel ? fs * 1.35 : 2 * r),
+        ox: lw ? (lw + 8) / 2 : 0,
+      });
+    }
+    const PADX = 16, PADY = 9; // 框与框之间还要留的呼吸空间
+    const separate = (k: number) => {
+      for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+        const A = pos.get(ids[i])!, B = pos.get(ids[j])!;
+        const ba = box.get(ids[i])!, bb = box.get(ids[j])!;
+        const dx = A.x + ba.ox - (B.x + bb.ox), dy = A.y - B.y;
+        const ox = (ba.w + bb.w) / 2 + PADX - Math.abs(dx);
+        if (ox <= 0) continue;
+        const oy = (ba.h + bb.h) / 2 + PADY - Math.abs(dy);
+        if (oy <= 0) continue;
+        const va = vel.get(ids[i])!, vb = vel.get(ids[j])!;
+        if (ox < oy) { // 沿更省力的那个轴推开
+          const f = (dx >= 0 ? 1 : -1) * ox * k;
+          va.vx += f; vb.vx -= f;
+        } else {
+          const f = (dy >= 0 ? 1 : -1) * oy * k;
+          va.vy += f; vb.vy -= f;
+        }
+      }
+    };
+    const ANCHOR_K = hasSem ? 0.026 : 0.002; // 有语义坐标就以它为准，否则退回向心力
+    const ITER = ids.length > 200 ? 220 : 380;
+    for (let it = 0; it < ITER; it++) {
+      separate(0.24);
+      for (const e of edges) {
+        const a = pos.get(e.from), b = pos.get(e.to); if (!a || !b) continue;
+        // 层级边(抽象自)拉得紧→同一个上层认知的概念抱成一团；普通关联很松，只给一点点牵引
+        const belong = e.kind === "belong";
+        const rest = belong ? 78 : 150, k = belong ? 0.028 : 0.006;
+        const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.01, f = (d - rest) * k;
+        const fx = (dx / d) * f, fy = (dy / d) * f;
+        const va = vel.get(e.from)!, vb = vel.get(e.to)!;
+        va.vx += fx; va.vy += fy; vb.vx -= fx; vb.vy -= fy;
+      }
+      for (const id of ids) {
+        const p = pos.get(id)!, v = vel.get(id)!, a = anchor.get(id)!;
+        const isAbs = byId.get(id)?.level === "abstract";
+        const ak = isAbs ? ANCHOR_K * 1.6 : ANCHOR_K; // 上层认知更贴紧它孩子的质心
+        v.vx += (a.x - p.x) * ak; v.vy += (a.y - p.y) * ak;
+        v.vx *= 0.84; v.vy *= 0.84; p.x += v.vx; p.y += v.vy;
+      }
+    }
+    // 收尾：只解重叠，不再拉锚点/弹簧——保证最后谁也不压着谁
+    for (let it = 0; it < 130; it++) {
+      separate(0.5);
+      for (const id of ids) {
+        const p = pos.get(id)!, v = vel.get(id)!, b = box.get(id)!;
+        v.vx *= 0.55; v.vy *= 0.55; p.x += v.vx; p.y += v.vy;
+        p.x = Math.max(b.w / 2 + 10, Math.min(W - b.w / 2 - 10, p.x)); // 别飘出画布
+        p.y = Math.max(b.h / 2 + 10, Math.min(H - b.h / 2 - 10, p.y));
+      }
+    }
+    return pos;
+  }, [nodes, edges]);
+  const [override, setOverride] = useState<Map<string, { x: number; y: number }>>(new Map());
+  const gp = (id: string) => override.get(id) || layout.get(id) || { x: W / 2, y: H / 2 };
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [hover, setHover] = useState<{ kind: "node" | "edge"; id: string; mx: number; my: number } | null>(null);
+  const [sel, setSel] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const dragRef = useRef<{ id?: string; kind: "node" | "pan"; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const nodeById = useMemo(() => { const m = new Map<string, any>(); for (const n of nodes) m.set(n.id, n); return m; }, [nodes]);
+  const toWorld = (cx: number, cy: number) => {
+    const r = svgRef.current!.getBoundingClientRect();
+    const vx = ((cx - r.left) / r.width) * W, vy = ((cy - r.top) / r.height) * H;
+    return { x: (vx - view.x) / view.k, y: (vy - view.y) / view.k };
+  };
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      const d = dragRef.current; if (!d) return;
+      const w = toWorld(e.clientX, e.clientY);
+      if (d.kind === "node" && d.id) { d.moved = true; setOverride((m) => { const n = new Map(m); n.set(d.id!, { x: w.x, y: w.y }); return n; }); }
+      else { const r = svgRef.current!.getBoundingClientRect(); const scale = W / r.width; setView((v) => ({ ...v, x: d.ox + (e.clientX - d.sx) * scale, y: d.oy + (e.clientY - d.sy) * scale })); }
+    };
+    const up = (e: MouseEvent) => { const d = dragRef.current; if (d && d.kind === "node" && !d.moved && d.id) setSel(d.id); dragRef.current = null; };
+    window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+  });
+  useEffect(() => {
+    const svg = svgRef.current; if (!svg) return;
+    const onWheel = (e: WheelEvent) => { e.preventDefault(); const r = svg.getBoundingClientRect(); const vx = ((e.clientX - r.left) / r.width) * W, vy = ((e.clientY - r.top) / r.height) * H; setView((v) => { const wx = (vx - v.x) / v.k, wy = (vy - v.y) / v.k; const k = Math.max(0.3, Math.min(4, v.k * (e.deltaY < 0 ? 1.12 : 1 / 1.12))); return { k, x: vx - wx * k, y: vy - wy * k }; }); };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, []);
+  const selNode = sel ? nodeById.get(sel) : null;
+  const hoverNode = hover?.kind === "node" ? nodeById.get(hover.id) : null;
+  const hoverEdge = hover?.kind === "edge" ? edges.find((e) => e.id === hover.id) : null;
+  return (
+    <div className="bbg-wrap">
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="bbg-svg"
+        onMouseDown={(e) => { const w = toWorld(e.clientX, e.clientY); dragRef.current = { kind: "pan", sx: e.clientX, sy: e.clientY, ox: view.x, oy: view.y, moved: false }; setSel(null); }}>
+        <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+          {edges.map((e) => { const a = gp(e.from), b = gp(e.to); if (!a || !b) return null; const on = sel && (e.from === sel || e.to === sel); const belong = e.kind === "belong"; return (
+            <line key={e.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+              stroke={on ? "var(--accent)" : belong ? "#9a7fbe" : "#8b949c"}
+              strokeWidth={on ? 1.8 : belong ? 1 : 0.6}
+              strokeDasharray={belong ? "4 4" : undefined}
+              strokeOpacity={sel && !on ? 0.12 : belong ? 0.5 : 0.34}
+              onMouseEnter={(ev) => setHover({ kind: "edge", id: e.id, mx: ev.clientX, my: ev.clientY })} onMouseLeave={() => setHover(null)} />
+          ); })}
+          {nodes.map((n) => {
+            const p = gp(n.id); const r = radiusOf(n); const abs = n.level === "abstract";
+            const dim = sel && sel !== n.id && !edges.some((e) => (e.from === sel && e.to === n.id) || (e.to === sel && e.from === n.id));
+            // 标签只给"够大的"节点常显(小概念挤在一起会糊成一片)，放大到 1.5 倍以上或选中/悬停时全显
+            const showLabel = abs || r >= 8.5 || view.k >= 1.5 || sel === n.id || hover?.id === n.id;
+            return (
+            <g key={n.id} transform={`translate(${p.x},${p.y})`} style={{ cursor: "pointer", opacity: dim ? 0.22 : 1 }}
+              onMouseDown={(ev) => { ev.stopPropagation(); const w = toWorld(ev.clientX, ev.clientY); dragRef.current = { id: n.id, kind: "node", sx: ev.clientX, sy: ev.clientY, ox: 0, oy: 0, moved: false }; }}
+              onMouseEnter={(ev) => setHover({ kind: "node", id: n.id, mx: ev.clientX, my: ev.clientY })} onMouseLeave={() => setHover(null)}>
+              {abs && <circle r={r + 7} fill={color(n)} opacity={0.13} />}
+              <circle r={r} fill={color(n)} stroke={sel === n.id ? "var(--text)" : "var(--bg)"} strokeWidth={sel === n.id ? 2.4 : abs ? 2 : 1} />
+              {showLabel && (
+                <text x={r + 3} y={abs ? 5 : 3.6} fontSize={abs ? Math.min(17, 11 + (n.depth || 1) * 1.6) : 10.5}
+                  fontWeight={abs ? 700 : 400} fill="var(--text)" style={{ pointerEvents: "none" }}>
+                  {n.name.length > 22 ? n.name.slice(0, 21) + "…" : n.name}
+                </text>
+              )}
+            </g>
+          ); })}
+        </g>
+      </svg>
+      {(hoverNode || hoverEdge) && (
+        <div className="bbg-tip" style={{ left: Math.min((hover!.mx - (svgRef.current?.getBoundingClientRect().left || 0)) + 14, W), top: (hover!.my - (svgRef.current?.getBoundingClientRect().top || 0)) + 14 }}>
+          {hoverNode ? (<>
+            <div className="bbg-tip-h"><span className="bbg-dot" style={{ background: color(hoverNode) }} />{hoverNode.name}</div>
+            <div className="bbg-tip-type">
+              {hoverNode.level === "abstract"
+                ? (hoverNode.isDao ? "塔尖 · 万物归一" : `第 ${hoverNode.depth} 层抽象 · 收敛了 ${hoverNode.children?.length || 0} 个`)
+                : hoverNode.type + (hoverNode.parent ? ` · 归入「${hoverNode.parent}」` : " · 还没固化")}
+            </div>
+            {hoverNode.summary && <div className="bbg-tip-sum">{hoverNode.summary}</div>}
+          </>) : (<>
+            <div className="bbg-tip-h">{hoverEdge.relation}</div>
+            <div className="bbg-tip-sum">{hoverEdge.from} → {hoverEdge.to}</div>
+          </>)}
+        </div>
+      )}
+      {selNode && (
+        <div className="bbg-detail">
+          <div className="bbg-detail-h"><span className="bbg-dot" style={{ background: color(selNode) }} />{selNode.name}<button onClick={() => setSel(null)}><Ic.IcBack size={13} /></button></div>
+          <div className="bbg-detail-type">
+            {selNode.level === "abstract"
+              ? (selNode.isDao ? "塔尖 · 万物归一" : `第 ${selNode.depth} 层抽象认知`)
+              : `类型：${selNode.type}`}
+          </div>
+          {selNode.level === "abstract" && !!selNode.children?.length && (
+            <div className="bbg-detail-row"><b>由这些收敛而来（{selNode.children.length}）</b><div>{selNode.children.join("、")}</div></div>
+          )}
+          {selNode.level !== "abstract" && (
+            <div className="bbg-detail-row"><b>固化情况</b><div>{selNode.parent ? `已归入「${selNode.parent}」` : "还没被收编进任何上层认知"}</div></div>
+          )}
+          {selNode.summary && <div className="bbg-detail-row"><b>它的理解</b><div>{selNode.summary}</div></div>}
+          {selNode.attrs && Object.entries(selNode.attrs).map(([k, v]) => (<div key={k} className="bbg-detail-row"><b>{k}</b><div>{String(v)}</div></div>))}
+        </div>
+      )}
+    </div>
   );
 }
 
