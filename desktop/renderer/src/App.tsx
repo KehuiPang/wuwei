@@ -7678,6 +7678,7 @@ function AskModal({
   lang,
   autoSec = 0,
   onAuto,
+  redlineHit,
 }: {
   data: { id: number; questions: AskQuestion[] };
   anchor: React.RefObject<HTMLDivElement | null>; // 输入框(composer)，用于对齐定位
