@@ -5562,6 +5562,57 @@ export function App() {
               ))}
             </div>
           )}
+          {goal && (
+            <div className={"goal-bar" + (goal.active ? " on" : "") + (goal.done ? " done" : "")}>
+              <span className="goal-ico">{goal.done ? "✓" : "◎"}</span>
+              <span className="goal-text" title={goal.text}>{goal.text}</span>
+              {goal.active ? (
+                <>
+                  <span className="goal-state">{lang === "en" ? "advancing" : "自主推进中"}{modeOf(currentId) === "cont" && contN > 0 ? (lang === "en" ? ` · step ${contN}` : ` · 第 ${contN} 步`) : ""}</span>
+                  <button
+                    onClick={() => {
+                      const g = { text: goal.text, active: false, done: goal.done };
+                      window.wuwei.goalSet?.(currentId, g);
+                      setGoal(g);
+                      setMode(currentId, "auto"); // 暂停 = 回到自动，不再替你接话
+                    }}
+                  >
+                    {lang === "en" ? "Pause" : "暂停"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {goal.done && <span className="goal-state">{lang === "en" ? "done" : "已完成"}</span>}
+                  <button
+                    className="on"
+                    onClick={() => {
+                      const g = { text: goal.text, active: true, done: false };
+                      window.wuwei.goalSet?.(currentId, g);
+                      setGoal(g);
+                      setMode(currentId, "cont");
+                      doSend(lang === "en" ? "Keep advancing toward the overall goal; continue where we left off." : "继续朝总目标推进，接着上次没做完的往下做。", []);
+                    }}
+                  >
+                    {goal.done ? (lang === "en" ? "Restart" : "重新开始") : (lang === "en" ? "Resume" : "继续")}
+                  </button>
+                </>
+              )}
+              <button onClick={() => setGoalEdit({ sid: currentId, text: goal.text })}>{lang === "en" ? "Edit" : "改"}</button>
+              {!goal.done && (
+                <button
+                  title={lang === "en" ? "Mark this goal as achieved" : "标记这个目标已达成（目标本身会一直留着，要清掉请到「改」里删除）"}
+                  onClick={() => {
+                    const g = { text: goal.text, active: false, done: true };
+                    window.wuwei.goalSet?.(currentId, g);
+                    setGoal(g);
+                    setMode(currentId, "auto");
+                  }}
+                >
+                  {lang === "en" ? "✓ Done" : "✓ 完成"}
+                </button>
+              )}
+            </div>
+          )}
           {suggestion && input === "" && (
             <div
               className="suggest-bar"
@@ -5578,13 +5629,24 @@ export function App() {
                 <path d="M9.6 18.5h4.8M10.5 21h3" />
               </svg>
               <span className="suggest-text">{suggestion}</span>
-              <span className="suggest-key">{t("suggest.key", "Tab 填入")}</span>
+              {suggestWait > 0 ? (
+                <button
+                  className="suggest-wait"
+                  title={lang === "en" ? "Smart-continue judged this a low-risk question; it will auto-send when the countdown ends. Click to wait for you." : "智能继续：这条判成想问你一句，但没碰红线，倒数完还是会自动发。点这里改成等你。"}
+                  onClick={(e) => { e.stopPropagation(); setSuggestWait(0); }}
+                >
+                  {lang === "en" ? `auto-send in ${suggestWait}s · click to wait` : `${suggestWait}s 后自动发 · 点这等我`}
+                </button>
+              ) : (
+                <span className="suggest-key">{modeOf(currentId) === "cont" ? (lang === "en" ? "smart-continue" : "智能继续中") : t("suggest.key", "Tab 填入")}</span>
+              )}
               <button
                 className="suggest-x"
                 title={t("suggest.dismiss", "关闭建议")}
                 aria-label={t("suggest.dismiss", "关闭建议")}
                 onClick={(e) => {
                   e.stopPropagation(); // 别冒泡到整条(那会直接发送)
+                  setSuggestWait(0); // 智能继续:关掉建议同时取消自动发送倒计时
                   setSuggestion("");
                 }}
               >
@@ -5696,6 +5758,13 @@ export function App() {
                 {lang === "en" ? "Continue" : "连推"}
               </button>
             </div>
+            <button
+              className="goal-open"
+              title={lang === "en" ? "Set an overall goal for this conversation and let it self-drive" : "给这个对话定一个总目标，让它自主拆解推进"}
+              onClick={() => setGoalEdit({ sid: currentId, text: goal?.text || "" })}
+            >
+              ◎ {lang === "en" ? "Goal" : "目标"}
+            </button>
 
             {/* 脑网络后台进度：索引构建 / 概念抽取，实时可见，点击进设置查看 */}
             {(idxProg?.building || conProg?.running) && (
@@ -6362,6 +6431,57 @@ export function App() {
                 ))}
               </div>
             )}
+          </div>
+        </>
+      )}
+      {goalEdit && (
+        <>
+          <div className="mq-overlay" onClick={() => setGoalEdit(null)} />
+          <div className="goal-modal">
+            <div className="goal-modal-h">◎ {lang === "en" ? "Overall goal for this conversation" : "这个对话的总目标"}</div>
+            <div className="goal-modal-sub">
+              {lang === "en"
+                ? "Describe what you want to achieve. After you click Start, it switches to smart-continue, breaks the task down and drives it step by step — only stopping to ask when something truly needs you (servers, accounts, spending, going live)."
+                : "写清楚你要达成什么。点「开始执行」后它会自动切到智能继续，自己拆解任务、一步步做下去，只有真正需要你出面的（服务器、账号、花钱、上线这类）才会停下来问你。"}
+            </div>
+            <textarea
+              autoFocus
+              rows={6}
+              value={goalEdit.text}
+              placeholder={lang === "en" ? "e.g. Research all the latest relevant literature, map out the directions, converge on the most valuable one, then implement/test/iterate until a verifiable result." : "例：把最前沿的相关文献全部调研一遍，梳理出有哪些研究方向，收敛出最有价值的一条，然后一步步实践、测试、迭代，直到跑出可验证的结果。"}
+              onChange={(e) => setGoalEdit({ ...goalEdit, text: e.target.value })}
+            />
+            <div className="goal-modal-b">
+              {goal && (
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    window.wuwei.goalSet?.(goalEdit.sid, null);
+                    if (goalEdit.sid === currentId) setGoal(null);
+                    setGoalEdit(null);
+                  }}
+                >
+                  {lang === "en" ? "Delete goal" : "删除目标"}
+                </button>
+              )}
+              <span style={{ flex: 1 }} />
+              <button className="ghost" onClick={() => setGoalEdit(null)}>{lang === "en" ? "Cancel" : "取消"}</button>
+              <button
+                className="ghost"
+                onClick={() => {
+                  const tx = goalEdit.text.trim();
+                  const g = tx ? { text: tx, active: false, done: false } : null;
+                  window.wuwei.goalSet?.(goalEdit.sid, g);
+                  if (goalEdit.sid === currentId) setGoal(g);
+                  setGoalEdit(null);
+                }}
+              >
+                {lang === "en" ? "Save only" : "只保存"}
+              </button>
+              <button className="primary" disabled={!goalEdit.text.trim()} onClick={() => startGoal(goalEdit.text)}>
+                {lang === "en" ? "Start" : "开始执行"}
+              </button>
+            </div>
           </div>
         </>
       )}
