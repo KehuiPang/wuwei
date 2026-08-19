@@ -3088,8 +3088,9 @@ export function App() {
           // AI 请用户选择：按发起会话 id 存。当前会话→直接弹框；别的会话→右上角通知，不打断当前对话。
           const askSid = payload.sid || currentIdRef.current;
           setAsks((m) => ({ ...m, [askSid]: { id: payload.id, questions: payload.questions || [] } }));
-          // 智能继续：这个会话开着 cont，且选择题没碰红线 → 等 askAutoSec 秒还没人选就按目标自己定
-          if (modeOf(askSid) === "cont") {
+          // 智能继续：后台会话开着 cont 且选择题没碰红线 → 等 askAutoSec 秒还没人选就按目标自己定。
+          // (当前会话由 AskModal 自己显示可见倒计时并到点自答，这里只管看不见的后台会话，避免双计时器)
+          if (modeOf(askSid) === "cont" && askSid !== currentIdRef.current) {
             const sec = askAutoSecFor(payload.questions || [], askAutoSecRef.current, stopRulesRef.current);
             if (sec > 0) {
               window.setTimeout(() => {
@@ -7071,8 +7072,17 @@ export function App() {
         <AskModal
           key={asks[currentId].id}
           t={t}
+          lang={lang}
           data={asks[currentId]}
           anchor={composerRef}
+          autoSec={modeOf(currentId) === "cont" ? askAutoSecFor(asks[currentId].questions || [], askAutoSec, stopRules) : 0}
+          onAuto={() => {
+            // 倒计时到点：按总目标替你选(不勾具体项，让 AI 挑最合理的继续)
+            window.wuwei.answerAsk(asks[currentId].id, {
+              list: (asks[currentId].questions || []).map(() => ({ selected: [], text: lang === "en" ? "You decide based on the overall goal — pick the most reasonable option and keep going." : "这个你按总目标自己定，挑最合理的选项继续。" })),
+            });
+            clearAsk(currentId);
+          }}
           onSubmit={(list, images) => {
             window.wuwei.answerAsk(asks[currentId].id, { list, images });
             clearAsk(currentId);
@@ -7645,12 +7655,18 @@ function AskModal({
   onSubmit,
   onCancel,
   t,
+  lang,
+  autoSec = 0,
+  onAuto,
 }: {
   data: { id: number; questions: AskQuestion[] };
   anchor: React.RefObject<HTMLDivElement | null>; // 输入框(composer)，用于对齐定位
   onSubmit: (list: { selected: string[]; text?: string }[], images: string[]) => void;
   onCancel: () => void;
   t: T;
+  lang?: Lang;
+  autoSec?: number; // 智能继续:>0 则显示倒计时，到点自动按目标替你定(0=不自动)
+  onAuto?: () => void; // 倒计时到点的回调(父组件提交"你自己定"的答案)
 }) {
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
@@ -7699,6 +7715,18 @@ function AskModal({
     return () => window.removeEventListener("keydown", h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 智能继续：可见倒计时。你一旦动手(选了/输入了/翻到下一题)就停表，交回你自己决定
+  const touched = step > 0 || Object.values(sel).some((a) => a?.length) ||
+    Object.values(other).some((s) => (s || "").trim()) || Object.values(imgs).some((a) => a?.length);
+  const [left, setLeft] = useState(autoSec);
+  const [autoCancelled, setAutoCancelled] = useState(false);
+  const autoOn = autoSec > 0 && !touched && !autoCancelled && !!onAuto;
+  useEffect(() => {
+    if (!autoOn) return;
+    if (left <= 0) { onAuto?.(); return; }
+    const tm = setTimeout(() => setLeft((n) => n - 1), 1000);
+    return () => clearTimeout(tm);
+  }, [autoOn, left]);
   // 对齐到输入框：同左、同宽、贴其正上方 8px
   const [box, setBox] = useState<{ left: number; width: number; bottom: number } | null>(null);
   useLayoutEffect(() => {
@@ -7804,6 +7832,18 @@ function AskModal({
           <span className="ask-title">{q.question}</span>
           {q.multiSelect && <span className="ask-multi">{getLang() === "en" ? "Multi-select" : "可多选"}</span>}
         </div>
+        {autoOn && (
+          <div className="ask-auto">
+            <span className="ask-auto-txt">
+              {(lang || getLang()) === "en"
+                ? `Smart-continue: auto-picking the best option toward the goal in ${left}s`
+                : `智能继续：${left} 秒后按总目标自动替你选`}
+            </span>
+            <button type="button" className="ask-auto-wait" onClick={() => setAutoCancelled(true)}>
+              {(lang || getLang()) === "en" ? "let me choose" : "我自己选"}
+            </button>
+          </div>
+        )}
         <div className="ask-opts">
           {q.options.map((o, oi) => {
             const on = (sel[step] || []).includes(o.label);

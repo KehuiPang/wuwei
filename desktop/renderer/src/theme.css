@@ -4910,6 +4910,18 @@ body {
   border-radius: 999px; padding: 2px 10px; cursor: pointer; font-size: 11px; font-family: var(--mono);
 }
 .suggest-wait:hover { background: var(--spark); color: #fff; }
+/* 选择题弹窗内的智能继续倒计时条 */
+.ask-auto {
+  display: flex; align-items: center; gap: 8px; margin: 6px 0 2px;
+  padding: 5px 10px; border-radius: 8px;
+  background: var(--spark-soft); border: 1px solid var(--spark);
+}
+.ask-auto-txt { flex: 1; min-width: 0; font-size: 12px; color: var(--spark); font-family: var(--mono); }
+.ask-auto-wait {
+  flex: 0 0 auto; border: 1px solid var(--spark); background: transparent; color: var(--spark);
+  border-radius: 999px; padding: 2px 10px; cursor: pointer; font-size: 11px;
+}
+.ask-auto-wait:hover { background: var(--spark); color: #fff; }
 .trash-list .empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
 .trash-row {
   display: flex;
