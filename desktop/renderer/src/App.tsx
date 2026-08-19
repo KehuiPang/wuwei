@@ -2179,6 +2179,13 @@ export function App() {
   useEffect(() => {
     window.wuwei.setContSessions?.(Object.keys(modeBySid).filter((s) => modeBySid[s] === "cont"));
   }, [modeBySid]);
+  // 「手动」模式默认藏起来(底部只留 自动/连推)，需要每步确认权限的人在设置里开
+  const [showManual, setShowManual] = useState(() => localStorage.getItem("wuwei-show-manual") === "1");
+  useEffect(() => {
+    const onToggle = (e: any) => setShowManual(!!e.detail);
+    window.addEventListener("wuwei-show-manual", onToggle);
+    return () => window.removeEventListener("wuwei-show-manual", onToggle);
+  }, []);
   // 安全阀都可调(设置→运行模式)：最多连推几轮、发出前留多久反悔、选择题等多少秒
   const [contMax, setContMax] = useState(() => {
     const v = localStorage.getItem("wuwei-cont-max");
@@ -2214,6 +2221,7 @@ export function App() {
   // 待跳转的目标：切会话是异步的(等 evt:session-loaded)，先记下来，会话加载完再滚过去
   const jumpRef = useRef<{ sid: string; anchor: string; q: string } | null>(null);
   // —— 数字婴儿(AGI 板块) ——
+  const [agiEnabled, setAgiEnabled] = useState(() => localStorage.getItem("wuwei-agi-enabled") === "1"); // 默认隐藏，实验功能，设置里手动开
   const [agiExpanded, setAgiExpanded] = useState(() => localStorage.getItem("minicc-agi-expanded") !== "0"); // 侧栏 AGI 区展开
   const [agiView, setAgiView] = useState<null | "baby">(null); // 主区是否显示数字婴儿面板
   const [babyExists, setBabyExists] = useState(() => localStorage.getItem("minicc-baby-exists") === "1");
@@ -3959,6 +3967,12 @@ export function App() {
     const el = babyChatRef.current;
     if (el && babyChatStick.current) el.scrollTop = el.scrollHeight;
   }, [babyChatLog, babyBusy]);
+  // AGI 板块显隐开关(设置里切换)
+  useEffect(() => {
+    const onToggle = (e: any) => setAgiEnabled(!!e.detail);
+    window.addEventListener("wuwei-agi-toggle", onToggle);
+    return () => window.removeEventListener("wuwei-agi-toggle", onToggle);
+  }, []);
   // 面板打开就每 2 秒轮询：更新"它在干嘛"活动状态 + 进度；活着时每轮刷状态区，歇着每 10 轮刷一次
   useEffect(() => {
     if (agiView !== "baby") return;
@@ -4006,17 +4020,28 @@ export function App() {
         <button className="new-session" onClick={() => window.wuwei.newSession()}>
           {t("session.new")}
         </button>
-        {/* AGI 板块：数字婴儿入口(迁自 minicc) */}
+        {/* AGI 板块：数字婴儿入口(迁自 minicc)。默认隐藏，设置里开 */}
+        {agiEnabled && (
         <div className="agi-panel">
           <div className="agi-head" onClick={() => { const v = !agiExpanded; setAgiExpanded(v); localStorage.setItem("minicc-agi-expanded", v ? "1" : "0"); }}>
-            <span>🧠 AGI</span>
+            <span className="agi-title">
+              <svg className="agi-glyph" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 4.5a3 3 0 0 0-3 3 2.6 2.6 0 0 0-1.4 4.6A2.6 2.6 0 0 0 9 16.8a3 3 0 0 0 3 1.7" />
+                <path d="M12 4.5a3 3 0 0 1 3 3 2.6 2.6 0 0 1 1.4 4.6A2.6 2.6 0 0 1 15 16.8a3 3 0 0 1-3 1.7" />
+                <path d="M12 4.5v14" />
+              </svg>
+              AGI
+            </span>
             <span className="agi-caret">{agiExpanded ? "▾" : "▸"}</span>
           </div>
           {agiExpanded && (
             <div className="agi-items">
               {babyExists ? (
                 <div className={"agi-item" + (agiView === "baby" ? " active" : "")}>
-                  <span className="agi-item-name" onClick={openBaby} title={lang === "en" ? "Open digital baby" : "点击进入数字婴儿"}>👶 {lang === "en" ? "Digital Baby" : "数字婴儿"}</span>
+                  <span className="agi-item-name" onClick={openBaby} title={lang === "en" ? "Open digital baby" : "点击进入数字婴儿"}>
+                    <BabyGlyph />
+                    {lang === "en" ? "Digital Baby" : "数字婴儿"}
+                  </span>
                   <span className="agi-item-del" title={lang === "en" ? "Remove" : "删除对接"} onClick={deleteBaby}>✕</span>
                 </div>
               ) : (
@@ -4025,6 +4050,7 @@ export function App() {
             </div>
           )}
         </div>
+        )}
         <div className="session-list">
           {sessions.length === 0 && <div className="empty">{lang === "en" ? "No conversations yet" : "暂无历史对话"}</div>}
           {(() => {
@@ -4234,6 +4260,24 @@ export function App() {
                   >
                     <HandoffIcon />
                     <span>{t("ctx.handoff", "总结并交接到新对话")}</span>
+                  </button>
+                  <div className="ctx-sep" />
+                  <button
+                    className="ctx-item ctx-ico"
+                    title={lang === "en" ? "Set an overall goal for this chat; it self-decomposes and drives step by step until done" : "给这个对话定一个大目标，它自己拆解、自己一步步推进，做完为止"}
+                    onClick={() => {
+                      const sid = ctxMenu.sid;
+                      close();
+                      window.wuwei.goalGet?.(sid)
+                        .then((g) => setGoalEdit({ sid, text: g?.text || "" }))
+                        .catch(() => setGoalEdit({ sid, text: "" }));
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="8" />
+                      <circle cx="12" cy="12" r="3.4" />
+                    </svg>
+                    <span>{lang === "en" ? "Set overall goal…" : "设置总目标…"}</span>
                   </button>
                   <div className="ctx-sep" />
                   <button
@@ -5774,9 +5818,11 @@ export function App() {
               )}
             </div>
             <div className="mode-mini" title={modeOf(currentId) === "manual" ? t("mode.manualTip") : modeOf(currentId) === "cont" ? (lang === "en" ? "Smart-continue: auto-approve + keep advancing toward the goal after each turn" : "智能继续：自动放行权限 + 跑完一轮自己朝目标接着推进") : t("mode.autoTip")}>
-              <button className={modeOf(currentId) === "manual" ? "on" : ""} onClick={() => setMode(currentId, "manual")}>
-                {t("mode.manual")}
-              </button>
+              {(showManual || modeOf(currentId) === "manual") && (
+                <button className={modeOf(currentId) === "manual" ? "on" : ""} onClick={() => setMode(currentId, "manual")}>
+                  {t("mode.manual")}
+                </button>
+              )}
               <button className={modeOf(currentId) === "auto" ? "on" : ""} onClick={() => setMode(currentId, "auto")}>
                 {t("mode.auto")}
               </button>
@@ -5784,13 +5830,6 @@ export function App() {
                 {lang === "en" ? "Continue" : "连推"}
               </button>
             </div>
-            <button
-              className="goal-open"
-              title={lang === "en" ? "Set an overall goal for this conversation and let it self-drive" : "给这个对话定一个总目标，让它自主拆解推进"}
-              onClick={() => setGoalEdit({ sid: currentId, text: goal?.text || "" })}
-            >
-              ◎ {lang === "en" ? "Goal" : "目标"}
-            </button>
 
             {/* 脑网络后台进度：索引构建 / 概念抽取，实时可见，点击进设置查看 */}
             {(idxProg?.building || conProg?.running) && (
@@ -8006,6 +8045,18 @@ function ThinkBlock({ content, live }: { content: string; live?: boolean }) {
       </summary>
       <div className="tk-body">{content.trim()}</div>
     </details>
+  );
+}
+
+// 数字婴儿：简约线性头像图标(替代 👶 emoji，跟随 currentColor)
+function BabyGlyph({ size = 15 }: { size?: number }) {
+  return (
+    <svg className="agi-glyph" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="13" r="7.5" />
+      <path d="M11.8 5.5c.2-1.3 1.2-2 2.4-1.5" />
+      <path d="M9.6 12.4v.5M14.4 12.4v.5" />
+      <path d="M10 15.7c.9.7 3.1.7 4 0" />
+    </svg>
   );
 }
 
@@ -11109,9 +11160,49 @@ function SettingsModal({
 
               {/* 智能继续：连推安全阀 + 自定义红线 */}
               <div className="app-set-group">{lang === "en" ? "Smart-continue" : "智能继续（连推 / 自主推进）"}</div>
+              <div className="app-set-row" style={{ cursor: "default", marginBottom: "6px" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">{lang === "en" ? "Show \"Manual\" mode (approve every tool step)" : "显示「手动」模式（每步都确认权限）"}</div>
+                  <div className="app-set-hint">
+                    {lang === "en" ? "Off by default — the bottom bar shows only Auto / Smart-continue. Turn on if you want to approve each tool call." : "默认关——底部只显示 自动 / 连推。想每一步都自己点确认再开。"}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  defaultChecked={localStorage.getItem("wuwei-show-manual") === "1"}
+                  onChange={(e) => {
+                    localStorage.setItem("wuwei-show-manual", e.target.checked ? "1" : "0");
+                    window.dispatchEvent(new CustomEvent("wuwei-show-manual", { detail: e.target.checked }));
+                  }}
+                />
+              </div>
               <ContSettings lang={lang} />
               <div style={{ height: 8 }} />
               <StopRulesSettings lang={lang} />
+              <div className="app-set-hint" style={{ marginBottom: "16px" }} />
+
+              {/* AGI 板块(实验性)：默认关，开了侧栏才出现「数字婴儿」入口 */}
+              <div className="app-set-group">{lang === "en" ? "AGI (experimental)" : "AGI 板块（实验性）"}</div>
+              <div className="app-set-row" style={{ cursor: "default", marginBottom: "6px" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">{lang === "en" ? "Show AGI section (Digital Baby) in the sidebar" : "在侧边栏显示 AGI 板块（数字婴儿）"}</div>
+                  <div className="app-set-hint">
+                    {lang === "en"
+                      ? "A curiosity-driven digital baby that self-learns, grows and chats. Needs a local Python backend — set agi.babyDir & agi.python in ~/.wuwei/config.json."
+                      : "好奇心驱动、自主学习成长并能聊天的数字婴儿。依赖本地 Python 后端——需在 ~/.wuwei/config.json 配 agi.babyDir 与 agi.python。"}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  defaultChecked={localStorage.getItem("wuwei-agi-enabled") === "1"}
+                  onChange={(e) => {
+                    localStorage.setItem("wuwei-agi-enabled", e.target.checked ? "1" : "0");
+                    window.dispatchEvent(new CustomEvent("wuwei-agi-toggle", { detail: e.target.checked }));
+                  }}
+                />
+              </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }} />
             </>
           )}

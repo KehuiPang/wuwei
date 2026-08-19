@@ -134,6 +134,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 6px; /* 搜索与折叠«之间留点距离，别挤一起 */
   padding: 0 10px;
 }
 .icon-btn {
@@ -4851,6 +4852,9 @@ body {
 .agi-item-del:hover { opacity: 1; color: #e5484d; }
 .agi-add { padding: 5px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; opacity: .7; border: 1px dashed var(--border, #ddd); text-align: center; }
 .agi-add:hover { opacity: 1; background: rgba(127,127,127,.08); }
+.agi-title { display: inline-flex; align-items: center; gap: 6px; }
+.agi-glyph { flex: 0 0 auto; opacity: .9; }
+.agi-item-name { display: inline-flex; align-items: center; gap: 6px; }
 
 /* ============ 智能继续：总目标条 / 目标弹窗 / 倒计时 ============ */
 .goal-bar {
