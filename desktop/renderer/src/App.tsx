@@ -3511,6 +3511,16 @@ export function App() {
     window.addEventListener("wuwei-stop-rules", onRules);
     return () => window.removeEventListener("wuwei-stop-rules", onRules);
   }, []);
+  // 设置面板改了连推安全阀 → 同步到运行时状态
+  useEffect(() => {
+    const onCont = (e: any) => {
+      if (typeof e.detail?.max === "number") setContMax(e.detail.max);
+      if (typeof e.detail?.delay === "number") setContDelay(e.detail.delay);
+      if (typeof e.detail?.askSec === "number") setAskAutoSec(e.detail.askSec);
+    };
+    window.addEventListener("wuwei-cont-cfg", onCont);
+    return () => window.removeEventListener("wuwei-cont-cfg", onCont);
+  }, []);
   // 定好目标就交给它自己跑：这段话是给 AI 的工作方式约定
   function startGoal(text: string) {
     const tx = text.trim();
@@ -7852,6 +7862,94 @@ function AskModal({
   );
 }
 // 复制按钮：点后短暂显示绿色勾 + "已复制"提示
+// 智能继续：自定义红线编辑(设置面板)
+function StopRulesSettings({ lang }: { lang: Lang }) {
+  const [text, setText] = useState("");
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    window.wuwei.stopRulesGet?.().then((t) => setText(t || "")).catch(() => {});
+  }, []);
+  return (
+    <>
+      <div className="app-set-row" style={{ cursor: "default" }}>
+        <div className="app-set-label">{lang === "en" ? "When it must stop and ask me (add your own)" : "必须停下来问我的情况（自己加）"}</div>
+      </div>
+      <textarea
+        rows={5}
+        style={{ width: "100%", boxSizing: "border-box", resize: "vertical", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 10, padding: "10px 12px", fontFamily: "var(--sans)", fontSize: 13, lineHeight: 1.6, outline: "none" }}
+        value={text}
+        placeholder={lang === "en" ? "one per line, e.g.\ntouch the prod DB / prod containers\nemail or message anyone\nchange nginx config" : "一行一条，例：\n碰线上库 / prod 容器\n给任何人发邮件或短信\n改 nginx 配置\n跑超过 10 分钟的任务"}
+        onChange={(e) => { setText(e.target.value); setSaved(false); }}
+        onBlur={() => {
+          window.wuwei.stopRulesSet?.(text);
+          window.dispatchEvent(new CustomEvent("wuwei-stop-rules", { detail: text }));
+          setSaved(true);
+        }}
+      />
+      <div style={{ fontSize: 11, opacity: saved ? 0.75 : 0.45, margin: "4px 0 10px" }}>
+        {saved ? (lang === "en" ? "Saved (saves when you leave the box)" : "已保存（离开输入框即保存）") : (lang === "en" ? "Click elsewhere to save" : "改完点一下别处即保存")}
+      </div>
+    </>
+  );
+}
+
+// 智能继续：连推安全阀(设置面板)
+function ContSettings({ lang }: { lang: Lang }) {
+  const [max, setMax] = useState(() => {
+    const v = localStorage.getItem("wuwei-cont-max");
+    return v === null ? 30 : Math.max(0, Number(v) || 0);
+  });
+  const [delay, setDelay] = useState(() => {
+    const v = localStorage.getItem("wuwei-cont-delay");
+    return v === null ? 1200 : Number(v) || 0;
+  });
+  const [askSec, setAskSec] = useState(() => {
+    const v = localStorage.getItem("wuwei-ask-auto-sec");
+    return v === null ? 3 : Number(v) || 0;
+  });
+  const pushCfg = (m: number, d: number, a: number) => {
+    localStorage.setItem("wuwei-cont-max", String(m));
+    localStorage.setItem("wuwei-cont-delay", String(d));
+    localStorage.setItem("wuwei-ask-auto-sec", String(a));
+    window.dispatchEvent(new CustomEvent("wuwei-cont-cfg", { detail: { max: m, delay: d, askSec: a } }));
+  };
+  return (
+    <>
+      <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+        <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Smart-continue max rounds" : "智能继续最多连推"}</div>
+        <span style={{ flex: 1 }} />
+        <input
+          type="number"
+          min={0}
+          value={max}
+          style={{ width: 96, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
+          onChange={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); setMax(v); pushCfg(v, delay, askSec); }}
+        />
+        <div className="app-set-hint" style={{ minWidth: 56, textAlign: "right" }}>
+          {max <= 0 ? (lang === "en" ? "∞" : "不限") : (lang === "en" ? "rounds" : "轮")}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, opacity: .5, margin: "-2px 0 8px" }}>
+        {lang === "en" ? "Any number; 0 = unlimited, keeps going until the goal is done (you can stop or switch to auto anytime)." : "自己填，多大都行；填 0 就是不限轮数，一直推到目标做完（随时能按停或切回自动）。"}
+      </div>
+      <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+        <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Undo window before sending" : "发出前反悔窗口"}</div>
+        <input type="range" min={0} max={10000} step={100} value={delay} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setDelay(v); pushCfg(max, v, askSec); }} />
+        <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
+          {delay === 0 ? (lang === "en" ? "instant" : "立即") : (delay / 1000).toFixed(1) + (lang === "en" ? "s" : " 秒")}
+        </div>
+      </div>
+      <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+        <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Auto-answer choices after" : "选择题多久由它自己定"}</div>
+        <input type="range" min={0} max={30} step={1} value={askSec} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setAskSec(v); pushCfg(max, delay, v); }} />
+        <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
+          {askSec === 0 ? (lang === "en" ? "always wait" : "一直等我") : askSec + (lang === "en" ? "s" : " 秒")}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function CopyBtn({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   return (
@@ -11008,6 +11106,13 @@ function SettingsModal({
                   }}
                 />
               </div>
+
+              {/* 智能继续：连推安全阀 + 自定义红线 */}
+              <div className="app-set-group">{lang === "en" ? "Smart-continue" : "智能继续（连推 / 自主推进）"}</div>
+              <ContSettings lang={lang} />
+              <div style={{ height: 8 }} />
+              <StopRulesSettings lang={lang} />
+              <div className="app-set-hint" style={{ marginBottom: "16px" }} />
             </>
           )}
 
