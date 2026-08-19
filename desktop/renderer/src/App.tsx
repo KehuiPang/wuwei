@@ -3500,9 +3500,12 @@ export function App() {
     if (cur) {
       setContN(n);
       setSuggestion("");
-      atBottomRef.current = true;
-      forceBottomUntilRef.current = Date.now() + 700;
-      setAwayFromBottom(false);
+      // 关键:自主推进≠用户意图看回复。只有你本来就贴着底时才继续吸底；
+      // 你滚上去看历史时(atBottomRef=false)绝不把你拽回底部，随它在下面自己更新。
+      if (atBottomRef.current) {
+        forceBottomUntilRef.current = Date.now() + 700;
+        setAwayFromBottom(false);
+      }
       thinkStartRef.current = Date.now();
       charsRef.current = 0;
       turnTextRef.current = "";
