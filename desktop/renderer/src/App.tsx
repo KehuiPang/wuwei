@@ -2126,7 +2126,28 @@ export function App() {
   }, [lightbox, imgMenu]);
   const [suggestion, setSuggestion] = useState(""); // 输入框幽灵提示：下一步动作建议(Tab 补全)
   const [interruptedSessions, setInterruptedSessions] = useState<{ id: string; title: string }[]>([]); // 上次被强杀、待恢复的任务
-  const [autoMode, setAutoMode] = useState(true);
+  // 运行模式按【会话】各记各的：manual=每步问权限；auto=自动放行权限；cont=智能继续(自动放行+跑完自己接着推进)
+  const [modeBySid, setModeBySid] = useState<Record<string, "manual" | "auto" | "cont">>(() => {
+    try { return JSON.parse(localStorage.getItem("wuwei-mode-by-sid") || "{}"); } catch { return {}; }
+  });
+  const modeRef = useRef(modeBySid);
+  modeRef.current = modeBySid;
+  const modeOf = (sid: string) => modeRef.current[sid] || "auto"; // 默认 auto(=旧 autoMode 默认放行权限)
+  const [contN, setContN] = useState(0); // 当前会话已连续自动继续多少次
+  const contBySid = useRef(new Map<string, number>()); // 计数也按会话各算各的
+  const setMode = (sid: string, m: "manual" | "auto" | "cont") => {
+    setModeBySid((prev) => {
+      const next = { ...prev, [sid]: m };
+      localStorage.setItem("wuwei-mode-by-sid", JSON.stringify(next));
+      return next;
+    });
+    contBySid.current.set(sid, 0);
+    setContN(0);
+  };
+  // 告诉主进程哪些会话开着智能继续：它们在后台跑完也要算下一步建议，好自己接着推进
+  useEffect(() => {
+    window.wuwei.setContSessions?.(Object.keys(modeBySid).filter((s) => modeBySid[s] === "cont"));
+  }, [modeBySid]);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [trash, setTrash] = useState<import("./env").TrashItem[]>([]); // 回收站:软删除的会话(7天自动清)
   const [showTrash, setShowTrash] = useState(false);
@@ -2533,8 +2554,6 @@ export function App() {
       }
     })()),
   );
-  const autoRef = useRef(autoMode);
-  autoRef.current = autoMode;
   const streamRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true); // 用户是否贴着底部：滚上去看历史时暂停自动吸底，滚回底部再恢复
   // 强制吸底截止时间戳(0=不强制)。切换会话/发消息后的这段时间里，滚动是"内容异步撑高"引起的，
@@ -2998,7 +3017,8 @@ export function App() {
           });
           break;
         case "evt:permission-request":
-          if (autoRef.current || alwaysAllowRef.current.has(payload.name))
+          // manual 模式每步问；auto/cont 自动放行(等价旧 autoMode)。按发起会话的模式判。
+          if (modeOf(payload.sid || currentIdRef.current) !== "manual" || alwaysAllowRef.current.has(payload.name))
             window.wuwei.respondPermission(payload.id, "allow");
           else setPending(payload);
           break;
@@ -5518,12 +5538,15 @@ export function App() {
                 </>
               )}
             </div>
-            <div className="mode-mini" title={autoMode ? t("mode.autoTip") : t("mode.manualTip")}>
-              <button className={autoMode ? "on" : ""} onClick={() => setAutoMode(true)}>
+            <div className="mode-mini" title={modeOf(currentId) === "manual" ? t("mode.manualTip") : modeOf(currentId) === "cont" ? (lang === "en" ? "Smart-continue: auto-approve + keep advancing toward the goal after each turn" : "智能继续：自动放行权限 + 跑完一轮自己朝目标接着推进") : t("mode.autoTip")}>
+              <button className={modeOf(currentId) === "manual" ? "on" : ""} onClick={() => setMode(currentId, "manual")}>
+                {t("mode.manual")}
+              </button>
+              <button className={modeOf(currentId) === "auto" ? "on" : ""} onClick={() => setMode(currentId, "auto")}>
                 {t("mode.auto")}
               </button>
-              <button className={!autoMode ? "on" : ""} onClick={() => setAutoMode(false)}>
-                {t("mode.manual")}
+              <button className={modeOf(currentId) === "cont" ? "on" : ""} onClick={() => setMode(currentId, "cont")}>
+                {lang === "en" ? "Continue" : "连推"}
               </button>
             </div>
 

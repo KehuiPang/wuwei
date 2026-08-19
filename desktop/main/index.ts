@@ -1052,11 +1052,44 @@ function applySettings(sIn: Settings) {
 // 只动 app 自己的 token(settings.oauthToken + sidecar 文件)，绝不碰 ~/.claude.json（避免搞挂 Claude Code 登录）。
 // 老用户(有 oauthToken 但无 sidecar/refresh) → 不动，手动重登一次后即自动续期。
 let refreshingClaude: Promise<void> | null = null;
+// 确认已过期且救不回来 → 把失效 token 从设置里清掉。
+// 留着它只会让每次请求都撞 401「授权过期」，用户还得自己去设置里点 × 清空；
+// 清掉后界面会提示重新授权，配了 API Key 的则自动回落到 Key。
+function clearDeadClaudeOAuth(why: string): void {
+  const s = loadSettings();
+  if (!s) return;
+  const slot = s.creds?.["claude-oauth"];
+  if (!s.oauthToken && !slot?.oauthToken) return; // 已经清过，别重复通知
+  log("claudeOAuth", "token 已过期且无法续期(", why, ") → 清除失效 token");
+  s.oauthToken = undefined;
+  if (slot) slot.oauthToken = undefined;
+  saveSettings(s);
+  applyEnvFromSettings(s);
+  provider = makeProvider(loadConfig());
+  for (const a of agents.values()) a.setProvider(provider);
+  send("evt:error", {
+    message: tt(
+      "Claude 订阅授权已过期，已自动清除失效 token。请在设置里重新授权，或改用 API Key。",
+      "Your Claude subscription authorization expired; the dead token has been cleared. Re-authorize in settings, or switch to an API key.",
+    ),
+  });
+}
+// 这个错误是不是「OAuth token 已失效」——只认鉴权类信号，别把限流/余额/网络错误也当成失效把 token 清了
+function isOAuthDead(e: any): boolean {
+  const status = Number(e?.status || 0);
+  const msg = String(e?.message || e || "").toLowerCase();
+  if (status === 401 || status === 403) return true;
+  return /\b401\b|invalid[_ ]?token|token (has )?expired|oauth token (expired|revoked|invalid)|unauthorized/.test(msg);
+}
 async function ensureFreshClaudeOAuth(): Promise<void> {
   const st = loadSettings();
   if (!st || st.kind !== "anthropic-oauth") return;
   const auth = loadClaudeAuth();
-  if (!auth?.refreshToken || !auth.expiresAt) return; // 无 refresh/过期信息 → 交给手动重登
+  if (!auth?.refreshToken || !auth.expiresAt) {
+    // 无 refresh/过期信息(老用户或 sidecar 丢失)：能判定已过期就清掉，否则交给手动重登
+    if (auth?.expiresAt && auth.expiresAt <= Date.now()) clearDeadClaudeOAuth("no-refresh-token");
+    return;
+  }
   if (auth.expiresAt - Date.now() > 5 * 60 * 1000) return; // 还有 >5 分钟 → 无需续期
   if (refreshingClaude) return refreshingClaude; // 合并并发，避免同一时刻多次刷新
   refreshingClaude = (async () => {
@@ -1064,7 +1097,9 @@ async function ensureFreshClaudeOAuth(): Promise<void> {
       log("claudeOAuth", "token 将过期，静默续期…");
       const r = await claudeOAuthRefresh(auth.refreshToken!); // 内部已把新值写回 sidecar
       if (!r?.token) {
-        log("claudeOAuth", "续期失败，保留旧 token（可能需手动重登）");
+        // 已过期才清：网络抖动导致的临时续期失败(尚未过期)保留旧 token，下次再试
+        if (auth.expiresAt! <= Date.now()) clearDeadClaudeOAuth("refresh-failed");
+        else log("claudeOAuth", "续期失败但尚未过期，保留旧 token，稍后重试");
         return;
       }
       const s = loadSettings();
@@ -2099,6 +2134,9 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
           log("turnError", useId.slice(0, 8), "status=", e?.status, "msg=", String(e?.message || e).slice(0, 800),
               e?.error ? "body=" + JSON.stringify(e.error).slice(0, 800) : "");
         } catch { /* ignore */ }
+        // Claude 订阅：真撞上 401/token 失效就当场清掉死 token。
+        // 光靠 expiresAt 判断会漏——在别处撤销授权时，时间还没到但 token 已经废了。
+        if (loadSettings()?.kind === "anthropic-oauth" && isOAuthDead(e)) clearDeadClaudeOAuth("http-401");
         send("evt:error", { sid: useId, message: e.message });
       }
     }
