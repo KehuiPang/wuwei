@@ -1600,7 +1600,7 @@ async function suggestNextAction(id: string) {
   // 需要至少有一轮助手回复；最后一条应是助手(回复已完成)
   const last = msgs[msgs.length - 1];
   if (!last || last.role !== "assistant" || !hasText(msgs, "user")) {
-    send("evt:suggest", { sid: id, text: "" });
+    send("evt:suggest", { sid: id, text: "", canContinue: false });
     return;
   }
   suggestInFlight.add(id);
@@ -1614,20 +1614,44 @@ async function suggestNextAction(id: string) {
     .filter((s: string) => s.length > 3)
     .join("\n");
   const lastReplyTail = msgTextTail(last, 600); // 助手最后回复的结尾——预测下一步只认它
+  const g = sessionGoals[id];
+  const goalBlock = g && g.active ? g.text.slice(0, 600) : ""; // 智能继续：会话总目标
+  const sr = stopRules.trim(); // 智能继续：自定义红线
   try {
     const res = await provider.complete(
       tt(
         "你是输入建议助手。下面对话里，助手『最后一条回复』的结尾通常会提出一个问题、或建议一个待确认的下一步动作。" +
           "请【只针对助手最后回复结尾的那个问题/下一步】，用中文写出用户最可能的回应(第一人称或祈使句，像用户自己会打的话，不超过20字)——" +
           "比如结尾问『要我继续部署吗?』就回『继续部署』/『先本地验证』这类。" +
-          "务必忽略对话中间的其它话题，别自己另起一件事。直接输出这句话，不要引号、解释或前缀。" +
-          "若结尾没有明确的问题或待确认的下一步(助手在等用户自由发挥)，只输出：无",
+          "务必忽略对话中间的其它话题，别自己另起一件事。\n" +
+          "输出两行，不要引号、解释或前缀：\n" +
+          "第1行：那句话本身；若结尾没有明确的问题或待确认的下一步(助手在等用户自由发挥)，第1行只写：无\n" +
+          "第2行：只写 AUTO 或 ASK。\n" +
+          "AUTO = 助手只是在确认按它已说明的方案往下推进，且这一步属于寻常低风险的事：本地或测试环境的操作、只读的检查与验证、查资料研究、改代码写文件、跑测试、构建、生成文档、整理数据。" +
+          "助手在结尾列了几条『可选的下一步』让用户挑，也算 AUTO——第1行直接替用户挑最贴近目标的那条说出来，别把选择题原样丢回去。\n" +
+          "ASK = 只有这些才停下来问人：删除/清空/覆盖数据、部署或上线到生产正式环境、发布对外内容、改线上配置或写生产数据库、花钱付款、替用户发邮件或消息、改权限与安全设置、任何不可逆或会影响他人的动作；或者要用户提供只有他才有的东西(账号、密钥、服务器、线下信息)、上一步出错需要用户定夺、几个方案的差别纯粹取决于用户偏好而无从推断。\n" +
+          "『要我继续吗』『下一步做 X 好吗』『可以选 A 或 B』这类一律 AUTO，别当成需要用户拿主意。" +
+          (goalBlock
+            ? "\n用户给这个对话定了总目标：" + goalBlock +
+              "\n他已经授权你朝这个目标自主推进，所以【朝目标推进的常规步骤一律写 AUTO】，第1行就写出推进下一步该说的话(别问要不要，直接说做什么)。只有下面 ASK 的红线才停。"
+            : "") +
+          (sr ? "\n用户自己定的红线(命中就必须写 ASK，优先级最高)：\n" + sr : ""),
         "You suggest what the user will type next. In the conversation below, the END of the assistant's LAST reply usually asks a question " +
           "or proposes a next step awaiting confirmation. Answer ONLY that question/next step: write, in English, the reply the user is most likely " +
           "to type (first person or imperative, the way a user actually types, under 12 words) — e.g. if it ends with 'Want me to deploy?', " +
-          "answer 'Go ahead and deploy' or 'Verify locally first'. Ignore other topics earlier in the conversation and do not start something new. " +
-          "Output that single line only — no quotes, no explanation, no prefix. " +
-          "If the ending has no clear question or pending next step (the assistant is waiting for the user to take the lead), output exactly: none",
+          "answer 'Go ahead and deploy' or 'Verify locally first'. Ignore other topics earlier in the conversation and do not start something new.\n" +
+          "Output TWO lines, no quotes, no explanation, no prefix:\n" +
+          "Line 1: that single line; if the ending has no clear question or pending next step (assistant is waiting for the user to lead), write exactly: none\n" +
+          "Line 2: write only AUTO or ASK.\n" +
+          "AUTO = the assistant is just confirming it should proceed along a plan it already described, and this step is ordinary low-risk: local/test-env actions, read-only checks and verification, research, editing code/writing files, running tests, builds, generating docs, organizing data. " +
+          "If the assistant listed a few optional next steps to pick from, that is also AUTO — on line 1 pick the one closest to the goal and say it, don't echo the menu back.\n" +
+          "ASK = stop and ask only for: deleting/clearing/overwriting data, deploying/releasing to production, publishing external content, changing live config or writing to a production DB, spending money, sending mail/messages on the user's behalf, changing permissions/security, anything irreversible or affecting others; or needing something only the user has (account, key, server, offline info), a prior step errored and needs the user to decide, or options differ purely by user preference and can't be inferred.\n" +
+          "'Want me to continue', 'shall I do X next', 'pick A or B' are all AUTO, not user-decision." +
+          (goalBlock
+            ? "\nThe user set an overall goal for this conversation: " + goalBlock +
+              "\nThey authorized you to drive toward it autonomously, so [ordinary steps advancing the goal are always AUTO]; line 1 states the next step to take (don't ask whether — say what to do). Only the ASK redlines below stop you."
+            : "") +
+          (sr ? "\nThe user's own redlines (hitting any one MUST be ASK, highest priority):\n" + sr : ""),
       ),
       [
         {
@@ -1646,22 +1670,31 @@ async function suggestNextAction(id: string) {
       [],
       {},
     );
-    let raw = (res.content || [])
+    const whole = (res.content || [])
       .filter((b: any) => b.type === "text")
       .map((b: any) => b.text)
       .join("")
-      .trim()
+      .trim();
+    const lines = whole.split("\n").map((s: string) => s.trim()).filter(Boolean);
+    let raw = (lines[0] || "")
       .replace(/^["'「『]|["'」』]$/g, "")
       .slice(0, en ? 90 : 40); // 英文同样意思字符数是中文的两三倍，别拦腰截断
     // "无"/"none" = 没有明确的下一步 → 不显示建议条
     if (raw === "无" || raw === "无。" || /^none[.!]?$/i.test(raw)) raw = "";
-    send("evt:suggest", { sid: id, text: raw });
+    // 只有模型明确判定「纯推进确认」(第2行 AUTO)才允许智能继续自动接话；缺这行一律当 ASK
+    const canContinue = /\bAUTO\b/i.test(lines[1] || "") && !!raw;
+    send("evt:suggest", { sid: id, text: raw, canContinue });
   } catch {
-    send("evt:suggest", { sid: id, text: "" });
+    send("evt:suggest", { sid: id, text: "", canContinue: false });
   } finally {
     suggestInFlight.delete(id);
   }
 }
+
+// 界面主动要一次建议(切到某个会话、或用户点灯泡)——回合结束时那次是自动发的
+ipcMain.handle("chat:suggest", async (_e, sid: string) => {
+  await suggestNextAction(String(sid || ""));
+});
 
 function createWindow() {
   const b = loadWindowBounds(); // 上次窗口尺寸/位置
@@ -2150,7 +2183,8 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     persist(useId); // 该会话跑完落盘
     if (!runs.has(useId)) setSessionRunning(useId, false); // 无残留活跃轮→清运行标记(须在 persist 后,它会保留旧标记)
     void emitAccount(); // 刷新余额/本会话已消耗(DeepSeek 等)
-    if (useId === currentId && !ac.signal.aborted) void suggestNextAction(useId); // 仅当前会话、正常跑完才提建议
+    // 当前会话，或开着智能继续的后台会话，跑完都算下一步建议(后台会话切走也能自己接着推进)
+    if ((useId === currentId || contSessions.has(useId)) && !ac.signal.aborted) void suggestNextAction(useId);
   }
 }
 

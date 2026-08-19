@@ -86,6 +86,7 @@ export interface WuweiApi {
   stopRulesGet(): Promise<string>;
   stopRulesSet(t: string): Promise<void>;
   setContSessions(ids: string[]): void;
+  suggestNow(sid: string): Promise<void>;
   listTrash(): Promise<TrashItem[]>;
   restoreSession(id: string): void;
   purgeTrash(id: string): void;

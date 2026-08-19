@@ -224,6 +224,37 @@ function highlightMatches(root: HTMLElement, q: string): Range | null {
   return ranges[0];
 }
 
+// 设置总目标后发给 AI 的那段工作方式约定（设置→运行模式里可改，{目标} 会被替换成你写的目标）
+const DEFAULT_GOAL_PROMPT = `【这个对话的总目标】{目标}
+
+从现在起你按这个目标自主推进，工作方式：
+1. 先把目标拆成可执行的步骤列出来，不用问我要不要拆；
+2. 然后自己一步步做下去，每做完一步简短报告进展，接着继续下一步，不用等我批准；
+3. 能自己查资料、自己验证、自己决策的一律自己来，无关紧要的选择自己定；
+4. 只有这几种情况停下来问我：需要我提供你拿不到的东西(服务器/账号/密钥/付费/线下信息)；要做删除、上线、写生产、花钱、对外发送这类不可逆或影响他人的动作；目标方向上出现分歧要我拍板；
+5. 我随时可能插话补充信息，听完照做，然后继续朝目标推进；
+6. 每轮结尾用一句话说清"下一步做什么"，方便自动接力。
+现在开始，先给拆解方案，然后直接动手做第一步。`;
+const goalPromptOf = () => localStorage.getItem("wuwei-goal-prompt") || DEFAULT_GOAL_PROMPT;
+
+// 一沾这些就别替用户拿主意——宁可停下来等人，也不能自动替他决定
+const RISKY_ASK = /删除|清空|覆盖|抹掉|销毁|上线|发布|部署|生产|正式环境|prod\b|线上|付款|支付|下单|花钱|转账|发邮件|发消息|通知(客户|用户|大家)|授权|权限|密钥|token|密码|回滚|重置|drop\s+table|truncate|rm\s+-rf|强制推送|force\s*push/i;
+/** 这道题能不能超时自动替他答：内置危险词 + 用户自己写的红线，命中任一就返回 0(死等) */
+function askAutoSecFor(qs: any[], sec: number, rules = ""): number {
+  if (!sec || sec <= 0) return 0;
+  // 用户红线按行/顿号拆成关键词，2 个字以上才算(避免"的""和"这种误伤)
+  const words = rules
+    .split(/[\n、,，;；]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2);
+  for (const q of qs || []) {
+    const blob = [q.question, q.header, ...(q.options || []).map((o: any) => `${o.label} ${o.description || ""}`)].join(" ");
+    if (RISKY_ASK.test(blob)) return 0;
+    if (words.some((w) => blob.includes(w))) return 0;
+  }
+  return sec;
+}
+
 // 从服务端报错里抠出它真正认的上下文上限（"prompt is too long: 303245 tokens > 200000 maximum"）。
 // 各家订阅通道的实际窗口未必等于模型标称值(如 Claude 订阅给不到 API 的 1M)，与其在客户端猜，
 // 不如报错一次就把真值学下来，回填占用条——从此显示的就是这条链路的真实上限。
@@ -2148,6 +2179,29 @@ export function App() {
   useEffect(() => {
     window.wuwei.setContSessions?.(Object.keys(modeBySid).filter((s) => modeBySid[s] === "cont"));
   }, [modeBySid]);
+  // 安全阀都可调(设置→运行模式)：最多连推几轮、发出前留多久反悔、选择题等多少秒
+  const [contMax, setContMax] = useState(() => {
+    const v = localStorage.getItem("wuwei-cont-max");
+    return v === null ? 30 : Math.max(0, Number(v) || 0); // 0 = 不限
+  });
+  const [contDelay, setContDelay] = useState(() => {
+    const v = localStorage.getItem("wuwei-cont-delay");
+    return v === null ? 1200 : Number(v) || 0;
+  });
+  const [askAutoSec, setAskAutoSec] = useState(() => {
+    const v = localStorage.getItem("wuwei-ask-auto-sec");
+    return v === null ? 3 : Number(v) || 0; // 0=永远等你
+  });
+  const [suggestWait, setSuggestWait] = useState(0); // ASK 兜底倒计时：N 秒后仍自动发这句
+  // 会话总目标 + 自定义红线
+  const [goal, setGoal] = useState<{ text: string; active: boolean; done?: boolean } | null>(null);
+  const [goalEdit, setGoalEdit] = useState<null | { sid: string; text: string }>(null);
+  const [stopRules, setStopRules] = useState("");
+  const contMaxRef = useRef(contMax); contMaxRef.current = contMax;
+  const contDelayRef = useRef(contDelay); contDelayRef.current = contDelay;
+  const askAutoSecRef = useRef(askAutoSec); askAutoSecRef.current = askAutoSec;
+  const stopRulesRef = useRef(stopRules); stopRulesRef.current = stopRules;
+  const lastSuggestRef = useRef<{ text: string; canContinue: boolean; auto: boolean }>({ text: "", canContinue: false, auto: false });
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [trash, setTrash] = useState<import("./env").TrashItem[]>([]); // 回收站:软删除的会话(7天自动清)
   const [showTrash, setShowTrash] = useState(false);
@@ -3058,10 +3112,34 @@ export function App() {
         case "evt:ratelimits":
           setRate(payload);
           break;
-        case "evt:suggest":
-          // 推理模型(z1 等)会带 <think>…</think>：只取思考后的正文当建议；思考未闭合时先不显示 ghost
-          if (payload.sid === currentIdRef.current) setSuggestion(splitThinking(payload.text || "").answer.trim());
+        case "evt:suggest": {
+          const sid = payload.sid;
+          const cur = sid === currentIdRef.current;
+          // 推理模型(z1 等)会带 <think>…</think>：只取思考后的正文当建议
+          const go = splitThinking(payload.text || "").answer.trim();
+          if (cur) {
+            // 建议条/幽灵提示只画当前会话；后台会话不占屏幕，只在下面照常往下推进
+            setSuggestion(go);
+            lastSuggestRef.current = { text: go, canContinue: !!payload.canContinue, auto: false };
+          }
+          // 智能继续：只有"纯推进确认"(canContinue)才自动接话；危险/要你拿主意的一律停下。
+          // 开没开看这个会话自己的模式——跟它在不在屏幕上无关，否则切走的会话就永远断在这儿。
+          const n0 = contBySid.current.get(sid) || 0;
+          if (modeOf(sid) !== "cont" || !go || (contMaxRef.current > 0 && n0 >= contMaxRef.current)) break;
+          if (payload.canContinue) {
+            if (cur) lastSuggestRef.current.auto = true;
+            // 反悔窗口(设置里可调)：这期间你一打字或按停，autoContinue 里会再校验一次
+            setTimeout(() => autoContinue(sid, go), Math.max(0, contDelayRef.current));
+          } else if (
+            // 判成 ASK 的兜底：只要这句本身不碰红线，就延时自动往下走；碰红线的才真停住等你
+            askAutoSecFor([{ question: go, header: "", options: [] }], askAutoSecRef.current, stopRulesRef.current) > 0
+          ) {
+            const sec = Math.max(3, askAutoSecRef.current * 2);
+            if (cur) setSuggestWait(sec); // 当前会话:屏上走秒，你随时能点"等我"
+            else setTimeout(() => autoContinue(sid, go), sec * 1000); // 后台会话:静默等同样久再走
+          }
           break;
+        }
         case "evt:assistant-replace":
           // 清理泄漏工具调用/噪音后：把屏上那条 assistant 换成干净正文(为空则移除该气泡)
           if (payload.sid !== currentIdRef.current) break;
@@ -3359,6 +3437,75 @@ export function App() {
     charsRef.current = 0;
     turnTextRef.current = ""; // 新一轮:清掉上轮预览缓冲
     window.wuwei.send(currentId, text, imgs.length ? imgs : undefined);
+  }
+
+  // —— 智能继续：自动接话 ——
+  const runningSetRef = useRef(runningSet); runningSetRef.current = runningSet;
+  const inputRef = useRef(input); inputRef.current = input;
+  const suggestionRef = useRef(suggestion); suggestionRef.current = suggestion;
+  // 后台会话没有输入框/建议条，直接投递给它自己的 sid，不碰当前屏幕。
+  // (只在最后落笔前再校验一次各种闸门，因为从收到建议到真发出去中间隔着"反悔窗口")
+  const autoContinue = (sid: string, text: string) => {
+    const go = (text || "").trim();
+    if (!go || !sid) return;
+    if (modeOf(sid) !== "cont") return; // 这期间被关掉了智能继续/点了暂停
+    if (runningSetRef.current.has(sid)) return; // 它又跑起来了(用户手动发了/上一轮还没完)
+    const cur = sid === currentIdRef.current;
+    if (cur && inputRef.current.trim()) return; // 当前会话:你正在打字就别抢
+    const n = (contBySid.current.get(sid) || 0) + 1;
+    if (contMaxRef.current > 0 && n > contMaxRef.current) return; // 连推轮数封顶(0=不限)
+    contBySid.current.set(sid, n);
+    setRunningSet((s) => new Set(s).add(sid)); // 乐观置运行中(主进程随后 evt:tasks 校准)
+    if (cur) {
+      setContN(n);
+      setSuggestion("");
+      atBottomRef.current = true;
+      forceBottomUntilRef.current = Date.now() + 700;
+      setAwayFromBottom(false);
+      thinkStartRef.current = Date.now();
+      charsRef.current = 0;
+      turnTextRef.current = "";
+      push({ type: "user", text: go, ts: Date.now() }); // 只有看得见的会话才画气泡
+    }
+    window.wuwei.send(sid, go);
+  };
+  // ASK 兜底倒计时：每秒减一，减到头仍然把这句发出去(智能继续下不该干等)
+  useEffect(() => {
+    if (suggestWait <= 0) return;
+    const t = setTimeout(() => {
+      if (suggestWait > 1) { setSuggestWait(suggestWait - 1); return; }
+      setSuggestWait(0);
+      const go = suggestionRef.current.trim();
+      if (!go) return;
+      lastSuggestRef.current = { text: go, canContinue: false, auto: true };
+      autoContinue(currentIdRef.current, go);
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [suggestWait]);
+  useEffect(() => { if (input.trim()) setSuggestWait(0); }, [input]); // 你一动手就别自动发了
+  // 切会话/启动时读这个会话的总目标 + 全局红线
+  useEffect(() => {
+    let alive = true;
+    window.wuwei.goalGet?.(currentId).then((gg) => { if (alive) setGoal(gg || null); }).catch(() => {});
+    return () => { alive = false; };
+  }, [currentId]);
+  useEffect(() => {
+    window.wuwei.stopRulesGet?.().then((tt) => setStopRules(tt || "")).catch(() => {});
+    const onRules = (e: any) => setStopRules(String(e.detail || ""));
+    window.addEventListener("wuwei-stop-rules", onRules);
+    return () => window.removeEventListener("wuwei-stop-rules", onRules);
+  }, []);
+  // 定好目标就交给它自己跑：这段话是给 AI 的工作方式约定
+  function startGoal(text: string) {
+    const tx = text.trim();
+    if (!tx) return;
+    const sid = currentId;
+    window.wuwei.goalSet?.(sid, { text: tx, active: true });
+    setGoal({ text: tx, active: true });
+    setMode(sid, "cont"); // 自动开智能继续
+    setGoalEdit(null);
+    const tpl = goalPromptOf();
+    doSend(tpl.includes("{目标}") ? tpl.replaceAll("{目标}", tx) : `【总目标】${tx}\n\n${tpl}`, []);
   }
 
   function clearComposer() {
