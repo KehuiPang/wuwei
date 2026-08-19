@@ -3080,6 +3080,22 @@ export function App() {
           // AI 请用户选择：按发起会话 id 存。当前会话→直接弹框；别的会话→右上角通知，不打断当前对话。
           const askSid = payload.sid || currentIdRef.current;
           setAsks((m) => ({ ...m, [askSid]: { id: payload.id, questions: payload.questions || [] } }));
+          // 智能继续：这个会话开着 cont，且选择题没碰红线 → 等 askAutoSec 秒还没人选就按目标自己定
+          if (modeOf(askSid) === "cont") {
+            const sec = askAutoSecFor(payload.questions || [], askAutoSecRef.current, stopRulesRef.current);
+            if (sec > 0) {
+              window.setTimeout(() => {
+                setAsks((m) => {
+                  if (m[askSid]?.id !== payload.id) return m; // 已被人回答/取消，别抢
+                  const qs = m[askSid].questions || [];
+                  window.wuwei.answerAsk(payload.id, {
+                    list: qs.map(() => ({ selected: [], text: lang === "en" ? "You decide based on the overall goal — pick the most reasonable option and keep going." : "这个你按总目标自己定，挑最合理的选项继续。" })),
+                  });
+                  const n = { ...m }; delete n[askSid]; return n;
+                });
+              }, sec * 1000);
+            }
+          }
           if (askSid !== currentIdRef.current) {
             const title = sessionsRef.current.find((s) => s.id === askSid)?.title || (lang === "en" ? "Another chat" : "其它会话");
             setAskToasts((t) => [...t.filter((x) => x.sid !== askSid), { askId: payload.id, sid: askSid, title }]);
