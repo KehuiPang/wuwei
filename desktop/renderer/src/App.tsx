@@ -5827,7 +5827,7 @@ export function App() {
                 {t("mode.auto")}
               </button>
               <button className={modeOf(currentId) === "cont" ? "on" : ""} onClick={() => setMode(currentId, "cont")}>
-                {lang === "en" ? "Continue" : "连推"}
+                {lang === "en" ? "Smart-continue" : "智能继续"}
               </button>
             </div>
 
