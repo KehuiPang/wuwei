@@ -1899,6 +1899,8 @@ if (!gotLock) {
   }
 
   app.whenReady().then(() => {
+    loadGoals(); // 智能继续：会话总目标(userData/session-goals.json)
+    loadStopRules(); // 智能继续：自定义红线(userData/stop-rules.txt，首次给默认)
     // app://bundle/xxx → out/renderer/xxx（打包后 renderer 与 main 同级 out 下）
     protocol.handle("app", async (request) => {
       const { pathname } = new URL(request.url);
@@ -3610,6 +3612,63 @@ ipcMain.handle("account:web-login", async (_e, pid: string) => {
   );
   void emitAccount();
   return true;
+});
+
+// ==================== 智能继续：会话总目标 + 自定义红线 + 后台推进集合 ====================
+// —— 会话总目标：给这个对话定一个大目标，它自己拆解、自己一步步推进 ——
+type SessionGoal = { text: string; active: boolean; done?: boolean };
+let sessionGoals: Record<string, SessionGoal> = {};
+const goalsFile = () => join(app.getPath("userData"), "session-goals.json");
+function loadGoals() {
+  try { sessionGoals = JSON.parse(readFileSync(goalsFile(), "utf-8")) || {}; } catch { sessionGoals = {}; }
+}
+function saveGoals() {
+  try { writeFileSync(goalsFile(), JSON.stringify(sessionGoals), "utf-8"); } catch { /* 存不下不影响主流程 */ }
+}
+// 用户自己写的「必须停下来问我」的规则(设置→运行模式)，优先级高于内置判断
+let stopRules = "";
+const stopRulesFile = () => join(app.getPath("userData"), "stop-rules.txt");
+// 首次使用给一份常见红线，省得用户从零写；之后以文件为准(不覆盖他改过的)
+const DEFAULT_STOP_RULES = [
+  "删除或清空任何数据、文件、数据库表、代码分支",
+  "部署上线、发布到生产/正式环境",
+  "修改线上配置，或往生产数据库写数据",
+  "重启、停止、扩缩容任何线上服务或容器",
+  "花钱：付款、下单、买资源、开通付费服务",
+  "替我给别人发邮件、消息、短信、提交工单",
+  "改权限、密钥、账号、安全设置",
+  "git 强制推送、回滚、reset 已推送的提交",
+  "执行 rm -rf、drop table、truncate 这类不可逆命令",
+  "把我的数据或代码上传、公开、分享到外部",
+].join("\n");
+function loadStopRules() {
+  try {
+    stopRules = readFileSync(stopRulesFile(), "utf-8");
+  } catch {
+    stopRules = DEFAULT_STOP_RULES;
+    try { writeFileSync(stopRulesFile(), stopRules, "utf-8"); } catch { /* ignore */ }
+  }
+}
+ipcMain.handle("chat:stopRulesGet", () => stopRules);
+ipcMain.handle("chat:stopRulesSet", (_e, t: string) => {
+  stopRules = String(t || "").slice(0, 4000);
+  try { writeFileSync(stopRulesFile(), stopRules, "utf-8"); } catch { /* ignore */ }
+});
+ipcMain.handle("chat:goalGet", (_e, sid: string) => sessionGoals[String(sid || "")] || null);
+ipcMain.handle("chat:goalSet", (_e, sid: string, goal: SessionGoal | null) => {
+  const k = String(sid || "");
+  if (!k) return;
+  // 只有显式传 null 才删；「完成」只是把 active 关掉、done 打上，目标本身一直留着
+  if (!goal || !String(goal.text || "").trim()) delete sessionGoals[k];
+  else sessionGoals[k] = { text: String(goal.text).slice(0, 2000), active: !!goal.active, done: !!goal.done };
+  saveGoals();
+});
+// 开着「智能继续/自主推进」的会话集合(渲染端在模式变化时同步过来)。
+// 这些会话即使不在屏幕上，跑完一轮也要照样算下一步建议——否则切走就断在那儿。
+const contSessions = new Set<string>();
+ipcMain.on("chat:cont-sessions", (_e, ids: string[]) => {
+  contSessions.clear();
+  for (const id of Array.isArray(ids) ? ids : []) if (id) contSessions.add(String(id));
 });
 
 // ==================== AGI 板块：数字婴儿对接 ====================

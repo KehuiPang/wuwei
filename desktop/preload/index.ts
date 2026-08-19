@@ -84,6 +84,13 @@ const api = {
   deleteSession: (id: string) => ipcRenderer.send("session:delete", id),
   // 全局搜索:跨所有会话搜正文,返回标题+上下文摘要+跳转锚点
   searchSessions: (q: string) => ipcRenderer.invoke("session:search", q) as Promise<any>,
+  // 智能继续:会话总目标 / 自定义红线 / 后台推进会话集合
+  goalGet: (sid: string) => ipcRenderer.invoke("chat:goalGet", sid) as Promise<{ text: string; active: boolean; done?: boolean } | null>,
+  goalSet: (sid: string, goal: { text: string; active: boolean; done?: boolean } | null) =>
+    ipcRenderer.invoke("chat:goalSet", sid, goal) as Promise<void>,
+  stopRulesGet: () => ipcRenderer.invoke("chat:stopRulesGet") as Promise<string>,
+  stopRulesSet: (t: string) => ipcRenderer.invoke("chat:stopRulesSet", t) as Promise<void>,
+  setContSessions: (ids: string[]) => ipcRenderer.send("chat:cont-sessions", ids),
   // 回收站:软删除的会话可恢复,7 天后自动彻底清除
   listTrash: () => ipcRenderer.invoke("session:list-trash") as Promise<any[]>,
   restoreSession: (id: string) => ipcRenderer.send("session:restore", id),
