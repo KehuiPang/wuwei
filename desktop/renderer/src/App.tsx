@@ -254,6 +254,22 @@ function askAutoSecFor(qs: any[], sec: number, rules = ""): number {
   }
   return sec;
 }
+/** 命中了哪条红线：返回 {word, custom}。word=命中的关键词，custom=是否来自用户自定义红线。没命中返回 null。
+ *  给弹窗做灰字提示用——让用户知道"为啥没自动倒计时"，好决定要不要去调红线。 */
+function riskyHitOf(qs: any[], rules = ""): { word: string; custom: boolean } | null {
+  const words = rules
+    .split(/[\n、,，;；]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2);
+  for (const q of qs || []) {
+    const blob = [q.question, q.header, ...(q.options || []).map((o: any) => `${o.label} ${o.description || ""}`)].join(" ");
+    const m = blob.match(RISKY_ASK);
+    if (m) return { word: m[0], custom: false };
+    const w = words.find((x) => blob.includes(x));
+    if (w) return { word: w, custom: true };
+  }
+  return null;
+}
 
 // 从服务端报错里抠出它真正认的上下文上限（"prompt is too long: 303245 tokens > 200000 maximum"）。
 // 各家订阅通道的实际窗口未必等于模型标称值(如 Claude 订阅给不到 API 的 1M)，与其在客户端猜，
@@ -7076,6 +7092,7 @@ export function App() {
           data={asks[currentId]}
           anchor={composerRef}
           autoSec={modeOf(currentId) === "cont" ? askAutoSecFor(asks[currentId].questions || [], askAutoSec, stopRules) : 0}
+          redlineHit={modeOf(currentId) === "cont" ? riskyHitOf(asks[currentId].questions || [], stopRules) : null}
           onAuto={() => {
             // 倒计时到点：按总目标替你选(不勾具体项，让 AI 挑最合理的继续)
             window.wuwei.answerAsk(asks[currentId].id, {
@@ -7667,6 +7684,7 @@ function AskModal({
   lang?: Lang;
   autoSec?: number; // 智能继续:>0 则显示倒计时，到点自动按目标替你定(0=不自动)
   onAuto?: () => void; // 倒计时到点的回调(父组件提交"你自己定"的答案)
+  redlineHit?: { word: string; custom: boolean } | null; // 命中红线才有值:显示灰字说明为啥没自动
 }) {
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
@@ -7842,6 +7860,13 @@ function AskModal({
             <button type="button" className="ask-auto-wait" onClick={() => setAutoCancelled(true)}>
               {(lang || getLang()) === "en" ? "let me choose" : "我自己选"}
             </button>
+          </div>
+        )}
+        {!autoOn && autoSec >= 0 && redlineHit && (
+          <div className="ask-redline" title={(lang || getLang()) === "en" ? "Smart-continue won't auto-decide on this; adjust redlines in Settings → Smart-continue" : "智能继续不替你定这类；可在 设置→智能继续 调整红线"}>
+            {(lang || getLang()) === "en"
+              ? `Redline hit: “${redlineHit.word}”${redlineHit.custom ? " (your custom rule)" : " (built-in)"} — waiting for you, no auto-pick. Adjust in Settings → Smart-continue.`
+              : `命中红线「${redlineHit.word}」${redlineHit.custom ? "（你自定义的）" : "（内置）"}，不自动替你选、停下等你。想改去 设置→智能继续。`}
           </div>
         )}
         <div className="ask-opts">
