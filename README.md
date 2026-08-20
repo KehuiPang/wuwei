@@ -158,13 +158,13 @@ Issues and PRs welcome. Run `npm run typecheck` before submitting to make sure t
 
 Looking for a free, local, open-source alternative to a specific tool? See how Wuwei compares:
 
-- [vs Cursor](https://wuweiai.io/vs/cursor-alternative)
-- [vs GitHub Copilot](https://wuweiai.io/vs/github-copilot-alternative)
-- [vs Claude Code](https://wuweiai.io/vs/claude-code-free-alternative)
-- [vs Windsurf](https://wuweiai.io/vs/windsurf-alternative)
-- [vs Cline](https://wuweiai.io/vs/cline-alternative)
-- [vs Aider](https://wuweiai.io/vs/aider-alternative)
-- [All comparisons →](https://wuweiai.io/vs)
+- [vs Cursor](https://wuweiai.io/en/vs/cursor-alternative)
+- [vs GitHub Copilot](https://wuweiai.io/en/vs/github-copilot-alternative)
+- [vs Claude Code](https://wuweiai.io/en/vs/claude-code-free-alternative)
+- [vs Windsurf](https://wuweiai.io/en/vs/windsurf-alternative)
+- [vs Cline](https://wuweiai.io/en/vs/cline-alternative)
+- [vs Aider](https://wuweiai.io/en/vs/aider-alternative)
+- [All comparisons →](https://wuweiai.io/en/vs)
 
 ## License
 
