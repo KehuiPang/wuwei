@@ -254,9 +254,9 @@ function askAutoSecFor(qs: any[], sec: number, rules = ""): number {
   }
   return sec;
 }
-/** 命中了哪条红线：返回 {word, custom}。word=命中的关键词，custom=是否来自用户自定义红线。没命中返回 null。
+/** 命中了哪条红线：返回 {word, src}。src=builtin(内置)/custom(自定义)/smart(智能识别)。没命中返回 null。
  *  给弹窗做灰字提示用——让用户知道"为啥没自动倒计时"，好决定要不要去调红线。 */
-function riskyHitOf(qs: any[], rules = ""): { word: string; custom: boolean } | null {
+function riskyHitOf(qs: any[], rules = ""): { word: string; src: "builtin" | "custom" | "smart" } | null {
   const words = rules
     .split(/[\n、,，;；]/)
     .map((s) => s.trim())
@@ -264,9 +264,9 @@ function riskyHitOf(qs: any[], rules = ""): { word: string; custom: boolean } | 
   for (const q of qs || []) {
     const blob = [q.question, q.header, ...(q.options || []).map((o: any) => `${o.label} ${o.description || ""}`)].join(" ");
     const m = blob.match(RISKY_ASK);
-    if (m) return { word: m[0], custom: false };
+    if (m) return { word: m[0], src: "builtin" };
     const w = words.find((x) => blob.includes(x));
-    if (w) return { word: w, custom: true };
+    if (w) return { word: w, src: "custom" };
   }
   return null;
 }
@@ -2220,9 +2220,20 @@ export function App() {
   const [goal, setGoal] = useState<{ text: string; active: boolean; done?: boolean } | null>(null);
   const [goalEdit, setGoalEdit] = useState<null | { sid: string; text: string }>(null);
   const [stopRules, setStopRules] = useState("");
+  // 红线识别方式:keyword=关键词匹配(快,选项提到词就拦) / smart=智能识别(LLM判是否真触发危险动作,少误伤)
+  const [redlineMode, setRedlineMode] = useState<"keyword" | "smart">(() =>
+    localStorage.getItem("wuwei-redline-mode") === "smart" ? "smart" : "keyword");
+  useEffect(() => {
+    const on = (e: any) => setRedlineMode(e.detail === "smart" ? "smart" : "keyword");
+    window.addEventListener("wuwei-redline-mode", on);
+    return () => window.removeEventListener("wuwei-redline-mode", on);
+  }, []);
+  // 智能识别的判定结果(按 askId 存):pending=判定中,risky=危险则停,reason=危险动作说明
+  const [askRisk, setAskRisk] = useState<Record<number, { pending: boolean; risky: boolean; reason: string }>>({});
   const contMaxRef = useRef(contMax); contMaxRef.current = contMax;
   const contDelayRef = useRef(contDelay); contDelayRef.current = contDelay;
   const askAutoSecRef = useRef(askAutoSec); askAutoSecRef.current = askAutoSec;
+  const redlineModeRef = useRef(redlineMode); redlineModeRef.current = redlineMode;
   const stopRulesRef = useRef(stopRules); stopRulesRef.current = stopRules;
   const lastSuggestRef = useRef<{ text: string; canContinue: boolean; auto: boolean }>({ text: "", canContinue: false, auto: false });
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
@@ -3104,21 +3115,35 @@ export function App() {
           // AI 请用户选择：按发起会话 id 存。当前会话→直接弹框；别的会话→右上角通知，不打断当前对话。
           const askSid = payload.sid || currentIdRef.current;
           setAsks((m) => ({ ...m, [askSid]: { id: payload.id, questions: payload.questions || [] } }));
-          // 智能继续：后台会话开着 cont 且选择题没碰红线 → 等 askAutoSec 秒还没人选就按目标自己定。
-          // (当前会话由 AskModal 自己显示可见倒计时并到点自答，这里只管看不见的后台会话，避免双计时器)
-          if (modeOf(askSid) === "cont" && askSid !== currentIdRef.current) {
-            const sec = askAutoSecFor(payload.questions || [], askAutoSecRef.current, stopRulesRef.current);
-            if (sec > 0) {
-              window.setTimeout(() => {
-                setAsks((m) => {
-                  if (m[askSid]?.id !== payload.id) return m; // 已被人回答/取消，别抢
-                  const qs = m[askSid].questions || [];
-                  window.wuwei.answerAsk(payload.id, {
-                    list: qs.map(() => ({ selected: [], text: lang === "en" ? "You decide based on the overall goal — pick the most reasonable option and keep going." : "这个你按总目标自己定，挑最合理的选项继续。" })),
-                  });
-                  const n = { ...m }; delete n[askSid]; return n;
+          const isCur0 = askSid === currentIdRef.current;
+          // 后台会话到点自答的公共动作(当前会话交给 AskModal 的可见倒计时)
+          const bgAutoAnswer = (sec: number) => {
+            if (sec <= 0) return;
+            window.setTimeout(() => {
+              setAsks((m) => {
+                if (m[askSid]?.id !== payload.id) return m; // 已被人回答/取消，别抢
+                const qs = m[askSid].questions || [];
+                window.wuwei.answerAsk(payload.id, {
+                  list: qs.map(() => ({ selected: [], text: lang === "en" ? "You decide based on the overall goal — pick the most reasonable option and keep going." : "这个你按总目标自己定，挑最合理的选项继续。" })),
                 });
-              }, sec * 1000);
+                const n = { ...m }; delete n[askSid]; return n;
+              });
+            }, sec * 1000);
+          };
+          // 智能继续 cont 模式：红线判定分两种方式
+          if (modeOf(askSid) === "cont") {
+            if (redlineModeRef.current === "smart") {
+              // 智能识别：先让 LLM 判"自主答会不会真触发危险动作"，结果存 askRisk 给 AskModal 用
+              setAskRisk((r) => ({ ...r, [payload.id]: { pending: true, risky: false, reason: "" } }));
+              window.wuwei.judgeAskRisk?.(payload.questions || [])
+                .then((v) => {
+                  setAskRisk((r) => ({ ...r, [payload.id]: { pending: false, risky: !!v?.risky, reason: v?.reason || "" } }));
+                  if (!isCur0 && !v?.risky) bgAutoAnswer(askAutoSecRef.current); // 后台会话:判完安全再自答
+                })
+                .catch(() => setAskRisk((r) => ({ ...r, [payload.id]: { pending: false, risky: false, reason: "" } })));
+            } else if (!isCur0) {
+              // 关键词匹配 + 后台会话：不碰红线就到点自答(当前会话由 AskModal 处理)
+              bgAutoAnswer(askAutoSecFor(payload.questions || [], askAutoSecRef.current, stopRulesRef.current));
             }
           }
           if (askSid !== currentIdRef.current) {
@@ -4272,6 +4297,11 @@ export function App() {
                         const r = await window.wuwei.handoffSession(sid);
                         if (!r?.ok)
                           push({ type: "notice", text: lang === "en" ? "Handoff failed: nothing to distill from this chat" : "交接失败：该会话暂无可提炼的内容" });
+                        else if (r.goalCarried && r.newId) {
+                          // 源会话带总目标 → 新会话自动开智能继续，交接后接着朝目标自主推进
+                          setMode(r.newId, "cont");
+                          push({ type: "notice", text: lang === "en" ? "Goal carried to the new chat — smart-continue on, advancing automatically." : "已把总目标带到新对话，并自动开启智能继续，接着朝目标推进。" });
+                        }
                       } finally {
                         setHandoffBusy(false);
                       }
@@ -7087,32 +7117,52 @@ export function App() {
         </div>
       )}
 
-      {asks[currentId] && (
+      {asks[currentId] && (() => {
+        const a = asks[currentId];
+        const cont = modeOf(currentId) === "cont";
+        // 红线识别:两种方式算出"能不能自动倒计时/命中了啥"
+        let autoSec = 0;
+        let redlineHit: { word: string; src: "builtin" | "custom" | "smart" } | null = null;
+        let judging = false;
+        if (cont) {
+          if (redlineMode === "smart") {
+            const rk = askRisk[a.id];
+            if (!rk || rk.pending) judging = true; // 判定中：先不倒计时
+            else if (rk.risky) redlineHit = { word: rk.reason || (lang === "en" ? "a risky action" : "涉及危险动作"), src: "smart" };
+            else autoSec = askAutoSec; // 判定安全：走倒计时(用原始秒数设置，不再做关键词拦截)
+          } else {
+            autoSec = askAutoSecFor(a.questions || [], askAutoSec, stopRules);
+            redlineHit = riskyHitOf(a.questions || [], stopRules);
+          }
+        }
+        return (
         <AskModal
-          key={asks[currentId].id}
+          key={a.id}
           t={t}
           lang={lang}
-          data={asks[currentId]}
+          data={a}
           anchor={composerRef}
-          autoSec={modeOf(currentId) === "cont" ? askAutoSecFor(asks[currentId].questions || [], askAutoSec, stopRules) : 0}
-          redlineHit={modeOf(currentId) === "cont" ? riskyHitOf(asks[currentId].questions || [], stopRules) : null}
+          autoSec={autoSec}
+          redlineHit={redlineHit}
+          judging={judging}
           onAuto={() => {
             // 倒计时到点：按总目标替你选(不勾具体项，让 AI 挑最合理的继续)
-            window.wuwei.answerAsk(asks[currentId].id, {
-              list: (asks[currentId].questions || []).map(() => ({ selected: [], text: lang === "en" ? "You decide based on the overall goal — pick the most reasonable option and keep going." : "这个你按总目标自己定，挑最合理的选项继续。" })),
+            window.wuwei.answerAsk(a.id, {
+              list: (a.questions || []).map(() => ({ selected: [], text: lang === "en" ? "You decide based on the overall goal — pick the most reasonable option and keep going." : "这个你按总目标自己定，挑最合理的选项继续。" })),
             });
             clearAsk(currentId);
           }}
           onSubmit={(list, images) => {
-            window.wuwei.answerAsk(asks[currentId].id, { list, images });
+            window.wuwei.answerAsk(a.id, { list, images });
             clearAsk(currentId);
           }}
           onCancel={() => {
-            window.wuwei.answerAsk(asks[currentId].id, { cancelled: true });
+            window.wuwei.answerAsk(a.id, { cancelled: true });
             clearAsk(currentId);
           }}
         />
-      )}
+        );
+      })()}
 
       {/* 别的会话发起的 ask → 右上角通知：点击切过去选择 / ✕ 忽略 / 30s 自动消失 */}
       {askToasts.some((x) => x.sid !== currentId) && (
@@ -7679,6 +7729,7 @@ function AskModal({
   autoSec = 0,
   onAuto,
   redlineHit,
+  judging = false,
 }: {
   data: { id: number; questions: AskQuestion[] };
   anchor: React.RefObject<HTMLDivElement | null>; // 输入框(composer)，用于对齐定位
@@ -7688,7 +7739,8 @@ function AskModal({
   lang?: Lang;
   autoSec?: number; // 智能继续:>0 则显示倒计时，到点自动按目标替你定(0=不自动)
   onAuto?: () => void; // 倒计时到点的回调(父组件提交"你自己定"的答案)
-  redlineHit?: { word: string; custom: boolean } | null; // 命中红线才有值:显示灰字说明为啥没自动
+  redlineHit?: { word: string; src: "builtin" | "custom" | "smart" } | null; // 命中红线才有值:显示灰字说明为啥没自动
+  judging?: boolean; // 智能识别模式:LLM 判定中(先不倒计时，显示"智能判断中…")
 }) {
   const qs = data.questions;
   const [sel, setSel] = useState<Record<number, string[]>>({});
@@ -7866,11 +7918,20 @@ function AskModal({
             </button>
           </div>
         )}
-        {!autoOn && autoSec >= 0 && redlineHit && (
-          <div className="ask-redline" title={(lang || getLang()) === "en" ? "Smart-continue won't auto-decide on this; adjust redlines in Settings → Smart-continue" : "智能继续不替你定这类；可在 设置→智能继续 调整红线"}>
-            {(lang || getLang()) === "en"
-              ? `Redline hit: “${redlineHit.word}”${redlineHit.custom ? " (your custom rule)" : " (built-in)"} — waiting for you, no auto-pick. Adjust in Settings → Smart-continue.`
-              : `命中红线「${redlineHit.word}」${redlineHit.custom ? "（你自定义的）" : "（内置）"}，不自动替你选、停下等你。想改去 设置→智能继续。`}
+        {!autoOn && judging && (
+          <div className="ask-redline">
+            {(lang || getLang()) === "en" ? "Smart-continue: checking whether this is safe to auto-decide…" : "智能继续：正在判断这题能不能替你定…"}
+          </div>
+        )}
+        {!autoOn && !judging && redlineHit && (
+          <div className="ask-redline" title={(lang || getLang()) === "en" ? "Smart-continue won't auto-decide on this; adjust in Settings → Smart-continue" : "智能继续不替你定这类；可在 设置→智能继续 调整"}>
+            {(() => {
+              const srcZh = redlineHit.src === "custom" ? "你自定义的" : redlineHit.src === "smart" ? "智能识别" : "内置";
+              const srcEn = redlineHit.src === "custom" ? "your custom rule" : redlineHit.src === "smart" ? "smart-detected" : "built-in";
+              return (lang || getLang()) === "en"
+                ? `Redline hit: “${redlineHit.word}” (${srcEn}) — waiting for you, no auto-pick. Adjust in Settings → Smart-continue.`
+                : `命中红线「${redlineHit.word}」（${srcZh}），不自动替你选、停下等你。想改去 设置→智能继续。`;
+            })()}
           </div>
         )}
         <div className="ask-opts">
@@ -11248,6 +11309,33 @@ function SettingsModal({
               </div>
               <ContSettings lang={lang} />
               <div style={{ height: 8 }} />
+              {/* 红线识别方式：智能识别(LLM判是否真危险) / 关键词匹配(选项含词即停) */}
+              <div className="app-set-row" style={{ cursor: "default", marginBottom: "2px" }}>
+                <div className="app-set-label">{lang === "en" ? "Redline detection" : "红线识别方式"}</div>
+              </div>
+              <div className="theme-pick" style={{ marginBottom: "6px" }}>
+                {[
+                  { id: "keyword", label: lang === "en" ? "Keywords" : "关键词匹配" },
+                  { id: "smart", label: lang === "en" ? "Smart (AI)" : "智能识别" },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={"theme-opt" + ((localStorage.getItem("wuwei-redline-mode") === "smart" ? "smart" : "keyword") === m.id ? " on" : "")}
+                    onClick={() => {
+                      localStorage.setItem("wuwei-redline-mode", m.id);
+                      window.dispatchEvent(new CustomEvent("wuwei-redline-mode", { detail: m.id }));
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "12px" }}>
+                {lang === "en"
+                  ? "Keywords: stop whenever an option text contains a risky word (fast, may over-trigger). Smart: an AI judges whether auto-deciding would really execute a dangerous action (fewer false stops, one quick call per question)."
+                  : "关键词匹配：选项文字里出现危险词就停（快，但偶尔误伤）。智能识别：让 AI 判断「自主选下去会不会真触发危险动作」（更少误停，每题多一次快速判定）。"}
+              </div>
               <StopRulesSettings lang={lang} />
               <div className="app-set-hint" style={{ marginBottom: "16px" }} />
 

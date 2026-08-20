@@ -1696,6 +1696,39 @@ ipcMain.handle("chat:suggest", async (_e, sid: string) => {
   await suggestNextAction(String(sid || ""));
 });
 
+// 智能识别红线：让模型判断"自主答这道选择题会不会真触发危险动作"(而非选项里提到词就拦)。
+// 返回 {risky, reason}。给智能继续的"智能识别"模式用，比关键词匹配更少误伤。
+ipcMain.handle("chat:judgeAskRisk", async (_e, questions: any[]) => {
+  if (!provider) return { risky: false, reason: "" };
+  const blob = (questions || [])
+    .map((q: any) => [q?.question, q?.header, ...((q?.options || []).map((o: any) => `${o?.label} ${o?.description || ""}`))].join(" "))
+    .join("\n")
+    .slice(0, 1500);
+  try {
+    const res = await provider.complete(
+      tt(
+        "你是安全判官。下面是 AI 想让用户拿主意的一道选择题。判断：如果 AI【不等用户、自己挑一个选项并据此行动】，会不会真的触发【不可逆或影响他人的危险动作】——" +
+          "删除/清空/覆盖数据、部署上线到生产、对外发布、改线上配置或写生产库、花钱付款下单、替用户对外发送、改权限/密钥/密码、git 强推回滚等。" +
+          "关键：只有'自主选下去就会真的执行这类动作'才算 RISKY；仅仅选项文字里提到某个词（如只是在讨论用哪种方案、其中一个方案名字带'密钥'二字）不算危险。" +
+          "输出两行：第1行只写 RISKY 或 SAFE；第2行仅当 RISKY 时，用不超过15字说清是哪个危险动作。",
+        "You are a safety judge. Below is a multiple-choice question the AI wants the user to decide. Judge: if the AI picks an option ITSELF without waiting and acts on it, " +
+          "would that actually trigger an irreversible or others-affecting dangerous action — deleting/overwriting data, deploying to production, publishing, changing live config or writing to prod DB, spending money, sending on the user's behalf, changing permissions/keys/passwords, git force-push/rollback? " +
+          "Key: only RISKY if choosing autonomously would really execute such an action; merely mentioning a word in an option (e.g. one approach is named with 'key') is NOT dangerous. " +
+          "Output two lines: line 1 only RISKY or SAFE; line 2 only when RISKY, ≤10 words naming the dangerous action.",
+      ),
+      [{ role: "user", content: [{ type: "text", text: blob }] }] as any,
+      [],
+      {},
+    );
+    const whole = (res.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+    const lines = whole.split("\n").map((s: string) => s.trim()).filter(Boolean);
+    const risky = /\bRISKY\b/i.test(lines[0] || "");
+    return { risky, reason: risky ? (lines[1] || tt("涉及危险动作", "a risky action")) : "" };
+  } catch {
+    return { risky: false, reason: "" };
+  }
+});
+
 function createWindow() {
   const b = loadWindowBounds(); // 上次窗口尺寸/位置
   // 窗口/任务栏图标：dev 下 electron.exe 用默认图标，显式指向 build/icon.png；
@@ -2395,11 +2428,22 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
   const newId = randomUUID();
   currentId = newId;
   getAgent(newId);
+  // 源会话带总目标 → 带给新会话，交接后接着朝同一目标自主推进(渲染端会据此自动开智能继续)
+  const srcGoal = sessionGoals[srcId];
+  const goalCarried = !!(srcGoal && String(srcGoal.text || "").trim() && srcGoal.active !== false && !srcGoal.done);
+  if (goalCarried) {
+    sessionGoals[newId] = { text: srcGoal.text, active: true, done: false };
+    saveGoals();
+  }
   send("evt:session-loaded", { id: newId, messages: [] });
   sendUsageFor(newId);
   send("evt:handoff", { sid: newId, phase: "done" });
   // 交接开场白会作为新会话的第一条用户消息显示出来，跟随界面语言
+  const goalLine = goalCarried
+    ? tt(`【总目标（延续自上一个对话，继续朝它推进）】\n${srcGoal.text}\n\n`, `[Overall goal (carried from the previous chat — keep advancing it)]\n${srcGoal.text}\n\n`)
+    : "";
   const firstMsg =
+    goalLine +
     tt(
       "【工作交接（来自上一个对话）】\n" +
         "上一个对话的上下文比较杂乱/过长，以下是从中整理出的有价值内容与当前进展。" +
@@ -2411,7 +2455,7 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
     "----\n" +
     doc;
   void startTurn(newId, firstMsg);
-  return { ok: true, newId };
+  return { ok: true, newId, goalCarried };
 });
 
 ipcMain.on("session:switch", (_e, id: string) => {
