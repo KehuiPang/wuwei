@@ -1698,23 +1698,26 @@ ipcMain.handle("chat:suggest", async (_e, sid: string) => {
 
 // 智能识别红线：让模型判断"自主答这道选择题会不会真触发危险动作"(而非选项里提到词就拦)。
 // 返回 {risky, reason}。给智能继续的"智能识别"模式用，比关键词匹配更少误伤。
-ipcMain.handle("chat:judgeAskRisk", async (_e, questions: any[]) => {
+ipcMain.handle("chat:judgeAskRisk", async (_e, questions: any[], rules?: string) => {
   if (!provider) return { risky: false, reason: "" };
   const blob = (questions || [])
     .map((q: any) => [q?.question, q?.header, ...((q?.options || []).map((o: any) => `${o?.label} ${o?.description || ""}`))].join(" "))
     .join("\n")
     .slice(0, 1500);
+  const userRules = String(rules || "").trim().slice(0, 1500);
   try {
     const res = await provider.complete(
       tt(
         "你是安全判官。下面是 AI 想让用户拿主意的一道选择题。判断：如果 AI【不等用户、自己挑一个选项并据此行动】，会不会真的触发【不可逆或影响他人的危险动作】——" +
           "删除/清空/覆盖数据、部署上线到生产、对外发布、改线上配置或写生产库、花钱付款下单、替用户对外发送、改权限/密钥/密码、git 强推回滚等。" +
-          "关键：只有'自主选下去就会真的执行这类动作'才算 RISKY；仅仅选项文字里提到某个词（如只是在讨论用哪种方案、其中一个方案名字带'密钥'二字）不算危险。" +
-          "输出两行：第1行只写 RISKY 或 SAFE；第2行仅当 RISKY 时，用不超过15字说清是哪个危险动作。",
+          (userRules ? "\n用户还自定义了必须停下来问他的红线(每行一条，按【意思】判断，不是关键词，别因为选项里只是提到某个字就算命中)：\n" + userRules + "\n" : "") +
+          "关键：只有'自主选下去就会真的执行这类动作/踩中上面红线的意思'才算 RISKY；仅仅选项文字里提到某个词（如只是在讨论用哪种方案、其中一个方案名字带'密钥'或'文件'二字）不算危险。" +
+          "输出两行：第1行只写 RISKY 或 SAFE；第2行仅当 RISKY 时，用不超过15字说清是哪个危险动作/踩了哪条红线。",
         "You are a safety judge. Below is a multiple-choice question the AI wants the user to decide. Judge: if the AI picks an option ITSELF without waiting and acts on it, " +
           "would that actually trigger an irreversible or others-affecting dangerous action — deleting/overwriting data, deploying to production, publishing, changing live config or writing to prod DB, spending money, sending on the user's behalf, changing permissions/keys/passwords, git force-push/rollback? " +
-          "Key: only RISKY if choosing autonomously would really execute such an action; merely mentioning a word in an option (e.g. one approach is named with 'key') is NOT dangerous. " +
-          "Output two lines: line 1 only RISKY or SAFE; line 2 only when RISKY, ≤10 words naming the dangerous action.",
+          (userRules ? "\nThe user also set custom redlines (one per line) — judge by MEANING, not keywords; don't flag just because an option mentions a word:\n" + userRules + "\n" : "") +
+          "Key: only RISKY if choosing autonomously would really execute such an action or match a redline's MEANING; merely mentioning a word (e.g. an option named with 'key' or 'file') is NOT dangerous. " +
+          "Output two lines: line 1 only RISKY or SAFE; line 2 only when RISKY, ≤10 words naming the dangerous action/redline.",
       ),
       [{ role: "user", content: [{ type: "text", text: blob }] }] as any,
       [],

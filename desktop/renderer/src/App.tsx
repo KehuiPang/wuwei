@@ -239,34 +239,34 @@ const goalPromptOf = () => localStorage.getItem("wuwei-goal-prompt") || DEFAULT_
 
 // 一沾这些就别替用户拿主意——宁可停下来等人，也不能自动替他决定
 const RISKY_ASK = /删除|清空|覆盖|抹掉|销毁|上线|发布|部署|生产|正式环境|prod\b|线上|付款|支付|下单|花钱|转账|发邮件|发消息|通知(客户|用户|大家)|授权|权限|密钥|token|密码|回滚|重置|drop\s+table|truncate|rm\s+-rf|强制推送|force\s*push/i;
-/** 这道题能不能超时自动替他答：内置危险词 + 用户自己写的红线，命中任一就返回 0(死等) */
+// 自定义红线拆成"一行一条"。**只按换行拆**，绝不再按顿号拆——
+// 一行是一个完整意思(如"删除或清空任何数据、文件、数据库表、代码分支")，
+// 顿号是这条意思内部的列举，拆开会把"文件"这种词变成独立关键词导致误伤。
+function splitRules(rules: string): string[] {
+  return (rules || "").split(/\n+/).map((s) => s.trim()).filter((s) => s.length >= 2);
+}
+/** 这道题能不能超时自动替他答：内置危险词 + 用户自己写的红线，命中任一就返回 0(死等)。
+ *  关键词模式下自定义红线只做"整行字面包含"匹配(描述性的行不会误伤;要按意思拦请用智能识别)。 */
 function askAutoSecFor(qs: any[], sec: number, rules = ""): number {
   if (!sec || sec <= 0) return 0;
-  // 用户红线按行/顿号拆成关键词，2 个字以上才算(避免"的""和"这种误伤)
-  const words = rules
-    .split(/[\n、,，;；]/)
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 2);
+  const lines = splitRules(rules);
   for (const q of qs || []) {
     const blob = [q.question, q.header, ...(q.options || []).map((o: any) => `${o.label} ${o.description || ""}`)].join(" ");
     if (RISKY_ASK.test(blob)) return 0;
-    if (words.some((w) => blob.includes(w))) return 0;
+    if (lines.some((line) => blob.includes(line))) return 0;
   }
   return sec;
 }
 /** 命中了哪条红线：返回 {word, src}。src=builtin(内置)/custom(自定义)/smart(智能识别)。没命中返回 null。
  *  给弹窗做灰字提示用——让用户知道"为啥没自动倒计时"，好决定要不要去调红线。 */
 function riskyHitOf(qs: any[], rules = ""): { word: string; src: "builtin" | "custom" | "smart" } | null {
-  const words = rules
-    .split(/[\n、,，;；]/)
-    .map((s) => s.trim())
-    .filter((s) => s.length >= 2);
+  const lines = splitRules(rules);
   for (const q of qs || []) {
     const blob = [q.question, q.header, ...(q.options || []).map((o: any) => `${o.label} ${o.description || ""}`)].join(" ");
     const m = blob.match(RISKY_ASK);
     if (m) return { word: m[0], src: "builtin" };
-    const w = words.find((x) => blob.includes(x));
-    if (w) return { word: w, src: "custom" };
+    const line = lines.find((x) => blob.includes(x));
+    if (line) return { word: line.length > 16 ? line.slice(0, 16) + "…" : line, src: "custom" };
   }
   return null;
 }
@@ -3135,7 +3135,7 @@ export function App() {
             if (redlineModeRef.current === "smart") {
               // 智能识别：先让 LLM 判"自主答会不会真触发危险动作"，结果存 askRisk 给 AskModal 用
               setAskRisk((r) => ({ ...r, [payload.id]: { pending: true, risky: false, reason: "" } }));
-              window.wuwei.judgeAskRisk?.(payload.questions || [])
+              window.wuwei.judgeAskRisk?.(payload.questions || [], stopRulesRef.current)
                 .then((v) => {
                   setAskRisk((r) => ({ ...r, [payload.id]: { pending: false, risky: !!v?.risky, reason: v?.reason || "" } }));
                   if (!isCur0 && !v?.risky) bgAutoAnswer(askAutoSecRef.current); // 后台会话:判完安全再自答

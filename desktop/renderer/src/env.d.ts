@@ -87,7 +87,7 @@ export interface WuweiApi {
   stopRulesSet(t: string): Promise<void>;
   setContSessions(ids: string[]): void;
   suggestNow(sid: string): Promise<void>;
-  judgeAskRisk(questions: any[]): Promise<{ risky: boolean; reason: string }>;
+  judgeAskRisk(questions: any[], rules?: string): Promise<{ risky: boolean; reason: string }>;
   listTrash(): Promise<TrashItem[]>;
   restoreSession(id: string): void;
   purgeTrash(id: string): void;
