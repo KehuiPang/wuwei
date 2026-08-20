@@ -7,7 +7,7 @@
 Tell an AI what you want in one sentence: read/write files, precise edits, run commands, search the web — every step behind a permission prompt.
 Switch between Claude / OpenAI / Chinese LLMs in one click, bring your own key or use Wuwei's hosted credits.
 
-[Website](https://wuweiai.io) · [Download](https://wuweiai.io) · [简体中文](./README.zh-CN.md)
+[Website](https://wuweiai.io/en) · [Download](https://wuweiai.io/en) · [简体中文](./README.zh-CN.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
 
@@ -85,13 +85,13 @@ flowchart TB
 ## Two ways to use it
 
 1. **Bring your own key (BYOK)** — fill in your own API key or local endpoint; fully free, data never goes through a third party.
-2. **Wuwei hosted** — use platform credits with zero config; even works free without login (see the [website](https://wuweiai.io)).
+2. **Wuwei hosted** — use platform credits with zero config; even works free without login (see the [website](https://wuweiai.io/en)).
 
 ## Quick start
 
 ### Desktop (recommended)
 
-Download the installer for your OS (Windows / macOS / Linux) at [wuweiai.io](https://wuweiai.io) and you're ready to go.
+Download the installer for your OS (Windows / macOS / Linux) at [wuweiai.io](https://wuweiai.io/en) and you're ready to go.
 
 ### CLI / run from source
 
@@ -150,6 +150,21 @@ Long tasks won't break: when the context exceeds `WUWEI_COMPACT_THRESHOLD` (defa
 ## Contributing
 
 Issues and PRs welcome. Run `npm run typecheck` before submitting to make sure types pass.
+
+## Links
+
+- 🌐 **Website & download**: [wuweiai.io](https://wuweiai.io/en)
+- 🐦 **X / Twitter**: [@usewuwei](https://x.com/usewuwei)
+
+Looking for a free, local, open-source alternative to a specific tool? See how Wuwei compares:
+
+- [vs Cursor](https://wuweiai.io/en/vs/cursor-alternative)
+- [vs GitHub Copilot](https://wuweiai.io/en/vs/github-copilot-alternative)
+- [vs Claude Code](https://wuweiai.io/en/vs/claude-code-free-alternative)
+- [vs Windsurf](https://wuweiai.io/en/vs/windsurf-alternative)
+- [vs Cline](https://wuweiai.io/en/vs/cline-alternative)
+- [vs Aider](https://wuweiai.io/en/vs/aider-alternative)
+- [All comparisons →](https://wuweiai.io/en/vs)
 
 ## License
 
