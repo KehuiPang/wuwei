@@ -2222,7 +2222,7 @@ export function App() {
   const [stopRules, setStopRules] = useState("");
   // 红线识别方式:keyword=关键词匹配(快,选项提到词就拦) / smart=智能识别(LLM判是否真触发危险动作,少误伤)
   const [redlineMode, setRedlineMode] = useState<"keyword" | "smart">(() =>
-    localStorage.getItem("wuwei-redline-mode") === "smart" ? "smart" : "keyword");
+    localStorage.getItem("wuwei-redline-mode") === "keyword" ? "keyword" : "smart"); // 默认智能识别(描述性红线按意思判)
   useEffect(() => {
     const on = (e: any) => setRedlineMode(e.detail === "smart" ? "smart" : "keyword");
     window.addEventListener("wuwei-redline-mode", on);
@@ -11315,13 +11315,13 @@ function SettingsModal({
               </div>
               <div className="theme-pick" style={{ marginBottom: "6px" }}>
                 {[
-                  { id: "keyword", label: lang === "en" ? "Keywords" : "关键词匹配" },
                   { id: "smart", label: lang === "en" ? "Smart (AI)" : "智能识别" },
+                  { id: "keyword", label: lang === "en" ? "Keywords" : "关键词匹配" },
                 ].map((m) => (
                   <button
                     key={m.id}
                     type="button"
-                    className={"theme-opt" + ((localStorage.getItem("wuwei-redline-mode") === "smart" ? "smart" : "keyword") === m.id ? " on" : "")}
+                    className={"theme-opt" + ((localStorage.getItem("wuwei-redline-mode") === "keyword" ? "keyword" : "smart") === m.id ? " on" : "")}
                     onClick={() => {
                       localStorage.setItem("wuwei-redline-mode", m.id);
                       window.dispatchEvent(new CustomEvent("wuwei-redline-mode", { detail: m.id }));
