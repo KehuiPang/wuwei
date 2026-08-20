@@ -92,6 +92,7 @@ const api = {
   stopRulesSet: (t: string) => ipcRenderer.invoke("chat:stopRulesSet", t) as Promise<void>,
   setContSessions: (ids: string[]) => ipcRenderer.send("chat:cont-sessions", ids),
   suggestNow: (sid: string) => ipcRenderer.invoke("chat:suggest", sid) as Promise<void>,
+  judgeAskRisk: (questions: any[]) => ipcRenderer.invoke("chat:judgeAskRisk", questions) as Promise<{ risky: boolean; reason: string }>,
   // 回收站:软删除的会话可恢复,7 天后自动彻底清除
   listTrash: () => ipcRenderer.invoke("session:list-trash") as Promise<any[]>,
   restoreSession: (id: string) => ipcRenderer.send("session:restore", id),

@@ -74,7 +74,7 @@ export interface WuweiApi {
   reset(): void;
   undoLast(): void;
   newSession(): void;
-  handoffSession(sid: string): Promise<{ ok: boolean; newId?: string }>; // 一键总结→开新会话接着做
+  handoffSession(sid: string): Promise<{ ok: boolean; newId?: string; goalCarried?: boolean }>; // 一键总结→开新会话接着做(带目标则自动智能继续)
   switchSession(id: string): void;
   resumeSession(id: string): void;
   dismissInterrupted(id: string): void;
@@ -87,6 +87,7 @@ export interface WuweiApi {
   stopRulesSet(t: string): Promise<void>;
   setContSessions(ids: string[]): void;
   suggestNow(sid: string): Promise<void>;
+  judgeAskRisk(questions: any[]): Promise<{ risky: boolean; reason: string }>;
   listTrash(): Promise<TrashItem[]>;
   restoreSession(id: string): void;
   purgeTrash(id: string): void;
