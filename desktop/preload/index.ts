@@ -84,6 +84,9 @@ const api = {
   deleteSession: (id: string) => ipcRenderer.send("session:delete", id),
   // 全局搜索:跨所有会话搜正文,返回标题+上下文摘要+跳转锚点
   searchSessions: (q: string) => ipcRenderer.invoke("session:search", q) as Promise<any>,
+  // 完整对话日志:归档(压缩前原文)+当前持久化，拼成完整历史
+  getTranscript: (sid: string) => ipcRenderer.invoke("session:transcript", sid) as Promise<{ archived: any[]; live: any[]; full: any[]; compacted: boolean }>,
+  pruneTranscripts: (days: number) => ipcRenderer.invoke("session:pruneTranscripts", days) as Promise<void>,
   // 智能继续:会话总目标 / 自定义红线 / 后台推进会话集合
   goalGet: (sid: string) => ipcRenderer.invoke("chat:goalGet", sid) as Promise<{ text: string; active: boolean; done?: boolean } | null>,
   goalSet: (sid: string, goal: { text: string; active: boolean; done?: boolean } | null) =>

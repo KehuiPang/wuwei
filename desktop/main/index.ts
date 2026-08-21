@@ -23,7 +23,7 @@ import * as brain from "../../src/brain/index.js";
 import type { Tool, ToolResult } from "../../src/types.js";
 import { connectMcp, mcpTools, mcpToolsBySource, mcpStatus, loadMcpConfig, searchMcpRegistry, MCP_CONFIG_PATH } from "./mcp.js";
 import * as secrets from "./secrets.js";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, appendFileSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 
 // 全局记忆：读/写 ~/.wuwei/memory.md
@@ -2181,6 +2181,7 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
           send("evt:ratelimits", rl);
         },
         onCompact: (b, a) => send("evt:compact", { sid: useId, before: b, after: a }),
+        onCompactArchive: (dropped) => archiveMessages(useId, dropped), // 压缩前把原始消息追加进完整日志(永不压缩)
         onAssistantDone: () => send("evt:done", { sid: useId }),
       },
       ac.signal,
@@ -3732,6 +3733,52 @@ ipcMain.handle("account:web-login", async (_e, pid: string) => {
   void emitAccount();
   return true;
 });
+
+// ==================== 完整对话日志归档（压缩前的原始消息，永不压缩） ====================
+// 上下文压缩会把旧消息换成摘要、原文就丢了。这里把压缩前的原始消息按会话追加进 jsonl，
+// 供"查看完整历史"弹窗还原被压缩前的交流(尤其半夜自主推进跑很久时)。
+const transcriptsDir = () => join(app.getPath("userData"), "transcripts");
+const transcriptFile = (sid: string) => join(transcriptsDir(), String(sid).replace(/[^\w.-]/g, "_") + ".jsonl");
+function archiveMessages(sid: string, msgs: any[]) {
+  if (!sid || !Array.isArray(msgs) || !msgs.length) return;
+  try {
+    mkdirSync(transcriptsDir(), { recursive: true });
+    const lines = msgs
+      .map((m) => { try { return JSON.stringify({ role: m.role, content: m.content, ts: m.ts || 0 }); } catch { return ""; } })
+      .filter(Boolean)
+      .join("\n") + "\n";
+    appendFileSync(transcriptFile(sid), lines, "utf-8");
+  } catch { /* 归档失败不影响主流程 */ }
+}
+// 查看完整历史：已归档(被压缩掉的原始消息) + 当前持久化消息(含最新摘要与近期原文)，拼成完整对话。
+// 没发生过压缩时归档为空，直接就是全量历史；发生过压缩则 = 压缩前原文 + 摘要 + 近期。
+ipcMain.handle("session:transcript", (_e, sid: string) => {
+  const id = String(sid || "");
+  let archived: any[] = [];
+  try {
+    const raw = readFileSync(transcriptFile(id), "utf-8");
+    archived = raw.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  } catch { /* 无归档文件=从没压缩过 */ }
+  let live: any[] = [];
+  try { live = loadMessages(id) || []; } catch { /* ignore */ }
+  return { archived, live, full: [...archived, ...live], compacted: archived.length > 0 };
+});
+// 按保留天数清理归档(渲染端启动时用它的设置调一次)
+ipcMain.handle("session:pruneTranscripts", (_e, days: number) => { pruneTranscripts(Number(days) || 0); });
+// 保留天数清理：删掉超过 N 天没更新的归档(N<=0 表示永久保留)
+function pruneTranscripts(days: number) {
+  if (!days || days <= 0) return;
+  try {
+    const dir = transcriptsDir();
+    if (!existsSync(dir)) return;
+    const cutoff = Date.now() - days * 86400_000;
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith(".jsonl")) continue;
+      const p = join(dir, f);
+      try { if (statSync(p).mtimeMs < cutoff) unlinkSync(p); } catch { /* ignore */ }
+    }
+  } catch { /* ignore */ }
+}
 
 // ==================== 智能继续：会话总目标 + 自定义红线 + 后台推进集合 ====================
 // —— 会话总目标：给这个对话定一个大目标，它自己拆解、自己一步步推进 ——

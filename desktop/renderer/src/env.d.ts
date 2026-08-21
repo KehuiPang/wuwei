@@ -80,6 +80,8 @@ export interface WuweiApi {
   dismissInterrupted(id: string): void;
   deleteSession(id: string): void;
   searchSessions(q: string): Promise<SearchResult>; // 全局搜所有对话正文
+  getTranscript(sid: string): Promise<{ archived: any[]; live: any[]; full: any[]; compacted: boolean }>; // 完整对话历史(含压缩前原文)
+  pruneTranscripts(days: number): Promise<void>; // 按保留天数清理归档
   // 智能继续:会话总目标 / 自定义红线 / 后台推进集合
   goalGet(sid: string): Promise<{ text: string; active: boolean; done?: boolean } | null>;
   goalSet(sid: string, goal: { text: string; active: boolean; done?: boolean } | null): Promise<void>;

@@ -2230,6 +2230,11 @@ export function App() {
   }, []);
   // 智能识别的判定结果(按 askId 存):pending=判定中,risky=危险则停,reason=危险动作说明
   const [askRisk, setAskRisk] = useState<Record<number, { pending: boolean; risky: boolean; reason: string }>>({});
+  // 完整历史归档保留天数(0=永久)。启动时清理一次过期归档
+  useEffect(() => {
+    const v = localStorage.getItem("wuwei-transcript-days");
+    window.wuwei.pruneTranscripts?.(v === null ? 30 : Math.max(0, Number(v) || 0));
+  }, []);
   const contMaxRef = useRef(contMax); contMaxRef.current = contMax;
   const contDelayRef = useRef(contDelay); contDelayRef.current = contDelay;
   const askAutoSecRef = useRef(askAutoSec); askAutoSecRef.current = askAutoSec;
@@ -2289,6 +2294,8 @@ export function App() {
   const [streamMode, setStreamMode] = useState<"typewriter" | "stream" | "instant">("stream"); // 输出方式
   const [streamSpeed, setStreamSpeed] = useState(400); // 打字机速度(字符/秒)
   const [keepRecent, setKeepRecent] = useState(12); // 上下文压缩保留最近N条
+  // 完整对话历史查看器(压缩前的原始交流):右键会话→查看完整历史
+  const [historyView, setHistoryView] = useState<null | { sid: string; title: string; items: Item[]; compacted: boolean; loading: boolean }>(null);
   const [effort, setEffort] = useState<Effort>("medium"); // 思考档位：越高越深入也越慢越贵
   const [showEffortPicker, setShowEffortPicker] = useState(true); // 底栏是否显示档位选择器
   const [showEffortMenu, setShowEffortMenu] = useState(false);
@@ -3587,6 +3594,17 @@ export function App() {
     doSend(tpl.includes("{目标}") ? tpl.replaceAll("{目标}", tx) : `【总目标】${tx}\n\n${tpl}`, []);
   }
 
+  // 打开某会话的完整历史(压缩前原文 + 当前)，用聊天布局渲染
+  async function openHistory(sid: string, title: string) {
+    setHistoryView({ sid, title, items: [], compacted: false, loading: true });
+    try {
+      const r = await window.wuwei.getTranscript(sid);
+      setHistoryView({ sid, title, items: messagesToItems(r.full || []), compacted: !!r.compacted, loading: false });
+    } catch {
+      setHistoryView({ sid, title, items: [], compacted: false, loading: false });
+    }
+  }
+
   function clearComposer() {
     setInput("");
     setPendingImages([]);
@@ -4328,6 +4346,22 @@ export function App() {
                       <circle cx="12" cy="12" r="3.4" />
                     </svg>
                     <span>{lang === "en" ? "Set overall goal…" : "设置总目标…"}</span>
+                  </button>
+                  <button
+                    className="ctx-item ctx-ico"
+                    title={lang === "en" ? "View the full conversation including exchanges before context compaction" : "查看完整对话，包括上下文压缩前的交流(半夜自主推进跑久了也能回看)"}
+                    onClick={() => {
+                      const sid = ctxMenu.sid;
+                      const title = sessions.find((x) => x.id === sid)?.title || (lang === "en" ? "Conversation" : "对话");
+                      close();
+                      openHistory(sid, title);
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H18a2 2 0 0 1 2 2v11.5a1.5 1.5 0 0 1-1.5 1.5H7a3 3 0 0 1-3-3V5.5z" />
+                      <path d="M8 8.5h8M8 12h8M8 15.5h5" />
+                    </svg>
+                    <span>{lang === "en" ? "View full history…" : "查看完整历史…"}</span>
                   </button>
                   <div className="ctx-sep" />
                   <button
@@ -6546,6 +6580,29 @@ export function App() {
                 ))}
               </div>
             )}
+          </div>
+        </>
+      )}
+      {historyView && (
+        <>
+          <div className="mq-overlay" onClick={() => setHistoryView(null)} />
+          <div className="history-modal">
+            <div className="history-head">
+              <span className="history-title" title={historyView.title}>
+                {historyView.title} · {lang === "en" ? "Full history" : "完整历史"}
+                {historyView.compacted && <span className="history-badge">{lang === "en" ? "incl. pre-compaction" : "含压缩前原文"}</span>}
+              </span>
+              <button className="history-close" title={lang === "en" ? "Close" : "关闭"} onClick={() => setHistoryView(null)}>✕</button>
+            </div>
+            <div className="history-body stream">
+              {historyView.loading ? (
+                <div className="history-empty">{lang === "en" ? "Loading…" : "加载中…"}</div>
+              ) : historyView.items.length === 0 ? (
+                <div className="history-empty">{lang === "en" ? "No history for this conversation yet." : "这个对话暂无历史记录。"}</div>
+              ) : (
+                historyView.items.map((it, i) => <ItemView key={i} item={it} now={now} />)
+              )}
+            </div>
           </div>
         </>
       )}
@@ -11215,6 +11272,25 @@ function SettingsModal({
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.g.compactionHint")}
+              </div>
+              {/* 完整对话历史归档：压缩前原文永不丢，右键会话→查看完整历史。这里设保留天数 */}
+              <div className="app-set-group">{lang === "en" ? "Full history archive" : "完整对话历史归档"}</div>
+              <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Keep archived logs for" : "归档日志保留"}</div>
+                <span style={{ flex: 1 }} />
+                <input
+                  type="number"
+                  min={0}
+                  defaultValue={(() => { const v = localStorage.getItem("wuwei-transcript-days"); return v === null ? 30 : Math.max(0, Number(v) || 0); })()}
+                  style={{ width: 88, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
+                  onChange={(e) => localStorage.setItem("wuwei-transcript-days", String(Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+                />
+                <div className="app-set-hint" style={{ minWidth: 48, textAlign: "right" }}>{lang === "en" ? "days" : "天"}</div>
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "16px" }}>
+                {lang === "en"
+                  ? "Every exchange is archived before context compaction, so you can review what happened before it was summarized (right-click a conversation → View full history). 0 = keep forever. Cleanup runs on next launch."
+                  : "每次上下文压缩前都会把原始交流归档，之后可回看被摘要前的完整对话（右键会话→查看完整历史）。填 0 = 永久保留。清理在下次启动时执行。"}
               </div>
               <div className="app-set-group">{t("set.g.effortGroup", "思考档位")}</div>
               <div className="app-set-row" style={{ cursor: "default" }}>

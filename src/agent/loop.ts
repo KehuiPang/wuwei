@@ -51,6 +51,7 @@ export interface AgentHooks {
   onUsage?(u: UsageReport): void; // 每步回报累计用量 + 本轮自足值
   onRateLimits?(rl: import("../types.js").RateLimits): void; // 订阅额度快照
   onCompact?(before: number, after: number): void; // 压缩发生时回报条数变化
+  onCompactArchive?(dropped: Message[]): void; // 压缩前把将被丢弃的原始消息交出去，供上层归档(永不压缩的完整日志)
   onStep?(): void; // 每完成一段(助手消息/工具结果)后回调：用于即时落盘，重启不丢进度
   onRecover?(cleanedText: string): void; // 模型把工具调用当文本吐出→兜底解析后，回传清理后的正文供前端修正显示
 }
@@ -675,6 +676,17 @@ export class Agent {
 
     // ⚠ 摘要为空/失败：宁可不压、也不能把历史丢成空摘要(否则 AI 直接失忆)
     if (!summaryText) return;
+
+    // 归档：把这批将被摘要顶替的原始消息交给上层写进"永不压缩的完整日志"。
+    // 排除之前压缩生成的摘要消息本身(它不是真实对话，且它顶替的原始消息早已归档过)，避免重复。
+    try {
+      const isSummary = (m: Message) =>
+        (m.content || []).some(
+          (b: any) => b.type === "text" && /^【之前对话摘要】|^\[Summary of earlier conversation\]/.test(String(b.text || "").trim()),
+        );
+      const droppedReal = older.filter((m) => !isSummary(m));
+      if (droppedReal.length) hooks.onCompactArchive?.(droppedReal);
+    } catch { /* 归档失败绝不影响压缩主流程 */ }
 
     this.messages = [
       // 这条会被原样渲染成一条用户消息 → 标题跟随界面语言
