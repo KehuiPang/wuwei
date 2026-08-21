@@ -7851,6 +7851,9 @@ function AskModal({
     Object.values(other).some((s) => (s || "").trim()) || Object.values(imgs).some((a) => a?.length);
   const [left, setLeft] = useState(autoSec);
   const [autoCancelled, setAutoCancelled] = useState(false);
+  // autoSec 变化就把倒计时重置(关键:智能识别是异步的，判定中 autoSec=0，判完才变 3——
+  // 若不重置，left 仍停在 0，倒计时 effect 会当场判 left<=0 立即自动提交，把你正在输入的文字/图片顶掉)
+  useEffect(() => { setLeft(autoSec); }, [autoSec]);
   const autoOn = autoSec > 0 && !touched && !autoCancelled && !!onAuto;
   useEffect(() => {
     if (!autoOn) return;
