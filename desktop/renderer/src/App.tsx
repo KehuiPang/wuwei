@@ -8026,6 +8026,7 @@ function AskModal({
             className="ask-other"
             placeholder={t("ask.otherPlaceholder", "其它（手动输入或粘贴/添加截图，可选）")}
             value={other[step] || ""}
+            onFocus={() => setAutoCancelled(true)} // 一点进手动输入框就取消自动提交，别抢你正在打的字/图
             onChange={(e) => setOther((o) => ({ ...o, [step]: e.target.value }))}
             onPaste={(e) => {
               const its = e.clipboardData?.items;
@@ -8049,7 +8050,7 @@ function AskModal({
             type="button"
             className="ask-attach"
             title={t("ask.addShot", "添加截图")}
-            onClick={() => fileRef.current?.click()}
+            onClick={() => { setAutoCancelled(true); fileRef.current?.click(); }}
           >
             📎
           </button>
