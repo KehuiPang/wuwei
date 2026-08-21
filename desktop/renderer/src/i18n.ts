@@ -535,6 +535,7 @@ const DICT_EN: Record<string, string> = {
   "notice.coinShortage": "Out of credits: please top up to keep using hosted models.",
   // 侧栏 / 会话分组（side.* ctx.*）
   "side.collapse": "Collapse sidebar",
+  "side.search": "Search all conversations (⌘/Ctrl+F)",
   "side.emptyHistory": "No past chats yet",
   "side.done": "Done",
   "side.discuss": "To discuss: needs a decision in a meeting",
