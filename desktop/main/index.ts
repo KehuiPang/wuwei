@@ -3862,6 +3862,10 @@ let babyProc: any = null;
 let babyPort = 0;
 let babyReady = false;
 let babyStarting: Promise<void> | null = null;
+// 婴儿的"大脑"：本地 nano_baby_gpt(纯手写小 GPT)。当 llmBase 指向本机时由 wuwei 自动拉起，
+// 这样开婴儿=大脑+身体一起起，用户不用手动跑。指向外部 LLM 时不管(那是用户自己的服务)。
+let babyBrainProc: any = null;
+let babyBrainStarting: Promise<void> | null = null;
 
 const _sleepBaby = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -3892,6 +3896,33 @@ function pingHealth(port: number): Promise<boolean> {
   });
 }
 
+// 确保婴儿"大脑"(本地 nano_baby_gpt)在跑。llmBase 指向本机(127.0.0.1/localhost)且 babyDir 有
+// nano_baby_gpt.py 才管；已经健康在跑就跳过(不重复起，兼容用户手动起的)。首启无 checkpoint 会先训练。
+function ensureNanoBrain(cfg: ReturnType<typeof agiCfg>): Promise<void> {
+  const p = (async () => {
+    let host = "", port = 0;
+    try { const u = new URL(cfg.llmBase); host = u.hostname; port = Number(u.port) || 0; } catch { return; }
+    if (!(host === "127.0.0.1" || host === "localhost")) return; // 外部 LLM：用户自己的服务，不代管
+    if (!port) return;
+    if (!existsSync(join(cfg.babyDir, "nano_baby_gpt.py"))) return; // 没有本地脑脚本：跳过
+    if (await pingHealth(port)) return; // 已经有人(可能用户手动)起着且健康：直接用
+    const { spawn } = await import("node:child_process");
+    const env = { HF_ENDPOINT: "https://hf-mirror.com", ...process.env, PYTHONIOENCODING: "utf-8", KMP_DUPLICATE_LIB_OK: "TRUE" };
+    babyBrainProc = spawn(cfg.python, ["nano_baby_gpt.py", "--port", String(port)], { cwd: cfg.babyDir, env });
+    babyBrainProc.stderr?.on("data", (d: any) => log("nano_brain", String(d).trim()));
+    babyBrainProc.on("exit", () => { babyBrainProc = null; });
+    const deadline = Date.now() + 120000; // 首启可能要训练(几分钟)，给足时间
+    while (Date.now() < deadline) {
+      if (babyBrainProc && await pingHealth(port)) return;
+      if (!babyBrainProc) throw new Error("nano_baby_gpt 进程已退出(看日志 nano_brain)");
+      await _sleepBaby(700);
+    }
+    throw new Error("nano_baby_gpt(婴儿大脑)启动超时");
+  })();
+  babyBrainStarting = p.finally(() => { babyBrainStarting = null; });
+  return babyBrainStarting;
+}
+
 // 确保常驻服务在跑(懒启动+并发合流)。首次要等模型加载 ~11s。
 function ensureBabyServer(): Promise<void> {
   if (babyReady && babyProc && !babyProc.killed) return Promise.resolve();
@@ -3900,6 +3931,7 @@ function ensureBabyServer(): Promise<void> {
     const cfg = agiCfg();
     if (!cfg.babyDir) throw new Error("未配置数字婴儿目录：请在 ~/.wuwei/config.json 的 agi.babyDir 填 d1_digital_baby 的绝对路径");
     if (!existsSync(join(cfg.babyDir, "baby_server.py"))) throw new Error("找不到 baby_server.py（检查 agi.babyDir 路径是否正确）");
+    await ensureNanoBrain(cfg); // 先把大脑(本地 nano)拉起来，否则 baby /chat 连不到 LLM
     babyPort = await pickPort();
     const { spawn } = await import("node:child_process");
     const env = { HF_HUB_OFFLINE: "1", HF_ENDPOINT: "https://hf-mirror.com", ...process.env, PYTHONIOENCODING: "utf-8", LLM_BASE: cfg.llmBase, LLM_MODEL: cfg.llmModel };
@@ -3943,10 +3975,11 @@ function babyHttp(path: string, body: any, timeoutMs: number): Promise<{ ok: boo
   });
 }
 
-// 停止常驻服务(app 退出时调用)
+// 停止常驻服务(app 退出时调用)：身体 + 大脑一起停
 function stopBabyServer() {
   try { babyProc?.kill(); } catch { /* ignore */ }
-  babyProc = null; babyReady = false;
+  try { babyBrainProc?.kill(); } catch { /* ignore */ }
+  babyProc = null; babyReady = false; babyBrainProc = null;
 }
 
 // 兼容旧签名：把 (args, stdin) 映射到常驻服务的 HTTP 接口，IPC handler 无需改动。
