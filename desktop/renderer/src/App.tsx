@@ -7913,7 +7913,9 @@ function AskModal({
     window.addEventListener("mouseup", up);
   }
   // 单个单选题靠点击即交，不显示按钮；多选题/多题分步/已附截图时显示「下一步/提交」
-  const showPrimary = curMulti || qs.length > 1 || curImgs.length > 0;
+  // 显示「提交/下一步」按钮：多选、多题、带图，或**在「其它」框手动输入了文字**(否则单选题里
+  // 手打答案没有可点的提交按钮，只能按回车——很多人不知道，会以为卡住)。
+  const showPrimary = curMulti || qs.length > 1 || curImgs.length > 0 || (other[step] || "").trim().length > 0;
   // 折叠态：只剩一个小条(不挡后面内容)，点「展开」还原
   if (box && collapsed) {
     return (
