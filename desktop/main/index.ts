@@ -136,6 +136,7 @@ import {
   wuweiRegister,
   wuweiPayCreate,
   wuweiPayStatus,
+  reportClientLogin,
   type WuweiSession,
 } from "./wuwei-auth.js";
 import { saveWuweiSession, loadWuweiSession, clearWuweiSession } from "./wuwei-session.js";
@@ -2095,6 +2096,14 @@ async function getFreshWuweiSession(): Promise<WuweiSession | null> {
   }
   return refreshInflight;
 }
+// 客户端登录埋点上报：登录成功即报；启动/运行期检测到有效会话每进程只报一次(loginReportedThisProc 节流)，
+// 避免 account:wuwei-me 被反复调用(启动拉账号、扣币刷余额)时重复上报把「登录数」灌水。显式登出后重置，重登会再报。
+let loginReportedThisProc = false;
+function reportLoginOnce(): void {
+  if (loginReportedThisProc) return;
+  loginReportedThisProc = true;
+  void reportClientLogin(app.getVersion());
+}
 // 托管平台每轮开跑前：把网关的 apiKey 注入并重建 provider。
 //  - 已登录：apiKey = 新鲜的无为 access_token(快过期先续期) → 按 token 扣无为币。
 //  - 未登录：apiKey = anon-<设备id> → 匿名试用分支(仅 anon 平台的 free 模型可用，网关按设备/IP 每日护栏)。
@@ -3286,6 +3295,8 @@ ipcMain.handle("account:wuwei-login", async () => {
   if (!sess) return null;
   wuweiLoggedOut = false; // 重新登录 → 解除登出封锁
   saveWuweiSession(sess);
+  loginReportedThisProc = false; // 新登录：重置节流，确保本次登录必报一次
+  reportLoginOnce();
   const me = await wuweiFetchMe(sess.accessToken);
   if (me === "unauthorized" || !me) return null;
   applyProFromMe(me);
@@ -3299,6 +3310,8 @@ async function finishWuweiSignin(
   if (typeof r === "string") return { error: r };
   wuweiLoggedOut = false; // 重新登录 → 解除登出封锁
   saveWuweiSession(r);
+  loginReportedThisProc = false; // 新登录：重置节流，确保本次登录必报一次
+  reportLoginOnce();
   const me = await wuweiFetchMe(r.accessToken);
   if (me === "unauthorized" || !me) {
     return {
@@ -3340,12 +3353,14 @@ ipcMain.handle("account:wuwei-me", async () => {
   }
   const meVal = me === "unauthorized" || !me ? null : me;
   applyProFromMe(meVal); // 同步会员态 → 脑网络可用性
+  if (meVal) reportLoginOnce(); // 启动/运行期首次确认有效会话 → 上报一次登录(节流，本进程只报一次)
   return meVal;
 });
 ipcMain.handle("account:wuwei-logout", () => {
   wuweiLoggedOut = true;      // 掐断后台刷新/推送，防"退一次又自动登回"
   refreshInflight = null;     // 丢弃进行中的续期(其回写已被 wuweiLoggedOut 拦)
   clearWuweiSession();
+  loginReportedThisProc = false; // 登出 → 重置节流，下次重登会再上报一次登录
   applyProFromMe(null); // 退出 → 会员态清空 → 脑网络停用
   return true;
 });

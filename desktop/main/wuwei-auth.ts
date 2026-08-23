@@ -163,6 +163,22 @@ export function wuweiLogin(forceSwitch = false): Promise<WuweiSession | null> {
   });
 }
 
+/** 上报客户端登录事件（隐私红线：只发匿名 anon_id=设备指纹 + 版本 + 平台，绝不带 email/name/IP 明文）。
+ *  写官网 /api/client-event(event=login)，供后台「客户端登录明细/版本分布/平台分布」看板统计。
+ *  纯 fire-and-forget：失败静默，绝不影响登录主流程。version 由主进程传入(app.getVersion())。 */
+export async function reportClientLogin(version?: string): Promise<void> {
+  try {
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    await fetch(`${SITE}/api/client-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: "login", anon_id: getDeviceId(), version: version || "", platform }),
+    });
+  } catch {
+    /* 上报失败静默：埋点不能拖累登录 */
+  }
+}
+
 /** token 静默续期：走官网 /api/refresh。成功返回新会话，失败返回 null（需重新登录）。 */
 export async function wuweiRefresh(refreshToken: string): Promise<WuweiSession | null> {
   if (!refreshToken) return null;
