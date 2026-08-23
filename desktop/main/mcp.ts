@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { join, delimiter } from "node:path";
 import type { Tool, ToolResult } from "../../src/types.js";
 
-export const MCP_CONFIG_PATH = join(homedir(), ".wuwei", "mcp.json");
+export const MCP_CONFIG_PATH = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "mcp.json");
 
 interface McpServerCfg {
   name: string;

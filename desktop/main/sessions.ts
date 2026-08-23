@@ -13,7 +13,7 @@ import { join } from "node:path";
 import type { Message } from "../../src/types.js";
 import { noteSessionSaved, dropFromIndex } from "./search.js";
 
-const DIR = join(homedir(), ".wuwei");
+const DIR = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei");
 const SDIR = join(DIR, "sessions");
 const META = join(DIR, "sessions.json");
 const GROUPS = join(DIR, "groups.json"); // 分组顺序(手动),新组前插=置顶

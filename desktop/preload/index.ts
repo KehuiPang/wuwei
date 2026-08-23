@@ -38,14 +38,23 @@ const EVENTS = [
 // 把当前 edition(wuwei/minicc)暴露给渲染层，供动态设置窗口/文档标题。
 // ⚠️ appName 在 preload 加载时就定死了：渲染进程的 env 是启动时从主进程继承的快照，
 //    用户之后在设置里切语言，这里不会跟着变。渲染层要显示品牌名请用 i18n 的 splash.brand。
+// edition：优先环境变量(dev 模式 cross-env 注入)；打包版 preload 进程拿不到时退回 exe 名判断。
+const _ed =
+  (process.env.WUWEI_EDITION ||
+    ((process.execPath || "").toLowerCase().includes("wuwei-test")
+      ? "test"
+      : (process.execPath || "").toLowerCase().includes("minicc")
+        ? "minicc"
+        : "wuwei"));
 contextBridge.exposeInMainWorld("wuweiEdition", {
-  edition: process.env.WUWEI_EDITION || "wuwei",
+  edition: _ed,
   appName:
-    (process.env.WUWEI_EDITION || "wuwei") === "minicc"
+    _ed === "minicc"
       ? "minicc"
-      : process.env.WUWEI_LANG === "en"
-        ? "Wuwei"
-        : "无为",
+      : (() => {
+          const base = process.env.WUWEI_LANG === "en" ? "Wuwei" : "无为";
+          return _ed === "test" ? `${base}[测试]` : base;
+        })(),
 });
 
 const api = {

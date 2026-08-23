@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "n
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 
-const WUWEI_DIR = join(homedir(), ".wuwei");
+const WUWEI_DIR = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei");
 const DEVICE_FILE = join(WUWEI_DIR, "device-id");
 const PREFIX = "wd_"; // wuwei device
 const ID_HEX_LEN = 32;

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { log } from "./logger.js";
 import type { WuweiSession } from "./wuwei-auth.js";
 
-const DIR = join(homedir(), ".wuwei");
+const DIR = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei");
 const FILE = join(DIR, "auth.json");
 
 interface StoredPlain {

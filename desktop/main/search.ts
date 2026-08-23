@@ -11,7 +11,7 @@ import { readFile, writeFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DIR = join(homedir(), ".wuwei");
+const DIR = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei");
 const SDIR = join(DIR, "sessions");
 const IDX_FILE = join(DIR, "search-index.json");
 

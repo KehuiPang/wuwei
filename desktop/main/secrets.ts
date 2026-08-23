@@ -7,7 +7,7 @@ import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 
-const VAULT_PATH = join(homedir(), ".wuwei", "secrets.json");
+const VAULT_PATH = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "secrets.json");
 
 // 界面语言（settings.ts 的 applyEnvFromSettings 写入）。下面这些报错/掩码文案会直接显示在密钥面板上，得跟界面语言走。
 // 语言可运行时切换，所以只在调用时求值，不做模块常量。

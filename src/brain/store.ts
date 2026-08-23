@@ -26,7 +26,7 @@ import type { BrainGraph, BrainNode, BrainEdge } from "./types.js";
 import { EMPTY_GRAPH } from "./types.js";
 
 // 目录可用 WUWEI_BRAIN_DIR 覆盖(自测用临时目录，不碰真实数据)；兼容旧 MINICC_BRAIN_DIR 测试变量。
-export const BRAIN_DIR = process.env.WUWEI_BRAIN_DIR || process.env.MINICC_BRAIN_DIR || join(homedir(), ".wuwei", "brain");
+export const BRAIN_DIR = process.env.WUWEI_BRAIN_DIR || process.env.MINICC_BRAIN_DIR || join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "brain");
 export const GRAPH_FILE = join(BRAIN_DIR, "graph.json"); // 旧格式：兼容读取/迁移来源
 export const SNAPSHOT_FILE = join(BRAIN_DIR, "graph.snapshot.json");
 export const LOG_FILE = join(BRAIN_DIR, "graph.log.jsonl");

@@ -20,11 +20,13 @@
     "start": "tsx src/index.tsx",
     "typecheck": "tsc --noEmit",
     "desktop:dev": "electron-vite dev",
+    "desktop:dev:test": "cross-env WUWEI_EDITION=test electron-vite dev",
     "desktop:build": "electron-vite build",
     "desktop:start": "electron-vite preview",
     "desktop:pack": "electron-vite build && electron-builder --mac",
     "pack:wuwei": "electron-vite build && electron-builder --win --config electron-builder.wuwei.yml",
-    "pack:minicc": "electron-vite build && electron-builder --win --config electron-builder.minicc.yml"
+    "pack:minicc": "electron-vite build && electron-builder --win --config electron-builder.minicc.yml",
+    "pack:wuwei-test": "electron-vite build && electron-builder --win --config electron-builder.wuwei-test.yml"
   },
   "engines": {
     "node": ">=20"
@@ -121,6 +123,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "cross-env": "^10.1.0",
     "electron": "^43.1.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",

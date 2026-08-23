@@ -1,0 +1,46 @@
+# wuwei-test 测试版打包配置：与正式版 wuwei 完全隔离（不同 appId / 数据目录 / 单实例锁 / 安装包名）。
+# 用途：上线前本地验收改动（埋点等），可与正式版【同时安装、同时运行】、互不干扰，连同一个线上库。
+# 数据目录靠运行时 EDITION=test 派生（.wuwei-test），exe/appName 含 "wuwei-test" 会被自动识别为 test 版。
+# 故意【不配置 publish】：测试版不接自动更新，绝不会去正式版更新源把自己覆盖。
+# 用法: npm run pack:wuwei-test
+appId: com.wuwei.test
+productName: wuwei-test
+directories:
+  output: release-test
+files:
+  - out/**/*
+  - build/icon.png
+  - build/tray.ico
+  - package.json
+asarUnpack:
+  - build/icon.png
+  - build/tray.ico
+  - "**/node_modules/@anthropic-ai/**"
+  - "**/node_modules/onnxruntime-node/**"
+  - "**/node_modules/@xenova/**"
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+dmg:
+  title: "wuwei-test ${version}"
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: build/icon.png
+  category: Development
+  maintainer: wuwei
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "wuwei-test-${version}-setup.${ext}"
+  include: build/installer.nsh # 同 wuwei：修 electron-builder 默认「应用在运行」检测漏排自身 PID
+npmRebuild: false

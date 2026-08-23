@@ -3,7 +3,7 @@ import { appendFileSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DIR = join(homedir(), ".wuwei", "logs");
+const DIR = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "logs");
 export const LOG_FILE = join(DIR, "minicc.log");
 const MAX_BYTES = 3 * 1024 * 1024; // 超过 3MB 滚动一次
 

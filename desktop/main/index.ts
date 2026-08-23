@@ -1,6 +1,9 @@
 // Electron 主进程：创建窗口，复用核心(agent/tools/config)，
 // 通过 IPC 把 Agent 流式 hooks 推给渲染进程，权限确认走 IPC 往返。
 import { app, BrowserWindow, WebContentsView, ipcMain, protocol, net, shell, session, clipboard, Menu, safeStorage, Tray, nativeImage, dialog, screen, nativeTheme } from "electron";
+// ⚠️ 必须是最靠前的本地 import：它的顶层副作用会设好 WUWEI_DATA_DIR_NAME，
+//    之后 sessions/settings/brain 等模块初始化时才能按正确版本(wuwei/minicc/test)选数据目录。
+import { EDITION, IS_MINICC, IS_TEST, APP_NAME, APP_ID, DATA_DIR_NAME, appDisplayName } from "./edition.js";
 import electronUpdater from "electron-updater";
 const safeStorageOk = () => {
   try {
@@ -86,35 +89,7 @@ import {
 } from "./settings.js";
 
 // 数据目录 .minicc→.wuwei 改名后的一次性迁移，须在任何数据读取前执行。
-// —— 应用版本(edition)：wuwei(默认) / minicc。两者完全独立：appId、数据目录、单实例锁、窗口标题。
-function resolveEdition(): "wuwei" | "minicc" {
-  const fromArgv = process.argv.find((a) => a.startsWith("--edition="));
-  let raw = (fromArgv ? fromArgv.split("=")[1] : "") || process.env.WUWEI_EDITION || "";
-  if (!raw) {
-    try {
-      const exeName = (process.execPath || "").toLowerCase();
-      const appName = (app.getName() || "").toLowerCase();
-      if (exeName.includes("minicc") || appName.includes("minicc")) raw = "minicc";
-    } catch {
-      /* ignore */
-    }
-  }
-  return raw.trim().toLowerCase() === "minicc" ? "minicc" : "wuwei";
-}
-const EDITION = resolveEdition();
-const IS_MINICC = EDITION === "minicc";
-const APP_NAME = IS_MINICC ? "minicc" : "无为";
-// 窗口标题/托盘提示等「显示用」名字：英文界面显示 Wuwei。
-// ⚠️ 只用于显示，绝不能拿去 app.setName()——那会改 userData 目录名，切个语言就把用户数据全丢了。
-function appDisplayName(): string {
-  return IS_MINICC ? "minicc" : process.env.WUWEI_LANG === "en" ? "Wuwei" : "无为";
-}
-const APP_ID = IS_MINICC ? "com.minicc.app" : "com.wuwei.app";
-const DATA_DIR_NAME = IS_MINICC ? ".minicc" : ".wuwei";
-process.env.WUWEI_DATA_DIR_NAME = DATA_DIR_NAME;
-process.env.WUWEI_EDITION = EDITION;
-
-// 数据目录 .minicc→.wuwei 改名后的一次性迁移，须在任何数据读取前执行。
+// （edition/数据目录名/APP_ID 等已在最顶部 ./edition.js 解析并写入 process.env。）
 migrateFromMinicc();
 import { getAccount, logout } from "./account.js";
 import {
@@ -2053,7 +2028,8 @@ if (!gotLock) {
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 function startClientTelemetry(): void {
   try {
-    const version = app.getVersion();
+    // 测试版给版本号打 -test 后缀，后台埋点一眼可辨、不污染正式版留存/安装统计。
+    const version = IS_TEST ? `${app.getVersion()}-test` : app.getVersion();
     // 首次安装标记：userData/.installed 不存在 → 报一次 install 并落标记
     const flag = join(app.getPath("userData"), ".installed");
     if (!existsSync(flag)) {
@@ -2827,7 +2803,7 @@ ipcMain.on("memory:set", (_e, text: string) => {
 });
 
 // —— 输入框草稿：实时落盘 ~/.wuwei/draft.json，重开/更新后自动恢复(含粘贴的截图 base64) ——
-const DRAFT_FILE = join(homedir(), ".wuwei", "draft.json");
+const DRAFT_FILE = join(homedir(), DATA_DIR_NAME, "draft.json");
 ipcMain.handle("draft:get", () => {
   try {
     return JSON.parse(readFileSync(DRAFT_FILE, "utf8"));
@@ -2927,7 +2903,7 @@ ipcMain.handle("brain:read-doc", (_e, ref: string) => brain.readDoc(String(ref))
 
 // —— 概念抽取：用当前对话模型(k3)从已索引文档「按文档级」批量抽概念+关系填进 graph ——
 // 按文档级(而非块级)大幅省 token：204 文档 = 204 次调用，非 3571 块。可停、进度持久、默认只抽未抽过的文档。
-const CONCEPTS_DONE_FILE = join(homedir(), ".wuwei", "brain", "concepts-done.json");
+const CONCEPTS_DONE_FILE = join(homedir(), DATA_DIR_NAME, "brain", "concepts-done.json");
 function loadConceptsDone(): Set<string> {
   try {
     return new Set(JSON.parse(readFileSync(CONCEPTS_DONE_FILE, "utf8")).files || []);
@@ -3439,6 +3415,8 @@ let updaterWired = false;
 function setupUpdater(): void {
   if (updaterWired) return;
   updaterWired = true;
+  // 测试版不接自动更新：否则会去正式版更新源下载并把自己覆盖，失去「独立测试」意义。
+  if (IS_TEST) { log("updater", "测试版跳过自动更新"); return; }
   autoUpdater.autoDownload = true; // 发现新版即后台下载
   autoUpdater.autoInstallOnAppQuit = false; // 不擅自在退出时装，由用户点「升级」触发
   autoUpdater.on("update-available", (info) => {

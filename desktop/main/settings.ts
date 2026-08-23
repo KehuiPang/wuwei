@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync } from "node
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const DIR = join(homedir(), ".wuwei");
+const DIR = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei");
 
 // 系统语言自动判定（用户没手动设过界面语言时用）：中国时区 → 中文；否则按系统 locale/LANG，
 // zh 开头 → 中文，其它 → 英文。不依赖 electron，CLI 侧同样可用。与 renderer i18n.getLang() 同逻辑。
