@@ -18,6 +18,53 @@ import type {
 // 必须在调用处求值：放模块顶层 const 会在加载那刻把语言焊死，切语言不生效。
 const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : zh);
 
+// 无为托管网关的错误码 → 人话提示。网关出错时会返回 {error:{type:"gateway_error",code,...}}，
+// 直接把原始 JSON 甩给用户看不懂(如「OpenAI 兼容端点报错 402: {...}」)，这里翻成中/英友好文案并给出下一步。
+// 只对无为网关(baseUrl 含 /api/gateway)生效；第三方端点保持原样报错，不误翻。
+function humanizeGatewayError(status: number, rawBody: string): string | null {
+  let code = ""; let bal: number | undefined; let est: number | undefined;
+  try {
+    const j = JSON.parse(rawBody);
+    const e = j?.error;
+    if (!e || e.type !== "gateway_error") return null; // 不是网关结构化错误 → 交回原始处理
+    code = String(e.code || "");
+    if (typeof e.balance === "number") bal = e.balance;
+    if (typeof e.estimated_cost === "number") est = e.estimated_cost;
+  } catch {
+    return null; // 非 JSON → 不是网关错误
+  }
+  const coins = (n?: number) => (typeof n === "number" ? String(n) : "");
+  switch (code) {
+    case "insufficient_balance": {
+      const need = est != null ? tt(`（本次约需 ${coins(est)} 无为币，`, `(this request needs ~${coins(est)} coins, `) : tt("（", "(");
+      const have = bal != null ? tt(`当前余额 ${coins(bal)}）`, `you have ${coins(bal)})`) : tt("）", ")");
+      return tt(
+        `无为币余额不足以支付本次请求${need}${have}。请前往充值，或改用免费模型继续。`,
+        `Not enough coins for this request ${need}${have}. Please top up, or switch to a free model.`,
+      );
+    }
+    case "daily_cap_reached":
+      return tt(
+        "已达今日使用上限。请明天再试，或到后台/会员页提升每日额度。",
+        "Daily usage limit reached. Try again tomorrow, or raise your daily cap.",
+      );
+    case "free_quota_exhausted":
+      return tt(
+        "免费体验额度已用完。登录并充值即可继续使用付费模型，或换其它免费模型。",
+        "Free trial quota used up. Sign in and top up to use paid models, or switch to another free model.",
+      );
+    case "free_trial_disabled":
+      return tt("免费体验暂时关闭，请登录后使用。", "Free trial is currently off. Please sign in.");
+    case "anon_not_allowed":
+      return tt("该模型需登录后使用，请先登录。", "This model requires sign-in. Please log in first.");
+    case "model_not_priced":
+    case "unknown_hosted_model":
+      return tt("该模型暂不可用，请换一个模型。", "This model is unavailable. Please pick another one.");
+    default:
+      return tt(`请求被网关拦下（${code || status}）。`, `Request blocked by gateway (${code || status}).`);
+  }
+}
+
 // Claude Code 订阅版(OAuth) 请求时，服务端要求 system 首段是官方身份，否则拒绝。
 const CLAUDE_CODE_IDENTITY =
   "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -313,8 +360,15 @@ class OpenAIProvider implements Provider {
       signal: handlers.signal,
     });
     if (!res.ok || !res.body) {
+      const rawBody = await res.text();
+      // 无为托管网关：把结构化错误(余额不足/达上限等)翻成人话，别甩原始 JSON 给用户。第三方端点保持原样。
+      const isWuweiGateway = base.includes("/api/gateway");
+      if (isWuweiGateway) {
+        const friendly = humanizeGatewayError(res.status, rawBody);
+        if (friendly) throw new Error(friendly);
+      }
       throw new Error(
-        `${tt("OpenAI 兼容端点报错", "OpenAI-compatible endpoint error")} ${res.status}: ${await res.text()}`,
+        `${tt("OpenAI 兼容端点报错", "OpenAI-compatible endpoint error")} ${res.status}: ${rawBody}`,
       );
     }
 
