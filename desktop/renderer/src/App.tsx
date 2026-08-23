@@ -4832,7 +4832,7 @@ export function App() {
                                   <path d="M21 11.5a8.5 8.5 0 0 1-11.7 7.9L4 20l1.4-4A8.5 8.5 0 1 1 21 11.5z" />
                                   <path d="M8.5 11.5h7M8.5 8.5h4" />
                                 </svg>
-                                {t("menu.feedback", "留言反馈")}
+                                {t("menu.feedback", "反馈有奖")}
                               </button>
                               {/* 帮助 · 检查更新：平时只显「更新」，有新版才标小红点；点击弹窗看结果/版本信息 */}
                               <button className="acct-it" onClick={() => (updateReady ? (setShowAcctMenu(false), setShowUpdateModal(true)) : checkUpdateNow())}>

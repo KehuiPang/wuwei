@@ -374,6 +374,8 @@ export function saveSession(
     project: prev?.project,
     done: prev?.done,
     discuss: prev?.discuss, // 保留待讨论标记，别被每轮落盘抹掉
+    model: prev?.model, // 保留每会话绑定的模型/平台，别被每轮落盘抹掉(否则切回会话记不住模型)
+    providerId: prev?.providerId,
     running: prev?.running, // 保留运行/中断标记，别被每轮落盘抹掉(否则崩溃检测失效)
     interrupted: prev?.interrupted,
     resumeDismissed: prev?.resumeDismissed,

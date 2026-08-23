@@ -855,7 +855,7 @@ const DICT_EN: Record<string, string> = {
   "menu.hintTopup": "Top up to unlock more chat quota",
   "menu.donate": "Top up",
   "menu.contactSupport": "Support",
-  "menu.feedback": "Leave feedback",
+  "menu.feedback": "Feedback rewards",
   // 消息操作按钮 tooltip（消息工具栏）
   "msg.resend": "Resend (send this message's text and images again — handy for retrying after switching models)",
   "msg.edit": "Undo & edit (retract this message; the text returns to the input box to edit and resend)",

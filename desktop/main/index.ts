@@ -2146,8 +2146,6 @@ async function refreshWuweiMe(): Promise<void> {
 
 async function startTurn(useId: string, text: string, images?: string[], sysOverride?: string) {
   turnSid = useId; // 供 ask_user 工具的事件带上会话 id
-  // 每会话绑定模型：记下这一轮实际用的模型/平台，切走再切回自动用回它(哪怕没手动改过模型)
-  try { const c = loadConfig(); setSessionModel(useId, c.model, loadSettings()?.providerId); } catch { /* ignore */ }
   text = secrets.redact(text).text; // 兜底：已入库密钥出现在消息里→占位符替换，永不出网到模型
   const agent = getAgent(useId);
   if (!agent) {
@@ -2207,6 +2205,8 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     );
     persist(useId); // 用户消息已同步入队,立即落盘让(新)会话进侧栏、带上运行点
     setSessionRunning(useId, true); // 跨重启存活的运行标记(须在 persist 后:新会话此刻才有元信息)；崩溃/强杀残留→下次启动识别为中断
+    // 每会话绑定模型：记下这一轮实际用的模型/平台(须在 persist 后，新会话此刻才有元信息)，切走再切回自动用回它
+    try { const c = loadConfig(); setSessionModel(useId, c.model, loadSettings()?.providerId); } catch { /* ignore */ }
     await runP;
     if (isHostedProvider(loadSettings()?.providerId)) void refreshWuweiMe(); // 托管平台：扣币后刷新顶栏/菜单余额
     if (runs.get(useId) === ac)
@@ -2481,6 +2481,14 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
 });
 
 ipcMain.on("session:switch", (_e, id: string) => {
+  // 切走前：把当前模型绑给正要离开的会话(若它还没绑过)，让老会话也能立刻记住、切回来能还原
+  try {
+    const leaving = currentId;
+    if (leaving && leaving !== id) {
+      const lm = listSessions().find((x) => x.id === leaving);
+      if (lm && !lm.model) { const c = loadConfig(); setSessionModel(leaving, c.model, loadSettings()?.providerId); }
+    }
+  } catch { /* ignore */ }
   currentId = id;
   // 每会话绑定模型：该会话存过模型/平台且和当前不同 → 切回它(applySettings 会推 evt:ready 更新底栏)
   try {
