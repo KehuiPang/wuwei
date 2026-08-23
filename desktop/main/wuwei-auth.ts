@@ -195,6 +195,49 @@ export async function reportClientEvent(event: "heartbeat" | "install", version?
   }
 }
 
+/** 上报「非托管」（订阅 / 自配 key）用量，供后台统计——网关物理上看不到这类请求（它们直连厂商），
+ *  故由客户端每轮结束后自报一次。隐私红线：只发 token 计数 + 模型/平台标识 + 匿名 anon_id + 版本/系统，
+ *  绝不发对话内容、也不发用户自己的 API key。登录用户带上 access_token(Authorization)，服务端据此归到 user_id；
+ *  未登录(纯自配 key 无账号)则只有设备维度。纯 fire-and-forget：失败静默，绝不拖累对话。 */
+export async function reportExternalUsage(
+  p: {
+    kind: string; // anthropic-oauth / anthropic-apikey / openai / codex
+    providerId?: string; // UI 平台标识：claude-oauth / anthropic / openai / openrouter / codex / deepseek ...
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheHitTokens?: number;
+    steps?: number;
+    version?: string;
+  },
+  accessToken?: string | null,
+): Promise<void> {
+  try {
+    if (!p.model || (p.inputTokens <= 0 && p.outputTokens <= 0)) return; // 无实际用量不上报
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    await fetch(`${SITE}/api/usage/report`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        anon_id: getDeviceId(),
+        kind: p.kind,
+        provider_id: p.providerId || "",
+        model: p.model,
+        input_tokens: Math.round(p.inputTokens),
+        output_tokens: Math.round(p.outputTokens),
+        cache_hit_tokens: Math.round(p.cacheHitTokens || 0),
+        steps: p.steps || 0,
+        platform,
+        version: p.version || "",
+      }),
+    });
+  } catch {
+    /* 上报失败静默：统计不能拖累对话 */
+  }
+}
+
 /** token 静默续期：走官网 /api/refresh。成功返回新会话，失败返回 null（需重新登录）。 */
 export async function wuweiRefresh(refreshToken: string): Promise<WuweiSession | null> {
   if (!refreshToken) return null;

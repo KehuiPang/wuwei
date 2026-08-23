@@ -114,6 +114,7 @@ import {
   wuweiPayStatus,
   reportClientLogin,
   reportClientEvent,
+  reportExternalUsage,
   type WuweiSession,
 } from "./wuwei-auth.js";
 import { saveWuweiSession, loadWuweiSession, clearWuweiSession } from "./wuwei-session.js";
@@ -149,6 +150,8 @@ let ctxWindow = 1_000_000; // 当前模型上下文窗口(占用条用真实值)
 let subFlag = false; // 当前后端是否订阅类(决定前端是否显示 5小时/周额度)
 let cwd = process.cwd();
 const agents = new Map<string, Agent>();
+// 每会话最近一轮的自足用量（onUsage 的 round），供「非托管」平台每轮结束后自报统计（见 reportExternalUsage 调用处）。
+const lastRoundBySid = new Map<string, { input: number; output: number; cacheHit: number; steps: number }>();
 let currentId = "";
 
 // 权限往返：id → resolve
@@ -2195,7 +2198,10 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
             pendingPerm.set(id, resolve);
             send("evt:permission-request", { sid: useId, id, name: tool.name, input });
           }),
-        onUsage: (u) => send("evt:usage", { sid: useId, usage: u }),
+        onUsage: (u) => {
+          if (u.round) lastRoundBySid.set(useId, { input: u.round.input, output: u.round.output, cacheHit: u.round.cacheHit, steps: u.round.steps });
+          send("evt:usage", { sid: useId, usage: u });
+        },
         onRateLimits: (rl) => {
           log("ratelimits", "5h=", rl.primaryUsedPercent, "% 周=", rl.secondaryUsedPercent, "%");
           saveRateLimits(curProviderId(), rl); // 记住（按平台），下次打开直接显示
@@ -2213,7 +2219,22 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     // 每会话绑定模型：记下这一轮实际用的模型/平台(须在 persist 后，新会话此刻才有元信息)，切走再切回自动用回它
     try { const c = loadConfig(); setSessionModel(useId, c.model, loadSettings()?.providerId); } catch { /* ignore */ }
     await runP;
-    if (isHostedProvider(loadSettings()?.providerId)) void refreshWuweiMe(); // 托管平台：扣币后刷新顶栏/菜单余额
+    const stAfter = loadSettings();
+    if (isHostedProvider(stAfter?.providerId)) void refreshWuweiMe(); // 托管平台：扣币后刷新顶栏/菜单余额
+    else {
+      // 非托管（订阅 / 自配 key）：这类请求直连厂商、不经网关，后台看不到 → 客户端每轮结束自报用量（仅计数+模型标识，不含内容）。
+      const rd = lastRoundBySid.get(useId);
+      if (rd && (rd.input > 0 || rd.output > 0)) {
+        const c = loadConfig();
+        void getFreshWuweiSession().then((sess) =>
+          reportExternalUsage(
+            { kind: stAfter?.kind || c.provider, providerId: stAfter?.providerId, model: c.model, inputTokens: rd.input, outputTokens: rd.output, cacheHitTokens: rd.cacheHit, steps: rd.steps, version: app.getVersion() },
+            sess?.accessToken,
+          ),
+        );
+      }
+    }
+    lastRoundBySid.delete(useId); // 已消费，避免下轮误用旧值
     if (runs.get(useId) === ac)
       send(ac.signal.aborted ? "evt:stopped" : "evt:done", { sid: useId }); // 中断后 loop 干净返回也算停止
   } catch (e: any) {

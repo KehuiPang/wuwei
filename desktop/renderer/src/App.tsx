@@ -2558,7 +2558,8 @@ export function App() {
   const showSubscription = !!wuwei?.flags?.includes("subscription");
   const isPro = (wuwei?.membership?.tier ?? "free") !== "free"; // 会员态：脑网络等专享功能门控
   const [wuweiBusy, setWuweiBusy] = useState(false);
-  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number } | null>(null);
+  // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
+  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string } } | null>(null);
   // 客户端公告：启动拉取，未读过该版本(version)且 active 才弹；读过存本地，同版本不再弹，后台更新(version 变)则再弹。
   const [announce, setAnnounce] = useState<{ version: string; title: string; body: string } | null>(null);
   // 自动更新：版本号 + 检查态 + 新版就绪(已下载好，点即装)
@@ -2571,12 +2572,24 @@ export function App() {
   const [updateChipHidden, setUpdateChipHidden] = useState<string>(() => { try { return localStorage.getItem("wuwei_dismissed_update_chip") || ""; } catch { return ""; } });
   const [dlProgress, setDlProgress] = useState<{ percent: number; bytesPerSecond: number } | null>(null); // 更新下载进度(0-100)，下载完清空
   async function refreshWuweiForShortage(message: string) {
-    setCoinShortage({ message });
+    // 若当前绑的是「无为托管·Claude」且已授权 Claude 订阅 → 提供一键改用订阅继续（订阅直连 Anthropic、走账号额度、不扣无为币）。
+    // 托管 GPT → Codex 订阅同理，但 Codex 登录态在 ~/.codex、渲染层不易可靠判定，暂只做 Claude（正是本次触发场景）。
+    let rebind: { providerId: string; model: string; label: string } | undefined;
+    try {
+      const rs = await window.wuwei.getSettings();
+      const creds = (rs?.settings?.creds || {}) as Record<string, { oauthToken?: string }>;
+      if (curProviderId === "wuwei-claude" && creds["claude-oauth"]?.oauthToken) {
+        rebind = { providerId: "claude-oauth", model: "claude-opus-4-8", label: lang === "en" ? "Claude subscription" : "Claude 订阅" };
+      }
+    } catch {
+      /* 读设置失败 → 不给改绑入口，退回充值路径 */
+    }
+    setCoinShortage({ message, rebind });
     try {
       const me = await window.wuwei.wuweiMe();
       if (me) {
         setWuwei(me);
-        setCoinShortage({ message, balance: me.coin.balance });
+        setCoinShortage({ message, balance: me.coin.balance, rebind });
       }
     } catch {
       /* 弹窗仍然保留充值入口 */
@@ -6969,6 +6982,15 @@ export function App() {
               <h2>{lang === "en" ? "Out of credits" : "无为币不足"}</h2>
               {/* 优先显示网关返回的具体估算(如「本次约需 8 无为币，当前余额 1」)，没有才回退到笼统文案 */}
               <p>{coinShortage.message?.trim() || (lang === "en" ? "Balance used up — pick a way to keep using Wuwei hosted models" : "余额已用尽 —— 选一种方式，继续使用无为托管模型")}</p>
+              {/* 消歧：明确「这次是无为托管在扣币」。底部栏可能显示的是全局选择(如订阅)，而正在跑的这个对话其实绑的是托管，
+                  两者不一致正是「我明明选了订阅怎么还扣无为币」的困惑来源，这里点破。 */}
+              {curPreset?.hosted && !curPreset?.anon && (
+                <p className="pay-bind-note" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+                  {lang === "en"
+                    ? `This chat is bound to ${pLabel(curPreset, lang)} (billed per token in credits) — not your subscription.`
+                    : `当前对话绑定的是「${pLabel(curPreset, lang)}」（按 token 扣无为币），不是你的订阅。`}
+                </p>
+              )}
             </div>
             <div className="pay-bal">
               <div className="pay-bal-l">{lang === "en" ? "Available balance" : "当前可用余额"}</div>
@@ -6978,6 +7000,37 @@ export function App() {
               </div>
             </div>
             <div className="pay-opts">
+              {coinShortage.rebind && (
+                <button
+                  className="pay-opt pay-opt-plan"
+                  onClick={async () => {
+                    const rb = coinShortage.rebind!;
+                    setCoinShortage(null);
+                    await applyBoundModel(rb.providerId, rb.model);
+                    push({
+                      type: "notice",
+                      text:
+                        lang === "en"
+                          ? `Switched this chat to ${rb.label} (direct, no credits used). Resend to continue.`
+                          : `已把当前对话改用${rb.label}（直连、不扣无为币）。重新发送即可继续。`,
+                    });
+                  }}
+                >
+                  <span className="pay-badge">{lang === "en" ? "No credits" : "不扣币"}</span>
+                  <span className="pay-oi">
+                    <PaySpark size={20} />
+                  </span>
+                  <span style={{ minWidth: 0 }}>
+                    <span className="pay-ot">{lang === "en" ? `Continue with ${coinShortage.rebind.label}` : `改用${coinShortage.rebind.label}继续`}</span>
+                    <span className="pay-os" style={{ display: "block" }}>
+                      {lang === "en" ? "Direct to your subscription — uses account quota, not credits" : "直连你的订阅账号 · 走订阅额度，不消耗无为币"}
+                    </span>
+                  </span>
+                  <span className="pay-arr">
+                    <PayArrow />
+                  </span>
+                </button>
+              )}
               {(() => {
                 // 按当前会员等级显示"下一级"：free/未登录→Pro，Pro→Plus，Plus→Max；Max 已顶配→不显升级卡
                 const cur = wuwei?.membership?.plan ?? null; // 服务端给的档位名 Pro/Plus/Max，free 时 null
