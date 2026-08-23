@@ -3089,6 +3089,9 @@ export function App() {
           break;
         case "evt:account":
           setAccount(payload);
+          // 每会话绑定模型:切会话后主进程按会话切了平台→同步底栏当前平台(否则平台/模型下拉停在旧的)。
+          // 值相同时 React 自动跳过，不会多余重渲染。
+          if (payload?.providerId) setCurProviderId(payload.providerId);
           break;
         case "evt:wuwei-me":
           setWuwei(payload); // 托管平台扣币后主进程推来的最新账号+余额

@@ -61,6 +61,7 @@ import {
   setGroupsOrder,
   setSessionDone,
   setSessionDiscuss,
+  setSessionModel,
   setSessionRunning,
   clearInterrupted,
   dismissResume,
@@ -2145,6 +2146,8 @@ async function refreshWuweiMe(): Promise<void> {
 
 async function startTurn(useId: string, text: string, images?: string[], sysOverride?: string) {
   turnSid = useId; // 供 ask_user 工具的事件带上会话 id
+  // 每会话绑定模型：记下这一轮实际用的模型/平台，切走再切回自动用回它(哪怕没手动改过模型)
+  try { const c = loadConfig(); setSessionModel(useId, c.model, loadSettings()?.providerId); } catch { /* ignore */ }
   text = secrets.redact(text).text; // 兜底：已入库密钥出现在消息里→占位符替换，永不出网到模型
   const agent = getAgent(useId);
   if (!agent) {
@@ -2479,6 +2482,14 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
 
 ipcMain.on("session:switch", (_e, id: string) => {
   currentId = id;
+  // 每会话绑定模型：该会话存过模型/平台且和当前不同 → 切回它(applySettings 会推 evt:ready 更新底栏)
+  try {
+    const meta = listSessions().find((x) => x.id === id);
+    const cur = loadSettings();
+    if (meta?.model && cur && (meta.model !== cur.model || (meta.providerId && meta.providerId !== cur.providerId))) {
+      applySettings({ ...cur, model: meta.model, ...(meta.providerId ? { providerId: meta.providerId } : {}) } as Settings);
+    }
+  } catch { /* 切模型失败不挡切会话 */ }
   const a = getAgent(id);
   // getDisplayMessages：带上还没并入历史的注入消息，否则切回正在跑的会话时「刚发的那条」会不见
   send("evt:session-loaded", { id, messages: a ? a.getDisplayMessages() : [] });
@@ -2733,6 +2744,11 @@ ipcMain.on("settings:set-secrets-prompt", (_e, text: string | null) => {
 ipcMain.on("settings:set", (_e, s: Settings) => {
   try {
     applySettings(s);
+    // 每会话绑定模型：把这次选的模型/平台记到当前会话，切走再切回自动用回它(新会话首轮后才有元信息)
+    if (currentId && (s?.model || s?.providerId)) {
+      const cfg = loadConfig();
+      setSessionModel(currentId, s?.model || cfg.model, s?.providerId ?? loadSettings()?.providerId);
+    }
   } catch (e: any) {
     send("evt:error", tt("切换后端失败：", "Failed to switch backend: ") + e.message);
   }
