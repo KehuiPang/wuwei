@@ -137,6 +137,7 @@ import {
   wuweiPayCreate,
   wuweiPayStatus,
   reportClientLogin,
+  reportClientEvent,
   type WuweiSession,
 } from "./wuwei-auth.js";
 import { saveWuweiSession, loadWuweiSession, clearWuweiSession } from "./wuwei-session.js";
@@ -2038,10 +2039,39 @@ if (!gotLock) {
     createWindow();
     createTray();
     setupUpdater(); // 自动更新：启动后延迟静默查一次
+    startClientTelemetry(); // 客户端埋点：首次安装报 install + 启动即报 heartbeat + 每 6h 补报（后台算 DAU/留存/安装量）
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
+}
+
+// —— 客户端匿名遥测（日活/安装）——
+// 隐私红线：只上报匿名设备指纹+版本+平台，绝不带任何个人数据。用于后台算 DAU/留存/安装量。
+// install：每台设备只报一次（userData 下打标记文件）。heartbeat：启动即报 + 每 6 小时补报一次
+// （长时间挂机的用户也算当日活跃），后台按 anon_id 去重跨天即得留存。
+let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+function startClientTelemetry(): void {
+  try {
+    const version = app.getVersion();
+    // 首次安装标记：userData/.installed 不存在 → 报一次 install 并落标记
+    const flag = join(app.getPath("userData"), ".installed");
+    if (!existsSync(flag)) {
+      void reportClientEvent("install", version);
+      try {
+        writeFileSync(flag, new Date().toISOString());
+      } catch {
+        /* 落标记失败：下次可能重报 install，可接受（后台可去重） */
+      }
+    }
+    // 启动即报一次心跳
+    void reportClientEvent("heartbeat", version);
+    // 每 6 小时补报，覆盖长时间挂机用户；unref 不阻止进程退出
+    heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version), 6 * 60 * 60 * 1000);
+    if (heartbeatTimer.unref) heartbeatTimer.unref();
+  } catch {
+    /* 遥测不能拖累启动 */
+  }
 }
 
 app.on("window-all-closed", () => {

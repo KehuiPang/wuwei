@@ -179,6 +179,22 @@ export async function reportClientLogin(version?: string): Promise<void> {
   }
 }
 
+/** 通用客户端埋点上报（heartbeat 日活 / install 安装）。
+ *  隐私红线同 reportClientLogin：只发匿名 anon_id(设备指纹)+版本+平台，绝不带 email/name/IP 明文。
+ *  纯 fire-and-forget：失败静默，绝不影响主流程。用于后台算 DAU/留存/安装量。 */
+export async function reportClientEvent(event: "heartbeat" | "install", version?: string): Promise<void> {
+  try {
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    await fetch(`${SITE}/api/client-event`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, anon_id: getDeviceId(), version: version || "", platform }),
+    });
+  } catch {
+    /* 上报失败静默：埋点不能拖累主流程 */
+  }
+}
+
 /** token 静默续期：走官网 /api/refresh。成功返回新会话，失败返回 null（需重新登录）。 */
 export async function wuweiRefresh(refreshToken: string): Promise<WuweiSession | null> {
   if (!refreshToken) return null;
