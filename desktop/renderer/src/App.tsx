@@ -6967,7 +6967,8 @@ export function App() {
             <div className="pay-top">
               <PayEnso />
               <h2>{lang === "en" ? "Out of credits" : "无为币不足"}</h2>
-              <p>{lang === "en" ? "Balance used up — pick a way to keep using Wuwei hosted models" : "余额已用尽 —— 选一种方式，继续使用无为托管模型"}</p>
+              {/* 优先显示网关返回的具体估算(如「本次约需 8 无为币，当前余额 1」)，没有才回退到笼统文案 */}
+              <p>{coinShortage.message?.trim() || (lang === "en" ? "Balance used up — pick a way to keep using Wuwei hosted models" : "余额已用尽 —— 选一种方式，继续使用无为托管模型")}</p>
             </div>
             <div className="pay-bal">
               <div className="pay-bal-l">{lang === "en" ? "Available balance" : "当前可用余额"}</div>
