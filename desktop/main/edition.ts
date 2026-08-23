@@ -42,6 +42,16 @@ export const DATA_DIR_NAME = IS_MINICC ? ".minicc" : IS_TEST ? ".wuwei-test" : "
 process.env.WUWEI_DATA_DIR_NAME = DATA_DIR_NAME;
 process.env.WUWEI_EDITION = EDITION;
 
+// ⚠️ 必须在 app.requestSingleInstanceLock() 之前 setName：
+// 单实例锁按 userData 目录(%APPDATA%\<name>)区分唯一性，而 userData 目录名由 app.getName() 决定。
+// 若 setName 拖到 whenReady 才做，test 版在拿锁那一刻 name 还是默认值、userData 仍指向正式版目录，
+// 就会和正式版撞锁、拿不到锁而自杀 → dev 模式下 test 与正式版无法并存。提前到这里即可各拿各的锁。
+try {
+  app.setName(APP_NAME);
+} catch {
+  /* ignore */
+}
+
 // 窗口标题/托盘提示等「显示用」名字：英文界面显示 Wuwei。测试版加 [测试] 后缀便于与正式版区分。
 // ⚠️ 只用于显示，绝不能拿去 app.setName()——那会改 userData 目录名，切个语言就把用户数据全丢了。
 export function appDisplayName(): string {
