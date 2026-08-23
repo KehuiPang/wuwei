@@ -6980,17 +6980,14 @@ export function App() {
             <div className="pay-top">
               <PayEnso />
               <h2>{lang === "en" ? "Out of credits" : "无为币不足"}</h2>
-              {/* 优先显示网关返回的具体估算(如「本次约需 8 无为币，当前余额 1」)，没有才回退到笼统文案 */}
-              <p>{coinShortage.message?.trim() || (lang === "en" ? "Balance used up — pick a way to keep using Wuwei hosted models" : "余额已用尽 —— 选一种方式，继续使用无为托管模型")}</p>
-              {/* 消歧：明确「这次是无为托管在扣币」。底部栏可能显示的是全局选择(如订阅)，而正在跑的这个对话其实绑的是托管，
-                  两者不一致正是「我明明选了订阅怎么还扣无为币」的困惑来源，这里点破。 */}
-              {curPreset?.hosted && !curPreset?.anon && (
-                <p className="pay-bind-note" style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                  {lang === "en"
-                    ? `This chat is bound to ${pLabel(curPreset, lang)} (billed per token in credits) — not your subscription.`
-                    : `当前对话绑定的是「${pLabel(curPreset, lang)}」（按 token 扣无为币），不是你的订阅。`}
-                </p>
-              )}
+              {/* 只一句、升级口径。余额在下方独立行、动作在下方卡片，都不重复；绝不透传网关原文(含「请前往充值…」那句啰嗦文案)。 */}
+              <p>
+                {curPreset?.hosted && !curPreset?.anon
+                  ? (lang === "en"
+                      ? `This chat runs on ${pLabel(curPreset, lang)} (pay-per-token). Upgrade to keep going.`
+                      : `当前对话走「${pLabel(curPreset, lang)}」按量计费，升级后可继续`)
+                  : (lang === "en" ? "Hosted quota used up — upgrade to keep going." : "无为托管额度已用完，升级后可继续")}
+              </p>
             </div>
             <div className="pay-bal">
               <div className="pay-bal-l">{lang === "en" ? "Available balance" : "当前可用余额"}</div>
