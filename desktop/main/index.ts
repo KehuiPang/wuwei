@@ -2490,17 +2490,12 @@ ipcMain.on("session:switch", (_e, id: string) => {
     }
   } catch { /* ignore */ }
   currentId = id;
-  // 每会话绑定模型：该会话存过模型/平台且和当前不同 → 切回它(applySettings 会推 evt:ready 更新底栏)
-  try {
-    const meta = listSessions().find((x) => x.id === id);
-    const cur = loadSettings();
-    if (meta?.model && cur && (meta.model !== cur.model || (meta.providerId && meta.providerId !== cur.providerId))) {
-      applySettings({ ...cur, model: meta.model, ...(meta.providerId ? { providerId: meta.providerId } : {}) } as Settings);
-    }
-  } catch { /* 切模型失败不挡切会话 */ }
   const a = getAgent(id);
+  // 每会话绑定模型：把该会话存的 {model, providerId} 带给渲染端，由它用 PRESETS 完整切平台
+  // (含 kind/apiKey/oauthToken/baseUrl——CredSlot 不存 kind，主进程切不干净会 invalid_token)
+  const bmeta = listSessions().find((x) => x.id === id);
   // getDisplayMessages：带上还没并入历史的注入消息，否则切回正在跑的会话时「刚发的那条」会不见
-  send("evt:session-loaded", { id, messages: a ? a.getDisplayMessages() : [] });
+  send("evt:session-loaded", { id, messages: a ? a.getDisplayMessages() : [], boundModel: bmeta?.model, boundProviderId: bmeta?.providerId });
   sendUsageFor(id);
   void emitAccount();
 });

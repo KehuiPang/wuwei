@@ -2968,6 +2968,40 @@ export function App() {
     }
   }
 
+  // 每会话绑定模型：切到某会话时，把它记住的平台+模型完整应用(和 quickProvider 同套逻辑，
+  // 从 PRESETS 取 kind/baseUrl、从 creds 取 key/token，避免只换 providerId 导致 invalid_token)。
+  async function applyBoundModel(providerId?: string, model?: string) {
+    if (!providerId && !model) return;
+    const r = await window.wuwei.getSettings();
+    const cur = r?.settings || {};
+    // 已经就是它 → 不重复切(避免 setSettings 抖动)
+    if ((!providerId || cur.providerId === providerId) && (!model || cur.model === model)) return;
+    if (providerId && cur.providerId !== providerId) {
+      const p = (PRESETS as any[]).find((x) => x.id === providerId);
+      if (p) {
+        const slot = (cur.creds || {})[providerId] || {};
+        window.wuwei.setSettings({
+          ...cur,
+          kind: p.kind,
+          providerId,
+          apiKey: slot.apiKey,
+          oauthToken: slot.oauthToken,
+          baseUrl: p.fixedBaseUrl ? p.baseUrl : slot.baseUrl || p.baseUrl,
+          model: model || slot.model || p.models[0] || cur.model,
+        });
+        setCurProviderId(providerId);
+        return;
+      }
+      // 平台不在预设(如自定义中转站)：连槽位一起带出，至少把 providerId/model/凭证换过去
+      const slot = (cur.creds || {})[providerId] || {};
+      window.wuwei.setSettings({ ...cur, providerId, apiKey: slot.apiKey, oauthToken: slot.oauthToken, baseUrl: slot.baseUrl, model: model || slot.model || cur.model });
+      setCurProviderId(providerId);
+      return;
+    }
+    // 同平台只换模型
+    if (model && cur.model !== model) window.wuwei.setSettings({ ...cur, model });
+  }
+
   // 快捷切换供应商：带出该平台已存的 key/baseUrl，默认用该平台第一个模型
   async function quickProvider(p: (typeof PRESETS)[number]) {
     // 访客门禁：未登录只能选「免费体验(anon)」，切到别的平台一律引导登录
@@ -3117,6 +3151,8 @@ export function App() {
           forceBottomUntilRef.current = jumping ? 0 : Date.now() + 700; // 跳转时不吸底(=0)，交给跳转 effect
           setAwayFromBottom(false);
           setItems(messagesToItems(payload.messages));
+          // 每会话绑定模型：切到该会话→用它上次绑定的平台/模型(渲染端切，带全 kind/鉴权，避免 invalid_token)
+          if (payload.boundProviderId || payload.boundModel) void applyBoundModel(payload.boundProviderId, payload.boundModel);
           break;
         }
         case "evt:assistant-delta":
