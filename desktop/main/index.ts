@@ -1016,7 +1016,12 @@ function applySettings(sIn: Settings) {
   ctxWindow = cfg.contextWindow;
   subFlag = isSub(s.providerId);
   sysPrompt = buildSysPrompt(cwd, modelLabel, s.providerId); // 底层模型/自定义提示词变了都同步
-  for (const a of agents.values()) {
+  for (const [sid, a] of agents) {
+    // 正在跑的会话绝不换 provider/系统提示：否则在别的会话切模型(含每会话绑定自动切)会把
+    // 这个正在跑的会话(如订阅版自主推进中)从它自己的模型换掉→下一步用了别的模型→撞余额/报错中断。
+    // 它跑完后下次轮到它(startTurn 前会按会话绑定重建)自然会用回自己的模型。
+    // 智能继续中的会话(contSessions)两步之间会短暂离开 runs，也一并跳过，避免那个空隙被切模型中断
+    if (runs.has(sid) || contSessions.has(sid)) continue;
     a.setProvider(provider);
     a.setSystem(sysPrompt); // 热更每个会话的系统提示，问"你是什么模型"能答对
   }
