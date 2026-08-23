@@ -1602,7 +1602,7 @@ async function suggestNextAction(id: string) {
   const lastReplyTail = msgTextTail(last, 600); // 助手最后回复的结尾——预测下一步只认它
   const g = sessionGoals[id];
   const goalBlock = g && g.active ? g.text.slice(0, 600) : ""; // 智能继续：会话总目标
-  const sr = stopRules.trim(); // 智能继续：自定义红线
+  const sr = (isUneditedStopRules(stopRules) ? defaultStopRules() : stopRules).trim(); // 智能继续：红线(未改过按当前语言取默认)
   try {
     const res = await provider.complete(
       tt(
@@ -3862,8 +3862,9 @@ function saveGoals() {
 // 用户自己写的「必须停下来问我」的规则(设置→运行模式)，优先级高于内置判断
 let stopRules = "";
 const stopRulesFile = () => join(app.getPath("userData"), "stop-rules.txt");
-// 首次使用给一份常见红线，省得用户从零写；之后以文件为准(不覆盖他改过的)
-const DEFAULT_STOP_RULES = [
+// 首次使用给一份常见红线，省得用户从零写；之后以文件为准(不覆盖他改过的)。
+// 中英各一份；「未改过的默认值」(空 / 恰好等于任一语言默认)跟随界面语言自动切换，改过的一律保留原样。
+const DEFAULT_STOP_RULES_ZH = [
   "删除或清空任何数据、文件、数据库表、代码分支",
   "部署上线、发布到生产/正式环境",
   "修改线上配置，或往生产数据库写数据",
@@ -3875,15 +3876,33 @@ const DEFAULT_STOP_RULES = [
   "执行 rm -rf、drop table、truncate 这类不可逆命令",
   "把我的数据或代码上传、公开、分享到外部",
 ].join("\n");
+const DEFAULT_STOP_RULES_EN = [
+  "Delete or wipe any data, files, database tables, or code branches",
+  "Deploy or release to production",
+  "Change production config, or write to a production database",
+  "Restart, stop, or scale any live service or container",
+  "Spend money: pay, place orders, buy resources, or enable paid services",
+  "Email, message, or text anyone on my behalf, or file a ticket",
+  "Change permissions, keys, accounts, or security settings",
+  "git force-push, revert, or reset already-pushed commits",
+  "Run irreversible commands like rm -rf, drop table, or truncate",
+  "Upload, publish, or share my data or code externally",
+].join("\n");
+const defaultStopRules = () => (process.env.WUWEI_LANG === "en" ? DEFAULT_STOP_RULES_EN : DEFAULT_STOP_RULES_ZH);
+// 是否「未改过的默认值」：空 or 恰好等于任一语言默认 → 视为没自定义，读取时按当前语言给默认。
+const isUneditedStopRules = (s: string) => {
+  const t = (s || "").trim();
+  return t === "" || t === DEFAULT_STOP_RULES_ZH || t === DEFAULT_STOP_RULES_EN;
+};
 function loadStopRules() {
   try {
     stopRules = readFileSync(stopRulesFile(), "utf-8");
   } catch {
-    stopRules = DEFAULT_STOP_RULES;
-    try { writeFileSync(stopRulesFile(), stopRules, "utf-8"); } catch { /* ignore */ }
+    stopRules = ""; // 无文件：留空、不落盘，读取时按当前语言给默认(保持随语言动态，直到用户真正改过)
   }
 }
-ipcMain.handle("chat:stopRulesGet", () => stopRules);
+// 未改过 → 返回当前语言的默认；改过 → 原样返回。这样存量的中文默认在英文界面下会自动显示英文版。
+ipcMain.handle("chat:stopRulesGet", () => (isUneditedStopRules(stopRules) ? defaultStopRules() : stopRules));
 ipcMain.handle("chat:stopRulesSet", (_e, t: string) => {
   stopRules = String(t || "").slice(0, 4000);
   try { writeFileSync(stopRulesFile(), stopRules, "utf-8"); } catch { /* ignore */ }
