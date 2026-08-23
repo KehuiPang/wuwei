@@ -3696,7 +3696,9 @@ export function App() {
     // 否则付费会员余额为0会被客户端提前误拦、根本发不出请求。
     const wq = wuwei?.membership?.weeklyQuota;
     const hasWeeklyQuota = !!wq?.active && (wq.remainingPct ?? 0) > 0;
-    if (curPreset?.hosted && wuwei && wuwei.coin.balance <= 0 && !hasWeeklyQuota) {
+    // 免登录免费体验(anon)走网关匿名分支、不扣无为币 → 绝不做余额拦截(否则登录用户选免费模型、
+    // 余额为0时会被误拦弹"无为币不足")。只对真正按量扣币的托管平台做前置拦截。
+    if (curPreset?.hosted && !curPreset?.anon && wuwei && wuwei.coin.balance <= 0 && !hasWeeklyQuota) {
       void refreshWuweiForShortage(lang === "en" ? "Out of credits: top up to keep using Wuwei hosted models." : "无为币余额不足：请充值后再使用无为托管模型。");
       return;
     }
