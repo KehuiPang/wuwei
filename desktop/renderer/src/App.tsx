@@ -105,6 +105,38 @@ let openImageLightbox: ((src: string) => void) | null = null;
 // 图片右键菜单：模块级 opener（同上，消息里的图在顶层组件 ItemView 里）
 let openImageMenu: ((x: number, y: number, src: string) => void) | null = null;
 
+// 读图片文件为 dataURL，并把过大的图缩到长边 ≤1568px。
+// 为什么：Claude 等 API 对图片单边有硬上限，超长截图(如很高的网页截图)会被直接拒 400，
+// 界面只笼统报"请求有误(模型名或参数不对)"。而服务端本来就会把长边>1568 的图缩到 1568 再喂模型，
+// 所以客户端先缩到 1568：既不再报错、又正是模型真正看到的分辨率，还省上传体积。
+const MAX_IMG_EDGE = 1568;
+function readImageDownscaled(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onerror = () => reject(r.error);
+    r.onload = () => {
+      const dataURL = String(r.result || "");
+      const img = new Image();
+      img.onload = () => {
+        const w = img.naturalWidth, h = img.naturalHeight;
+        const long = Math.max(w, h);
+        if (!long || long <= MAX_IMG_EDGE) { resolve(dataURL); return; } // 不超限：原样用
+        const scale = MAX_IMG_EDGE / long;
+        const cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = cw; canvas.height = ch;
+          canvas.getContext("2d")!.drawImage(img, 0, 0, cw, ch);
+          resolve(canvas.toDataURL("image/png")); // 截图多为文字，png 比 jpeg 锐利
+        } catch { resolve(dataURL); } // 缩放失败兜底用原图
+      };
+      img.onerror = () => resolve(dataURL);
+      img.src = dataURL;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
 // 把图片(dataURL/url)复制到系统剪贴板。统一过 canvas 转 png，兼容 jpeg(剪贴板只保证 png)。
 async function copyImageToClipboard(src: string): Promise<boolean> {
   try {
@@ -3485,13 +3517,11 @@ export function App() {
     localStorage.setItem("wuwei-sidebar-collapsed", v ? "1" : "0");
   }
 
-  // 读取图片文件为 dataURL
+  // 读取图片文件为 dataURL(过大自动缩到长边1568，避免超长截图被 API 拒)
   function addFiles(files: FileList | File[]) {
     for (const f of Array.from(files)) {
       if (!f.type.startsWith("image/")) continue;
-      const reader = new FileReader();
-      reader.onload = () => setPendingImages((p) => [...p, reader.result as string]);
-      reader.readAsDataURL(f);
+      readImageDownscaled(f).then((url) => setPendingImages((p) => [...p, url])).catch(() => {});
     }
   }
 
@@ -7813,9 +7843,7 @@ function AskModal({
   const addImgFiles = (files: FileList | File[]) => {
     for (const f of Array.from(files)) {
       if (!f.type.startsWith("image/")) continue;
-      const reader = new FileReader();
-      reader.onload = () => setImgs((m) => ({ ...m, [step]: [...(m[step] || []), reader.result as string] }));
-      reader.readAsDataURL(f);
+      readImageDownscaled(f).then((url) => setImgs((m) => ({ ...m, [step]: [...(m[step] || []), url] }))).catch(() => {});
     }
   };
   const buildList = (s: Record<number, string[]>) =>
