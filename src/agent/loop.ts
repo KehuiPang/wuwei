@@ -706,14 +706,19 @@ export class Agent {
     hooks.onCompact?.(before, this.messages.length);
   }
 
-  // 找安全切点：从"倒数第 keepRecent 条"往前找最近的"真正用户输入"边界，
-  // 保证保留 >= keepRecent 条最近消息(不会像以前往后找越留越少)，且不拆散 tool_use/tool_result。
+  // 找安全切点：从"倒数第 keepRecent 条"往前找最近的安全边界。
+  // ⚠ 旧版只认「纯文本 user 消息」，但自主推进/工具密集的会话里这种消息极少(常只有开头那条)，
+  //    导致每次都切在第 1 条→只把开头一条摘要重摘一遍、recent 仍是几乎全部→条数不变(314→314)、
+  //    上下文没变小→lastInput 仍超阈值→每轮反复空转触发。改为：只要 recent 第一条不是「孤儿 tool_result」
+  //    就是安全切点(它的 tool_use 会被 older 的摘要顶替→悬空报错，故必须避开)。assistant 消息、纯文本 user 都安全。
   private findCutIndex(): number {
     const target = Math.min(this.messages.length - this.keepRecent, this.messages.length - 1);
     for (let i = target; i >= 1; i--) {
       const m = this.messages[i];
-      if (m.role === "user" && m.content.every((b) => b.type === "text")) return i;
+      // recent 的第一条若含 tool_result → 其配对的 tool_use 在 older 里、会被摘要顶替 → 悬空，跳过
+      const startsWithToolResult = m.content.some((b) => b.type === "tool_result");
+      if (!startsWithToolResult) return i;
     }
-    return -1; // 前面没有干净的用户边界(极少)，放弃本次压缩
+    return -1; // 全是工具结果边界(极罕见)：放弃本次压缩，绝不拆散工具对
   }
 }
