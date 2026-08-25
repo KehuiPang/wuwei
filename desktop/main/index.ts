@@ -1007,7 +1007,8 @@ function initProvider() {
 function applySettings(sIn: Settings) {
   // 合并到磁盘现有配置:调用方只需传自己要改的字段,其余(会话提醒/保留条数/输出方式/主题/app 等
   // 各走独立 IPC 存的设置)一律保留、不被整体替换覆盖。显式传 undefined 仍可清字段(切平台清 key 用)。
-  const s: Settings = { ...(loadSettings() || {}), ...sIn };
+  const prev: Partial<Settings> = loadSettings() || {};
+  const s: Settings = { ...prev, ...sIn };
   log("applySettings", "平台=", s.providerId, "模型=", s.model, "有key=", !!s.apiKey);
   saveSettings(s);
   applyEnvFromSettings(s);
@@ -1019,12 +1020,25 @@ function applySettings(sIn: Settings) {
   ctxWindow = cfg.contextWindow;
   subFlag = isSub(s.providerId);
   sysPrompt = buildSysPrompt(cwd, modelLabel, s.providerId); // 底层模型/自定义提示词变了都同步
+  // 判定本次是否只是"同平台同模型的凭证刷新"(token/key 变了、模型没变)。这种情况下连正在跑的会话也
+  // 必须换上带新 token 的 provider——否则 token 过期被清空后重新授权,那个正在重试的会话永远拿不到新
+  // token,会一直报"未授权"(且"总结交接"也在该会话里跑→同样失败)。真正切模型/平台时不在此列。
+  const sameBackend =
+    (prev.providerId || "") === (s.providerId || "") && (prev.model || "") === (s.model || "");
+  const credChanged =
+    (prev.oauthToken || "") !== (s.oauthToken || "") || (prev.apiKey || "") !== (s.apiKey || "");
+  const credRefreshOnly = sameBackend && credChanged;
   for (const [sid, a] of agents) {
     // 正在跑的会话绝不换 provider/系统提示：否则在别的会话切模型(含每会话绑定自动切)会把
     // 这个正在跑的会话(如订阅版自主推进中)从它自己的模型换掉→下一步用了别的模型→撞余额/报错中断。
     // 它跑完后下次轮到它(startTurn 前会按会话绑定重建)自然会用回自己的模型。
     // 智能继续中的会话(contSessions)两步之间会短暂离开 runs，也一并跳过，避免那个空隙被切模型中断
-    if (runs.has(sid) || contSessions.has(sid)) continue;
+    if (runs.has(sid) || contSessions.has(sid)) {
+      // 例外：纯凭证刷新(同平台同模型、只是 token/key 变)时，也给正在跑的会话热更带新 token 的
+      // provider(只换 token、不动模型/系统提示)，修复"token 过期重新授权后正在重试的会话一直报未授权"。
+      if (credRefreshOnly) a.setProvider(provider);
+      continue;
+    }
     a.setProvider(provider);
     a.setSystem(sysPrompt); // 热更每个会话的系统提示，问"你是什么模型"能答对
   }
@@ -2030,11 +2044,23 @@ if (!gotLock) {
   });
 }
 
-// —— 客户端匿名遥测（日活/安装）——
-// 隐私红线：只上报匿名设备指纹+版本+平台，绝不带任何个人数据。用于后台算 DAU/留存/安装量。
-// install：每台设备只报一次（userData 下打标记文件）。heartbeat：启动即报 + 每 6 小时补报一次
-// （长时间挂机的用户也算当日活跃），后台按 anon_id 去重跨天即得留存。
+// —— 客户端匿名遥测（日活/安装/使用时长）——
+// 隐私红线：只上报匿名设备指纹+版本+平台+active 标志，绝不带任何个人数据。用于后台算 DAU/留存/安装量/时长。
+// install：每台设备只报一次（userData 下打标记文件）。
+// heartbeat：启动即报 + 每 5 分钟补报一次，每次带 active（窗口是否可见且聚焦）：
+//   - 后台按「当天心跳首末时间差」算「开机时长」（进程活着就在报）；
+//   - 按「active=true 的心跳条数 × 5 分钟」算「活跃时长」（真正在用，最小化/挂后台不计）。
+// 5 分钟频率：一台机器一天最多 288 条，数据量可控，时长误差 ≤±5 分钟。
+const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+// 本次心跳是否「活跃」：主窗口存在、可见、未最小化、且当前聚焦。取不到窗口时保守按 false（只算开机不算活跃）。
+function isClientActive(): boolean {
+  try {
+    return !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.isFocused();
+  } catch {
+    return false;
+  }
+}
 function startClientTelemetry(): void {
   try {
     // 测试版给版本号打 -test 后缀，后台埋点一眼可辨、不污染正式版留存/安装统计。
@@ -2049,10 +2075,10 @@ function startClientTelemetry(): void {
         /* 落标记失败：下次可能重报 install，可接受（后台可去重） */
       }
     }
-    // 启动即报一次心跳
-    void reportClientEvent("heartbeat", version);
-    // 每 6 小时补报，覆盖长时间挂机用户；unref 不阻止进程退出
-    heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version), 6 * 60 * 60 * 1000);
+    // 启动即报一次心跳（带当前活跃态）
+    void reportClientEvent("heartbeat", version, isClientActive());
+    // 每 5 分钟补报，覆盖长时间挂机用户 + 累积活跃时长；unref 不阻止进程退出
+    heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version, isClientActive()), HEARTBEAT_INTERVAL_MS);
     if (heartbeatTimer.unref) heartbeatTimer.unref();
   } catch {
     /* 遥测不能拖累启动 */

@@ -2767,7 +2767,9 @@ export function App() {
   // 当前平台预设(用于右下角模型快切列出该平台模型)；设置面板关闭后刷新
   useEffect(() => {
     window.wuwei.getSettings().then((r) => {
-      setCurProviderId(r?.settings?.providerId || "");
+      // 首启兜底：从未选过平台(providerId 为空)时默认落到「免费体验(wuwei-free, anon 免登录)」，
+      // 让全新未登录用户下载后第一条消息就能直接聊、不撞登录墙(头号转化真凶)。已登录/已选过平台者 providerId 非空不受影响。
+      setCurProviderId(r?.settings?.providerId || "wuwei-free");
       setStations(r?.settings?.customStations || []);
       setProviderOrder(r?.settings?.providerOrder || []);
       setHiddenProviders(r?.settings?.hiddenProviders || []);
@@ -3725,7 +3727,7 @@ export function App() {
   // override：不经过输入框直接发一句（如中断后点「继续」）。缺省仍用输入框内容。
   // 防御 typeof：万一哪个 onClick 直接写成 {submit}，传进来的是 MouseEvent，
   // 对它调 .trim() 会当场抛异常把整个界面炸成白屏——这里一律只认字符串。
-  function submit(override?: string) {
+  function submit(override?: string, _afterAnonSwitch?: boolean) {
     const text = (typeof override === "string" ? override : input).trim();
     if (!text && pendingImages.length === 0) return;
     if (text === "/reset") {
@@ -3736,7 +3738,18 @@ export function App() {
     // 未登录发任何消息 → 先弹居中的登录激励卡(免费顶级模型 + 注册得 100 无为币)，
     // 用户点「登录」再切到登录表单，比一上来就甩登录框干净、转化更好。
     // 例外：选中的是 anon(免登录免费体验)平台 → 直接放行，让未登录用户零摩擦试用。
-    if (!wuwei && !curPreset?.anon) {
+    // 双保险：未登录且当前非 anon 平台时，若存在 anon 免费体验平台，自动切过去(quickProvider 写 settings)
+    // 并提示用户再发一次，而不是弹登录墙。仅当确实无任何 anon 平台可用才引导登录。
+    if (!wuwei && !curPreset?.anon && !_afterAnonSwitch) {
+      const anonP = providerList.find((p) => p.anon);
+      if (anonP) {
+        // 切到免费体验平台(写 settings + 更新 curProviderId)，待 state 生效后自动重发本次消息，
+        // 用户无感知、零摩擦。_afterAnonSwitch 防止重发再次进入本分支形成循环。
+        setInput(text);
+        void quickProvider(anonP as (typeof PRESETS)[number]);
+        setTimeout(() => submit(text, true), 80);
+        return;
+      }
       setShowLoginIntro(true);
       return;
     }
