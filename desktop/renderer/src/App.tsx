@@ -4706,6 +4706,11 @@ export function App() {
                   {wuweiBusy ? (lang === "en" ? "Signing in…" : "登录中…") : wuwei ? wuwei.user.name || wuwei.user.email || (lang === "en" ? "Wuwei user" : "无为用户") : t("acct.guest")}
                 </div>
                 <span className="acct-caret">⋯</span>
+                {/* 未读消息红点：菜单收起时也常驻可见，否则用户根本不知道有站内消息（回访/奖励/活动通知）。
+                    菜单展开后消息中心项自带数字红点，这里就不重复显示。 */}
+                {msgUnread > 0 && !showAcctMenu && (
+                  <span className="acct-unread">{msgUnread > 99 ? "99+" : msgUnread}</span>
+                )}
               </button>
               {showAcctMenu && (
                 <>

@@ -262,6 +262,7 @@ body {
 }
 /* 账号按钮：头像+名字，点开才有菜单 */
 .acct-btn {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -272,6 +273,25 @@ body {
   padding: 6px 8px;
   border-radius: 10px;
   text-align: left;
+}
+/* 未读消息红点：叠在左下角账号入口头像右上角，菜单收起时也能看到，提醒用户有站内消息。 */
+.acct-unread {
+  position: absolute;
+  top: 3px;
+  left: 26px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #E5484D;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  border: 2px solid var(--bg);
+  pointer-events: none;
 }
 .acct-btn:hover {
   background: var(--bg-raised);
