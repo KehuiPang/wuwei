@@ -3509,6 +3509,9 @@ function setupUpdater(): void {
   autoUpdater.on("error", (e) => log("updater", "更新出错", String(e?.message || e)));
   // 启动后延迟自动查一次（静默；有新版即等待下载完成后主动推「就绪」，不依赖原生 update-downloaded 事件）
   setTimeout(() => { void checkAndPrepareUpdate(); }, 8000);
+  // 之后每 5min 轮询一次更新源：发版后老用户最迟 5 分钟就能收到「新版就绪」提示，不用等重启。
+  // checkAndPrepareUpdate 内部已吞错(离线/超时静默跳过)，轮询无副作用；发现新版会自动后台下载并推「升级重启」。
+  setInterval(() => { void checkAndPrepareUpdate(); }, 5 * 60 * 1000);
 }
 
 // 检查更新 + 等待下载完成（已缓存则立即完成）后主动推「就绪」。返回 {available, downloaded, version, notes}。

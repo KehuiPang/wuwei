@@ -36,6 +36,7 @@ export interface Config {
 // 各模型上下文窗口(按 model id 推断；不确定的取保守 128k，避免超限报错)
 function contextWindowFor(model: string): number {
   const m = model.toLowerCase();
+  if (/ox-alpha/.test(m)) return 1_000_000; // Ox Alpha(牛来) 旗舰 1M 上下文(不命中会掉进兜底 128k，提前触发无谓压缩)
   if (/claude-(opus|sonnet|fable|mythos)/.test(m)) return 1_000_000;
   if (/claude-haiku/.test(m)) return 200_000;
   if (/deepseek-v4/.test(m)) return 1_000_000; // V4 Pro/Flash 均 1M
