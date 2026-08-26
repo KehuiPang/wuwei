@@ -168,12 +168,14 @@ export function wuweiLogin(forceSwitch = false): Promise<WuweiSession | null> {
 /** 上报客户端登录事件（隐私红线：只发匿名 anon_id=设备指纹 + 版本 + 平台，绝不带 email/name/IP 明文）。
  *  写官网 /api/client-event(event=login)，供后台「客户端登录明细/版本分布/平台分布」看板统计。
  *  纯 fire-and-forget：失败静默，绝不影响登录主流程。version 由主进程传入(app.getVersion())。 */
-export async function reportClientLogin(version?: string): Promise<void> {
+export async function reportClientLogin(version?: string, accessToken?: string | null): Promise<void> {
   try {
     const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     await fetch(`${SITE}/api/client-event`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ event: "login", anon_id: getDeviceId(), version: version || "", platform }),
     });
   } catch {
@@ -184,12 +186,14 @@ export async function reportClientLogin(version?: string): Promise<void> {
 /** 通用客户端埋点上报（heartbeat 日活 / install 安装）。
  *  隐私红线同 reportClientLogin：只发匿名 anon_id(设备指纹)+版本+平台，绝不带 email/name/IP 明文。
  *  纯 fire-and-forget：失败静默，绝不影响主流程。用于后台算 DAU/留存/安装量。 */
-export async function reportClientEvent(event: "heartbeat" | "install", version?: string, active?: boolean): Promise<void> {
+export async function reportClientEvent(event: "heartbeat" | "install", version?: string, active?: boolean, accessToken?: string | null): Promise<void> {
   try {
     const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
     await fetch(`${SITE}/api/client-event`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ event, anon_id: getDeviceId(), version: version || "", platform, active: active === true }),
     });
   } catch {

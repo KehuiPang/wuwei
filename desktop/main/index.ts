@@ -2068,7 +2068,7 @@ function startClientTelemetry(): void {
     // 首次安装标记：userData/.installed 不存在 → 报一次 install 并落标记
     const flag = join(app.getPath("userData"), ".installed");
     if (!existsSync(flag)) {
-      void reportClientEvent("install", version);
+      void reportClientEvent("install", version, false, loadWuweiSession()?.accessToken ?? null);
       try {
         writeFileSync(flag, new Date().toISOString());
       } catch {
@@ -2076,9 +2076,9 @@ function startClientTelemetry(): void {
       }
     }
     // 启动即报一次心跳（带当前活跃态）
-    void reportClientEvent("heartbeat", version, isClientActive());
+    void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null);
     // 每 5 分钟补报，覆盖长时间挂机用户 + 累积活跃时长；unref 不阻止进程退出
-    heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version, isClientActive()), HEARTBEAT_INTERVAL_MS);
+    heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null), HEARTBEAT_INTERVAL_MS);
     if (heartbeatTimer.unref) heartbeatTimer.unref();
   } catch {
     /* 遥测不能拖累启动 */
@@ -2143,7 +2143,7 @@ let loginReportedThisProc = false;
 function reportLoginOnce(): void {
   if (loginReportedThisProc) return;
   loginReportedThisProc = true;
-  void reportClientLogin(app.getVersion());
+  void reportClientLogin(app.getVersion(), loadWuweiSession()?.accessToken ?? null);
 }
 // 托管平台每轮开跑前：把网关的 apiKey 注入并重建 provider。
 //  - 已登录：apiKey = 新鲜的无为 access_token(快过期先续期) → 按 token 扣无为币。
