@@ -1697,10 +1697,11 @@ function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onCl
               padding: "3px 11px",
               borderRadius: 20,
               marginBottom: 16,
+              whiteSpace: "nowrap",
             }}
           >
             <CoinIcon size={12} />
-            {zh ? "新用户送 100 无为币" : "New users get 100 credits"}
+            {zh ? "新用户送 100 无为币" : "100 free credits"}
           </div>
           <button
             onClick={onLogin}
@@ -2532,6 +2533,12 @@ export function App() {
   const [loginResume, setLoginResume] = useState(false); // 登录成功后是否续发刚才拦下的消息
   const [lang, setLangState] = useState<Lang>(getLang()); // 界面语言
   const t = makeT(lang);
+  // 供空依赖 onEvent 事件 handler 取「最新」语言/翻译函数：闭包会冻结挂载时的 lang/t，
+  // 直接用会导致切换界面语言后、事件生成的提示/报错仍是挂载时旧语言(如中文版仍显示英文报错)。
+  const langRef = useRef(lang);
+  langRef.current = lang;
+  const tRef = useRef(t);
+  tRef.current = t;
   function changeLang(l: Lang) {
     persistLang(l);
     setLangState(l);
@@ -3121,6 +3128,10 @@ export function App() {
 
   useEffect(() => {
     const off = window.wuwei.onEvent((ch, payload: any) => {
+      // ⚠ 本 onEvent 是空依赖注册(见本 effect 末尾 }, [])，闭包冻结挂载时的 lang/t。用 ref 取最新语言/翻译，
+      // 否则切换界面语言后，本 handler 里所有 lang===/friendlyError(…,t) 生成的提示与报错仍是挂载时旧语言。
+      const lang = langRef.current;
+      const t = tRef.current;
       // 结构性事件(工具/完成/切换…)前先把累积的流式文本落定，保证顺序不乱
       if (ch !== "evt:assistant-delta" && pendingDeltaRef.current) flushDelta(true); // 段落边界整段吐
       switch (ch) {
@@ -5026,10 +5037,11 @@ export function App() {
                             padding: "3px 11px",
                             borderRadius: 20,
                             marginBottom: 16,
+                            whiteSpace: "nowrap",
                           }}
                         >
                           <CoinIcon size={12} />
-                          {lang === "zh" ? "新用户送 100 无为币" : "New users get 100 credits"}
+                          {lang === "zh" ? "新用户送 100 无为币" : "100 free credits"}
                         </div>
                         <button
                           onClick={() => {

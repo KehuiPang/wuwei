@@ -126,6 +126,7 @@ export class Agent {
   };
   private compactThreshold: number;
   private keepRecent: number;
+  private lastCompactedLen = 0; // 上次压缩后剩下的消息条数;用于反空转:增长不足前不再压
   private pendingInject: { text: string; images: string[] }[] = []; // 运行中注入的新需求，循环边界取用
   private round: RoundUsage = { input: 0, output: 0, cacheHit: 0, cacheMiss: 0, steps: 0, lastInput: 0 }; // 本轮自足用量
   private softStop = false; // 温和停止:不切断当前输出，让本轮自然吐完并干净落历史后，在下个边界停
@@ -588,6 +589,10 @@ export class Agent {
     if (this.compactThreshold <= 0) return;
     if (this.usage.lastInput < this.compactThreshold) return;
     if (this.messages.length <= this.keepRecent + 1) return;
+    // 反空转:上次压缩后消息没增长够 keepRecent 条,说明能摘掉的旧消息极少(退化成"15→13"这类),
+    // 压了也几乎不缩上下文、却每次都要花一次昂贵的摘要请求。等积累够新内容再压。
+    // (保留的最近几条本身超阈值——如含大图/大输出——时,就是靠这个避免每个请求都空压一次。)
+    if (this.messages.length < this.lastCompactedLen + this.keepRecent) return;
 
     const cut = this.findCutIndex();
     if (cut <= 0) return; // 找不到安全切点则不压
@@ -703,6 +708,7 @@ export class Agent {
     ];
     // 压缩后当前上下文变小，重置 lastInput 让下轮重新度量
     this.usage.lastInput = 0;
+    this.lastCompactedLen = this.messages.length; // 记下压缩后长度,反空转水位以此为基准
     hooks.onCompact?.(before, this.messages.length);
   }
 
