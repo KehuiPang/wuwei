@@ -9567,7 +9567,7 @@ function mergeCatalogIntoPresets(
       // 后台配了显示名且与 id 不同 → 记下，下拉里优先显示 label(如 gpt-5.6→"GPT-5.6 Sol")
       if (labelMap && m.label && m.label !== m.id) labelMap.set(m.id, m.label);
       // 英文显示名：后台 ai_model.label_en，英文界面优先显示（缺省回退中文 label）
-      if (labelEnMap && m.labelEn) labelEnMap.set(m.id, m.labelEn);
+      if (labelEnMap) { const enLabel = m.labelEn || m.label_en; if (enLabel) labelEnMap.set(m.id, enLabel); }
     }
     const models = c.models.map((m) => m.id);
     const local = byId.get(c.id);

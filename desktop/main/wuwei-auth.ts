@@ -45,6 +45,7 @@ export interface CatalogModelDto {
   id: string;
   label: string;
   labelEn?: string | null;
+  label_en?: string | null; // 兼容旧/直出 snake_case catalog 字段
   free: boolean;
   badge?: string | null; // 角标（如「快」），下拉里显示，提醒用户
 }
