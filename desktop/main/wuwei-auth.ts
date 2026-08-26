@@ -44,6 +44,7 @@ export interface WuweiMe {
 export interface CatalogModelDto {
   id: string;
   label: string;
+  labelEn?: string | null;
   free: boolean;
   badge?: string | null; // 角标（如「快」），下拉里显示，提醒用户
 }

@@ -2802,8 +2802,12 @@ export function App() {
   // 后台新增的平台则整条按 catalog 构造。免费模型 id 收集给下拉打「免费」标。catalog=null 时原样返回。
   const freeModelIds = new Set<string>();
   const modelBadges = new Map<string, string>(); // 后台配的模型角标(如「快」)，下拉里显示
+  // 后台角标中英对照：DB 里混存中文词(限免/快/更强/深度思考/识图)与英文码(new/hot/top)，英文界面统一映射成英文
+  const BADGE_EN: Record<string, string> = { "限免": "Free", "免费": "Free", "快": "Fast", "更强": "Stronger", "深度思考": "Reasoning", "识图": "Vision", "new": "New", "hot": "Hot", "top": "Top" };
+  const badgeEn = (b: string) => BADGE_EN[b] ?? BADGE_EN[b.toLowerCase()] ?? (/[一-鿿]/.test(b) ? "" : b);
   const modelLabels = new Map<string, string>(); // 后台配的模型显示名(如 gpt-5.6→"GPT-5.6 Sol")，下拉里优先显示 label
-  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels);
+  const modelLabelsEn = new Map<string, string>(); // 后台配的英文显示名(ai_model.label_en)，英文界面优先显示
+  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels, modelLabelsEn);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerListRaw = arrangePresets(
     // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
@@ -4777,24 +4781,25 @@ export function App() {
                                   </button>
                                 )}
                               </div>
-                              {bal > 0 || isPro ? (
-                                <button
-                                  type="button"
-                                  className={"acct-checkin" + (checkinDone ? " done" : "")}
-                                  disabled={checkinDone || checkinBusy}
-                                  onClick={doCheckin}
-                                  title={
-                                    checkinDone
-                                      ? t("menu.checkedInTitle", "今日已签到")
-                                      : isPro
-                                        ? t("menu.hintProGift", "会员每月赠币 · 每日签到再领更多")
-                                        : t("menu.hintDailyCheckin", "每日签到领 10 无为币")
-                                  }
-                                >
-                                  {checkinBusy ? <span className="acct-checkin-spin" aria-hidden="true" /> : checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
-                                  <span>{checkinBusy ? t("menu.checkinBusy", "签到中…") : checkinDone ? t("menu.checkedInShort", "已签到") : t("menu.checkinShort", "签到")}</span>
-                                </button>
-                              ) : (
+                              {/* 签到按钮永远显示：0 余额非会员反而最该签到领免费币，不能因 bal<=0 把它藏掉。
+                                  0 余额非会员额外在下方追加充值引导。 */}
+                              <button
+                                type="button"
+                                className={"acct-checkin" + (checkinDone ? " done" : "")}
+                                disabled={checkinDone || checkinBusy}
+                                onClick={doCheckin}
+                                title={
+                                  checkinDone
+                                    ? t("menu.checkedInTitle", "今日已签到")
+                                    : isPro
+                                      ? t("menu.hintProGift", "会员每月赠币 · 每日签到再领更多")
+                                      : t("menu.hintDailyCheckin", "每日签到领 10 无为币")
+                                }
+                              >
+                                {checkinBusy ? <span className="acct-checkin-spin" aria-hidden="true" /> : checkinDone ? <CheckinDoneIcon size={13} /> : <CheckinIcon size={13} />}
+                                <span>{checkinBusy ? t("menu.checkinBusy", "签到中…") : checkinDone ? t("menu.checkedInShort", "已签到") : t("menu.checkinShort", "签到")}</span>
+                              </button>
+                              {bal <= 0 && !isPro && (
                                 <div className="acct-hint zero">{t("menu.hintTopup", "充值解锁更多对话额度")}</div>
                               )}
                             </div>
@@ -6080,7 +6085,7 @@ export function App() {
                   setShowModelMenu((v) => !v);
                 }}
               >
-                <span className="mq-txt">{MODEL_LABEL_OVERRIDES[meta.model] || modelLabels.get(meta.model) || meta.model}</span>
+                <span className="mq-txt">{MODEL_LABEL_OVERRIDES[meta.model] || (lang === "en" && modelLabelsEn.get(meta.model)) || modelLabels.get(meta.model) || meta.model}</span>
                 <span className="mq-caret">▾</span>
               </button>
               {/* 思考档位：只对支持 effort 的模型出现（Claude 4.5+/Sonnet 5、GPT-5、o 系）。
@@ -6207,7 +6212,7 @@ export function App() {
                         onClick={() => quickModel(m)}
                       >
                         <span>
-                          {MODEL_LABEL_OVERRIDES[m] || modelLabels.get(m) || m}
+                          {MODEL_LABEL_OVERRIDES[m] || (lang === "en" && modelLabelsEn.get(m)) || modelLabels.get(m) || m}
                           {freeModelIds.has(m) && (
                             <span
                               style={{
@@ -6227,7 +6232,7 @@ export function App() {
                             <span
                               style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "#e8722c", color: "#fff", verticalAlign: "middle" }}
                             >
-                              {modelBadges.get(m)}
+                              {lang === "en" ? badgeEn(modelBadges.get(m)!) : modelBadges.get(m)}
                             </span>
                           )}
                         </span>
@@ -9549,6 +9554,7 @@ function mergeCatalogIntoPresets(
   keepId?: string,
   badgeMap?: Map<string, string>,
   labelMap?: Map<string, string>,
+  labelEnMap?: Map<string, string>,
 ): Preset[] {
   if (!catalog || catalog.length === 0) return base;
   const byId = new Map(base.map((p) => [p.id, p]));
@@ -9560,6 +9566,8 @@ function mergeCatalogIntoPresets(
       if (m.badge && badgeMap) badgeMap.set(m.id, m.badge);
       // 后台配了显示名且与 id 不同 → 记下，下拉里优先显示 label(如 gpt-5.6→"GPT-5.6 Sol")
       if (labelMap && m.label && m.label !== m.id) labelMap.set(m.id, m.label);
+      // 英文显示名：后台 ai_model.label_en，英文界面优先显示（缺省回退中文 label）
+      if (labelEnMap && m.labelEn) labelEnMap.set(m.id, m.labelEn);
     }
     const models = c.models.map((m) => m.id);
     const local = byId.get(c.id);
