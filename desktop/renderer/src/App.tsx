@@ -2524,6 +2524,13 @@ export function App() {
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」/ 账号菜单「留言反馈」进入）
   const [leaveMsgFromSupport, setLeaveMsgFromSupport] = useState(false); // 区分来源：从客服弹窗进=显返回；从菜单直接进=无返回
   const [showMsgCenter, setShowMsgCenter] = useState(false); // 消息中心弹窗
+
+  // —— 产品行为埋点：弹窗展示 / 用户菜单打开（每次弹出/打开记一次，供后台漏斗分析）——
+  useEffect(() => { if (coinPackOpen) void window.wuwei.track?.("buy_credits_popup_shown"); }, [coinPackOpen]);
+  useEffect(() => { if (planOpen) void window.wuwei.track?.("upgrade_member_popup_shown"); }, [planOpen]);
+  useEffect(() => { if (showLoginIntro) void window.wuwei.track?.("login_popup_shown", { kind: "intro" }); }, [showLoginIntro]);
+  useEffect(() => { if (showLoginForm) void window.wuwei.track?.("login_popup_shown", { kind: "form" }); }, [showLoginForm]);
+  useEffect(() => { if (showAcctMenu) void window.wuwei.track?.("user_menu_open"); }, [showAcctMenu]);
   const [msgUnread, setMsgUnread] = useState(0); // 消息中心未读数（菜单红点）
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
@@ -3356,6 +3363,8 @@ export function App() {
           thinkStartRef.current = null;
           const rawMsg = String(payload.message ?? payload);
           const friendly = friendlyError(rawMsg, t);
+          // 产品行为埋点：用中报错/限额（报错原文进 detail，供后台诊断分析）
+          void window.wuwei.track?.("error_shown", { friendly: friendly.slice(0, 100) }, rawMsg.slice(0, 2000));
           // 服务端报了真实上限就记下来，占用条改按它算(比客户端按模型名猜准)
           const realLimit = parseServerCtxLimit(rawMsg);
           if (realLimit > 0) setServerCtxMax(realLimit);
