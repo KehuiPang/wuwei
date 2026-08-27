@@ -2547,6 +2547,7 @@ export function App() {
   useEffect(() => { if (showLoginIntro) void window.wuwei.track?.("login_popup_shown", { kind: "intro" }); }, [showLoginIntro]);
   useEffect(() => { if (showLoginForm) void window.wuwei.track?.("login_popup_shown", { kind: "form" }); }, [showLoginForm]);
   useEffect(() => { if (showAcctMenu) { markFirstAction("open_menu"); void window.wuwei.track?.("user_menu_open"); } }, [showAcctMenu]);
+  useEffect(() => { if (showSettings) void window.wuwei.track?.("settings_open"); }, [showSettings]); // 打开设置面板
   const [msgUnread, setMsgUnread] = useState(0); // 消息中心未读数（菜单红点）
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
@@ -2644,6 +2645,7 @@ export function App() {
   // 手动签到：账号面板点「签到」触发。后端幂等，给币则弹 toast + 刷新余额；无论刚签/已签都标记当天完成。
   async function doCheckin() {
     if (checkinBusy || checkinDone) return;
+    void window.wuwei.track?.("menu_item_click", { item: "checkin" });
     setCheckinBusy(true);
     try {
       const r = await window.wuwei.checkin();
@@ -4787,8 +4789,8 @@ export function App() {
                         const daysLeft = exp ? Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000) : Infinity;
                         const nearExpiry = daysLeft <= 7;
                         const bal = wuwei.coin.balance;
-                        const openPack = () => { setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
-                        const openPlan = () => { setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
+                        const openPack = () => { void window.wuwei.track?.("menu_item_click", { item: "topup" }); setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
+                        const openPlan = () => { void window.wuwei.track?.("menu_item_click", { item: "upgrade" }); setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
                         // 已登录但没昵称/邮箱时的兜底首字：中文取「无」(无为)，英文取 W
                         const initial = (wuwei.user.name || wuwei.user.email || t("acct.userInitial", "无")).slice(0, 1).toUpperCase();
                         const Spark = () => (
@@ -4902,6 +4904,7 @@ export function App() {
                               <button
                                 className="acct-it"
                                 onClick={() => {
+                                  void window.wuwei.track?.("menu_item_click", { item: "messages" });
                                   setShowAcctMenu(false);
                                   setShowMsgCenter(true);
                                 }}
@@ -4920,6 +4923,7 @@ export function App() {
                               <button
                                 className="acct-it"
                                 onClick={() => {
+                                  void window.wuwei.track?.("menu_item_click", { item: "settings" });
                                   setShowAcctMenu(false);
                                   setSettingsTab("general");
                                   setShowSettings(true);
@@ -4931,6 +4935,7 @@ export function App() {
                               <button
                                 className="acct-it"
                                 onClick={() => {
+                                  void window.wuwei.track?.("menu_item_click", { item: "support" });
                                   setShowAcctMenu(false);
                                   setShowSupport(true);
                                 }}
@@ -4947,6 +4952,7 @@ export function App() {
                               <button
                                 className="acct-it"
                                 onClick={() => {
+                                  void window.wuwei.track?.("menu_item_click", { item: "feedback" });
                                   setShowAcctMenu(false);
                                   setLeaveMsgFromSupport(false);
                                   setShowLeaveMsg(true);
@@ -4959,7 +4965,7 @@ export function App() {
                                 {t("menu.feedback", "反馈有奖")}
                               </button>
                               {/* 帮助 · 检查更新：平时只显「更新」，有新版才标小红点；点击弹窗看结果/版本信息 */}
-                              <button className="acct-it" onClick={() => (updateReady ? (setShowAcctMenu(false), setShowUpdateModal(true)) : checkUpdateNow())}>
+                              <button className="acct-it" onClick={() => { void window.wuwei.track?.("menu_item_click", { item: "update" }); return updateReady ? (setShowAcctMenu(false), setShowUpdateModal(true)) : checkUpdateNow(); }}>
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                   <circle cx="12" cy="12" r="9" />
                                   <path d="M9.5 9a2.5 2.5 0 0 1 4.5 1.5c0 1.5-2 2-2 2.5" />
@@ -4975,6 +4981,7 @@ export function App() {
                               <button
                                 className="acct-it danger"
                                 onClick={() => {
+                                  void window.wuwei.track?.("menu_item_click", { item: "logout" });
                                   setShowAcctMenu(false);
                                   void doWuweiLogout();
                                 }}
@@ -10464,6 +10471,8 @@ function SettingsModal({
     const cur = loadedRef.current || {};
     loadedRef.current = { ...cur, app: { ...(cur.app || {}), ...patch } }; // 同步本地，避免后续「保存」把开关刷回
     window.wuwei.setAppSettings(patch);
+    // 设置项变更埋点：改了哪个开关、开还是关（用于分析用户在设置里动了什么）
+    for (const [key, value] of Object.entries(patch)) void window.wuwei.track?.("setting_change", { key, value });
   };
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [newStName, setNewStName] = useState(""); // 新增中转站：名称
