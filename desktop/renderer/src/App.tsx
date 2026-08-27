@@ -2862,7 +2862,7 @@ export function App() {
     }
     const r = await window.wuwei.getSettings();
     const cur = r?.settings;
-    if (cur) window.wuwei.setSettings({ ...cur, model: m });
+    if (cur) { void window.wuwei.track?.("model_switch", { model: m }); window.wuwei.setSettings({ ...cur, model: m }); }
     setShowModelMenu(false);
   }
 
@@ -2872,6 +2872,8 @@ export function App() {
     try {
       const r = await window.wuwei.checkConn();
       setConn(r);
+      // 产品行为埋点：模型连通检测结果(green=通/其它=不通)，诊断「选了模型能不能用」
+      void window.wuwei.track?.("model_connect", { ok: r.status === "green", status: r.status }, r.reason?.slice(0, 500));
     } catch {
       setConn({ status: "yellow", reason: lang === "en" ? "Check failed, please retry." : "检测失败，请重试。" });
     }
@@ -3028,6 +3030,7 @@ export function App() {
       }
       // 平台不在预设(如自定义中转站)：连槽位一起带出，至少把 providerId/model/凭证换过去
       const slot = (cur.creds || {})[providerId] || {};
+      void window.wuwei.track?.("platform_switch", { providerId, model: model || slot.model || cur.model });
       window.wuwei.setSettings({ ...cur, providerId, apiKey: slot.apiKey, oauthToken: slot.oauthToken, baseUrl: slot.baseUrl, model: model || slot.model || cur.model });
       setCurProviderId(providerId);
       return;
@@ -4202,7 +4205,7 @@ export function App() {
             «
           </button>
         </div>
-        <button className="new-session" onClick={() => window.wuwei.newSession()}>
+        <button className="new-session" onClick={() => { void window.wuwei.track?.("new_chat"); window.wuwei.newSession(); }}>
           {t("session.new")}
         </button>
         {/* AGI 板块：数字婴儿入口(迁自 minicc)。默认隐藏，设置里开 */}
