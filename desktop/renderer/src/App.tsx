@@ -622,7 +622,7 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { pac
             </button>
           ))}
         </div>
-        <button className="pay-cta red" onClick={() => onCheckout(p)}>
+        <button className="pay-cta red" onClick={() => { void window.wuwei.track?.("buy_credits_click", { sku: p.sku, price: p.price }); onCheckout(p); }}>
           {t("pay.coinpack.ctaPrefix", "确认购买")} {money(en, p.price, p.priceUsd)}
         </button>
         <div className="pay-cancel">
@@ -688,7 +688,7 @@ function PlanModal({ onClose, onCheckout, t, lang }: { onClose: () => void; onCh
             </div>
           ))}
         </div>
-        <button className="pay-cta gold" onClick={() => onCheckout(selPlan)}>
+        <button className="pay-cta gold" onClick={() => { void window.wuwei.track?.("upgrade_member_click", { plan: selPlan.name }); onCheckout(selPlan); }}>
           {t("pay.plan.cta", "升级 {name} ¥{p}/月").replace("{name}", en ? selPlan.nameEn : selPlan.name).replace("{p}", en ? String(selPlan.priceUsd) : String(selPlan.price))}
         </button>
         <div className="pay-fnote">
@@ -1843,6 +1843,7 @@ function WuweiLoginModal({
     else res = await window.wuwei.wuweiCodeLogin(phone.trim(), code.trim());
     setBusy(false);
     if (res.me) {
+      void window.wuwei.track?.("login_success", { method: mode === "phone" ? "sms" : "email", mode });
       // 登录/注册/改密成功且有密码 → 记住账号密码(手机验证码模式无密码不记)
       if (mode !== "phone" && password) void window.wuwei.rememberSet?.(email.trim(), password);
       onSuccess(res.me, mode === "email-register" ? "register" : mode === "email-reset" ? "reset" : "login");
@@ -1853,7 +1854,7 @@ function WuweiLoginModal({
     setErr("");
     const me = await window.wuwei.wuweiLogin();
     setBusy(false);
-    if (me) onSuccess(me);
+    if (me) { void window.wuwei.track?.("login_success", { method: "google" }); onSuccess(me); }
     else setErr(t("login.googleIncomplete"));
   }
 
