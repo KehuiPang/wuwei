@@ -2271,6 +2271,14 @@ export function App() {
   }, []);
   const contMaxRef = useRef(contMax); contMaxRef.current = contMax;
   const contDelayRef = useRef(contDelay); contDelayRef.current = contDelay;
+  // 产品行为埋点：打开客户端后「第一个动作是什么、距打开多久」（只记一次）
+  const appOpenAtRef = useRef(Date.now());
+  const firstActionRef = useRef(false);
+  function markFirstAction(type: string) {
+    if (firstActionRef.current) return;
+    firstActionRef.current = true;
+    void window.wuwei.track?.("first_action", { type, ms_since_open: Date.now() - appOpenAtRef.current });
+  }
   const askAutoSecRef = useRef(askAutoSec); askAutoSecRef.current = askAutoSec;
   const redlineModeRef = useRef(redlineMode); redlineModeRef.current = redlineMode;
   const stopRulesRef = useRef(stopRules); stopRulesRef.current = stopRules;
@@ -2531,7 +2539,7 @@ export function App() {
   useEffect(() => { if (planOpen) void window.wuwei.track?.("upgrade_member_popup_shown"); }, [planOpen]);
   useEffect(() => { if (showLoginIntro) void window.wuwei.track?.("login_popup_shown", { kind: "intro" }); }, [showLoginIntro]);
   useEffect(() => { if (showLoginForm) void window.wuwei.track?.("login_popup_shown", { kind: "form" }); }, [showLoginForm]);
-  useEffect(() => { if (showAcctMenu) void window.wuwei.track?.("user_menu_open"); }, [showAcctMenu]);
+  useEffect(() => { if (showAcctMenu) { markFirstAction("open_menu"); void window.wuwei.track?.("user_menu_open"); } }, [showAcctMenu]);
   const [msgUnread, setMsgUnread] = useState(0); // 消息中心未读数（菜单红点）
   const [showBrainIntro, setShowBrainIntro] = useState(false); // 脑网络功能介绍弹窗（会员专享）
   const [checkinToast, setCheckinToast] = useState(""); // 每日签到到账轻量提示
@@ -2862,7 +2870,7 @@ export function App() {
     }
     const r = await window.wuwei.getSettings();
     const cur = r?.settings;
-    if (cur) { void window.wuwei.track?.("model_switch", { model: m }); window.wuwei.setSettings({ ...cur, model: m }); }
+    if (cur) { markFirstAction("switch_model"); void window.wuwei.track?.("model_switch", { model: m }); window.wuwei.setSettings({ ...cur, model: m }); }
     setShowModelMenu(false);
   }
 
@@ -3030,6 +3038,7 @@ export function App() {
       }
       // 平台不在预设(如自定义中转站)：连槽位一起带出，至少把 providerId/model/凭证换过去
       const slot = (cur.creds || {})[providerId] || {};
+      markFirstAction("switch_platform");
       void window.wuwei.track?.("platform_switch", { providerId, model: model || slot.model || cur.model });
       window.wuwei.setSettings({ ...cur, providerId, apiKey: slot.apiKey, oauthToken: slot.oauthToken, baseUrl: slot.baseUrl, model: model || slot.model || cur.model });
       setCurProviderId(providerId);
@@ -3609,6 +3618,7 @@ export function App() {
 
   // 真正发送一条(立即入队跑)
   function doSend(text: string, imgs: string[]) {
+    markFirstAction("send_input");
     if (text) {
       history.current.push(text);
       histIdx.current = history.current.length;
