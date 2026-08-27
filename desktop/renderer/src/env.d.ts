@@ -112,6 +112,8 @@ export interface WuweiApi {
   setSecretsPrompt(text: string | null): void;
   getAnnouncement(): Promise<{ active: boolean; version?: string; titleZh?: string; titleEn?: string; bodyZh?: string; bodyEn?: string }>;
   getAppVersion(): Promise<string>;
+  /** 产品行为埋点：任意 UI 事件上报到 product_events（fire-and-forget，失败静默） */
+  track(event: string, props?: Record<string, unknown>, detail?: string): Promise<boolean>;
   checkUpdate(): Promise<{ available: boolean; version?: string; notes?: string; error?: string }>;
   installUpdate(): void;
   deleteExchange(sid: string, ordinal: number): void;

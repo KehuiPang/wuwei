@@ -201,6 +201,37 @@ export async function reportClientEvent(event: "heartbeat" | "install", version?
   }
 }
 
+/** 产品行为埋点上报 → 官网 /api/product-event（通用事件，desktop 端；后台「行为分析」板块读 product_events）。
+ *  隐私：只发匿名 anon_id(设备指纹)+版本+平台+事件名+props/detail；登录态带 Bearer 让服务端落 user_id(不落邮箱/姓名)。
+ *  纯 fire-and-forget：失败静默，绝不拖累主流程。event/props/detail 由业务侧传入。 */
+export async function trackProductEvent(
+  event: string,
+  opts: { props?: Record<string, unknown>; detail?: string; sessionId?: string | null; version?: string; accessToken?: string | null } = {},
+): Promise<void> {
+  try {
+    if (!event) return;
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (opts.accessToken) headers.Authorization = `Bearer ${opts.accessToken}`;
+    await fetch(`${SITE}/api/product-event`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        event,
+        surface: "desktop",
+        anon_id: getDeviceId(),
+        session_id: opts.sessionId || null,
+        props: opts.props || {},
+        detail: opts.detail || null,
+        platform,
+        app_version: opts.version || "",
+      }),
+    });
+  } catch {
+    /* 埋点失败静默：不拖累主流程 */
+  }
+}
+
 /** 上报「非托管」（订阅 / 自配 key）用量，供后台统计——网关物理上看不到这类请求（它们直连厂商），
  *  故由客户端每轮结束后自报一次。隐私红线：只发 token 计数 + 模型/平台标识 + 匿名 anon_id + 版本/系统，
  *  绝不发对话内容、也不发用户自己的 API key。登录用户带上 access_token(Authorization)，服务端据此归到 user_id；

@@ -58,6 +58,8 @@ contextBridge.exposeInMainWorld("wuweiEdition", {
 });
 
 const api = {
+  // ——— 产品行为埋点：任意 UI 事件调 window.wuwei.track(event, props?, detail?) → product_events ———
+  track: (event: string, props?: Record<string, unknown>, detail?: string) => ipcRenderer.invoke("track", { event, props, detail }) as Promise<boolean>,
   // ——— AGI 板块:数字婴儿 ———
   agiCfg: () => ipcRenderer.invoke("agi:cfg") as Promise<any>,
   babyStatus: () => ipcRenderer.invoke("agi:baby:status") as Promise<string>,

@@ -114,6 +114,7 @@ import {
   wuweiPayStatus,
   reportClientLogin,
   reportClientEvent,
+  trackProductEvent,
   reportExternalUsage,
   type WuweiSession,
 } from "./wuwei-auth.js";
@@ -2053,6 +2054,8 @@ if (!gotLock) {
 // 5 分钟频率：一台机器一天最多 288 条，数据量可控，时长误差 ≤±5 分钟。
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+// 一次应用启动 = 一个会话 ID，把这次打开客户端的所有行为事件串成一条路径（产品行为埋点用）
+const APP_SESSION_ID = randomUUID();
 // 本次心跳是否「活跃」：主窗口存在、可见、未最小化、且当前聚焦。取不到窗口时保守按 false（只算开机不算活跃）。
 function isClientActive(): boolean {
   try {
@@ -2077,6 +2080,8 @@ function startClientTelemetry(): void {
     }
     // 启动即报一次心跳（带当前活跃态）
     void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null);
+    // 产品行为埋点：打开客户端（一次会话开始）
+    void trackProductEvent("app_open", { sessionId: APP_SESSION_ID, version, accessToken: loadWuweiSession()?.accessToken ?? null });
     // 每 5 分钟补报，覆盖长时间挂机用户 + 累积活跃时长；unref 不阻止进程退出
     heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null), HEARTBEAT_INTERVAL_MS);
     if (heartbeatTimer.unref) heartbeatTimer.unref();
@@ -3635,6 +3640,13 @@ ipcMain.handle("messages:read", async (_e, arg: { ids?: number[]; all?: boolean 
 });
 // 稳定设备指纹（灰度开关 & 免费试用额度共用）
 ipcMain.handle("account:wuwei-device-id", () => getDeviceId());
+
+// 产品行为埋点：渲染层任意 UI 事件 → window.wuwei.track(event, props?, detail?)，这里补 session/version/token → product_events
+ipcMain.handle("track", (_e, p: { event?: string; props?: Record<string, unknown>; detail?: string }) => {
+  const v = IS_TEST ? `${app.getVersion()}-test` : app.getVersion();
+  void trackProductEvent(String(p?.event || ""), { props: p?.props, detail: p?.detail, sessionId: APP_SESSION_ID, version: v, accessToken: loadWuweiSession()?.accessToken ?? null });
+  return true;
+});
 
 // ── 扫码支付：下单 / 轮询。带用户 token 调后端，401 自动 refresh 重试（同 wuwei-me）──
 ipcMain.handle("pay:create", async (_e, sku: string, channel: string) => {
