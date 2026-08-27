@@ -6,7 +6,7 @@
 // 客户端只跟官网通信：不接 Supabase SDK、不持有任何 key。token 续期走官网 /api/refresh。
 // —— 从 wuwei-pro 移植（B2）。与 codex/claude 登录(account.ts)互不干扰，是独立的「无为账号态」。
 import http from "node:http";
-import { shell } from "electron";
+import { shell, app } from "electron";
 import { randomBytes } from "node:crypto";
 import { log } from "./logger.js";
 import { getDeviceId } from "../../src/device-id.js";
@@ -176,7 +176,7 @@ export async function reportClientLogin(version?: string, accessToken?: string |
     await fetch(`${SITE}/api/client-event`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ event: "login", anon_id: getDeviceId(), version: version || "", platform }),
+      body: JSON.stringify({ event: "login", anon_id: getDeviceId(), version: version || "", platform, sys_lang: app.getLocale(), app_lang: process.env.WUWEI_LANG || null }),
     });
   } catch {
     /* 上报失败静默：埋点不能拖累登录 */
@@ -194,7 +194,7 @@ export async function reportClientEvent(event: "heartbeat" | "install", version?
     await fetch(`${SITE}/api/client-event`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ event, anon_id: getDeviceId(), version: version || "", platform, active: active === true }),
+      body: JSON.stringify({ event, anon_id: getDeviceId(), version: version || "", platform, active: active === true, sys_lang: app.getLocale(), app_lang: process.env.WUWEI_LANG || null }),
     });
   } catch {
     /* 上报失败静默：埋点不能拖累主流程 */
