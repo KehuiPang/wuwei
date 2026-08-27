@@ -592,10 +592,13 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { pac
   const en = lang === "en";
   const [sel, setSel] = useState(() => { const i = packs.findIndex((x) => x.badgeType === "rec"); return i >= 0 ? i : 0; }); // 默认选中"推荐"档
   const p = packs[sel];
+  const shownAt = useRef(Date.now());
+  const dwell = () => Date.now() - shownAt.current;
+  const close = () => { void window.wuwei.track?.("buy_credits_popup_closed", { dwell_ms: dwell() }); onClose(); };
   return (
-    <div className="perm-overlay pay-overlay" onClick={onClose}>
+    <div className="perm-overlay pay-overlay" onClick={close}>
       <div className="pay-card" onClick={(e) => e.stopPropagation()}>
-        <PayCloseX onClick={onClose} />
+        <PayCloseX onClick={close} />
         <div className="pay-top">
           <PayEnso />
           <h2>{t("pay.coinpack.title", "购买积分包")}</h2>
@@ -603,7 +606,7 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { pac
         </div>
         <div className="pay-rows">
           {packs.map((pack, i) => (
-            <button key={pack.coins} className={"pay-rw" + (i === sel ? " sel" : "")} onClick={() => setSel(i)}>
+            <button key={pack.coins} className={"pay-rw" + (i === sel ? " sel" : "")} onClick={() => { setSel(i); void window.wuwei.track?.("buy_credits_pack_select", { sku: pack.sku, price: pack.price, dwell_ms: dwell() }); }}>
               {pack.badge && <span className={"pay-rbadge " + pack.badgeType}>{en ? pack.badgeEn : pack.badge}</span>}
               <span className="pay-rw-ic">
                 <PackIcon />
@@ -622,7 +625,7 @@ function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { pac
             </button>
           ))}
         </div>
-        <button className="pay-cta red" onClick={() => { void window.wuwei.track?.("buy_credits_click", { sku: p.sku, price: p.price }); onCheckout(p); }}>
+        <button className="pay-cta red" onClick={() => { void window.wuwei.track?.("buy_credits_click", { sku: p.sku, price: p.price, dwell_ms: dwell() }); onCheckout(p); }}>
           {t("pay.coinpack.ctaPrefix", "确认购买")} {money(en, p.price, p.priceUsd)}
         </button>
         <div className="pay-cancel">
@@ -641,10 +644,14 @@ function PlanModal({ onClose, onCheckout, t, lang }: { onClose: () => void; onCh
   const [sel, setSel] = useState<ProPlan["id"]>("pro5x");
   const selPlan = PRO_PLANS.find((x) => x.id === sel)!;
   const feats = en ? PRO_FEATS_EN : PRO_FEATS;
+  const shownAt = useRef(Date.now()); // 弹窗打开时刻，算停留时长
+  const dwell = () => Date.now() - shownAt.current;
+  // 叉掉/点空白关闭（未购买）：记停留时长，后台据此看「看了多久就走」
+  const close = () => { void window.wuwei.track?.("upgrade_member_popup_closed", { dwell_ms: dwell() }); onClose(); };
   return (
-    <div className="perm-overlay pay-overlay" onClick={onClose}>
+    <div className="perm-overlay pay-overlay" onClick={close}>
       <div className="pay-card plan" onClick={(e) => e.stopPropagation()}>
-        <PayCloseX onClick={onClose} />
+        <PayCloseX onClick={close} />
         <div className="pay-top">
           <PayEnso />
           <h2>{t("pay.plan.title", "升级无为 Pro")}</h2>
@@ -652,7 +659,7 @@ function PlanModal({ onClose, onCheckout, t, lang }: { onClose: () => void; onCh
         </div>
         <div className="pay-plans">
           {PRO_PLANS.map((plan) => (
-            <button key={plan.id} className={"pay-pc" + (plan.id === sel ? " sel" : "")} onClick={() => setSel(plan.id)}>
+            <button key={plan.id} className={"pay-pc" + (plan.id === sel ? " sel" : "")} onClick={() => { setSel(plan.id); void window.wuwei.track?.("upgrade_tier_select", { tier: plan.name, dwell_ms: dwell() }); }}>
               <span className={"pay-tag " + plan.tagType}>{en ? plan.tagEn : plan.tag}</span>
               <span className="pay-pc-r1">
                 <span className="pay-pc-nm">
@@ -688,7 +695,7 @@ function PlanModal({ onClose, onCheckout, t, lang }: { onClose: () => void; onCh
             </div>
           ))}
         </div>
-        <button className="pay-cta gold" onClick={() => { void window.wuwei.track?.("upgrade_member_click", { plan: selPlan.name }); onCheckout(selPlan); }}>
+        <button className="pay-cta gold" onClick={() => { void window.wuwei.track?.("upgrade_member_click", { plan: selPlan.name, dwell_ms: dwell() }); onCheckout(selPlan); }}>
           {t("pay.plan.cta", "升级 {name} ¥{p}/月").replace("{name}", en ? selPlan.nameEn : selPlan.name).replace("{p}", en ? String(selPlan.priceUsd) : String(selPlan.price))}
         </button>
         <div className="pay-fnote">
@@ -2583,6 +2590,13 @@ export function App() {
   const [wuweiBusy, setWuweiBusy] = useState(false);
   // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string } } | null>(null);
+  const shortageShownAt = useRef(0); // 余额不足弹窗展示时刻，用于算用户看了多久
+  // 关闭余额不足弹窗并记录用户动作 + 停留时长。action: close(叉/暂不) | upgrade(升级会员) | buy_pack(买积分包) | rebind(改用订阅)
+  function closeShortage(action: string) {
+    const dwellMs = shortageShownAt.current ? Date.now() - shortageShownAt.current : 0;
+    void window.wuwei.track?.("credits_shortage_action", { action, dwell_ms: dwellMs });
+    setCoinShortage(null);
+  }
   // 客户端公告：启动拉取，未读过该版本(version)且 active 才弹；读过存本地，同版本不再弹，后台更新(version 变)则再弹。
   const [announce, setAnnounce] = useState<{ version: string; title: string; body: string } | null>(null);
   // 自动更新：版本号 + 检查态 + 新版就绪(已下载好，点即装)
@@ -2608,6 +2622,10 @@ export function App() {
       /* 读设置失败 → 不给改绑入口，退回充值路径 */
     }
     setCoinShortage({ message, rebind });
+    // 关键漏斗节点：余额不足弹窗展示（用户无为币耗尽被拦下的这一刻）。此前只记了 error_shown，
+    // 没记「被提示充值/升级」这个转化节点，导致后台看不到「撞墙→是否点充值」的漏斗。
+    void window.wuwei.track?.("credits_shortage_shown", { canRebind: !!rebind });
+    shortageShownAt.current = Date.now();
     try {
       const me = await window.wuwei.wuweiMe();
       if (me) {
@@ -7032,9 +7050,9 @@ export function App() {
       })()}
       {/* ① 无为币不足触发弹窗（v2）：金色升级Pro在上(更划算) + 朱色购买积分包在下 */}
       {coinShortage && (
-        <div className="perm-overlay pay-overlay" onClick={() => setCoinShortage(null)}>
+        <div className="perm-overlay pay-overlay" onClick={() => closeShortage("close")}>
           <div className="pay-card" onClick={(e) => e.stopPropagation()}>
-            <PayCloseX onClick={() => setCoinShortage(null)} />
+            <PayCloseX onClick={() => closeShortage("close")} />
             <div className="pay-top">
               <PayEnso />
               <h2>{lang === "en" ? "Out of credits" : "无为币不足"}</h2>
@@ -7060,7 +7078,7 @@ export function App() {
                   className="pay-opt pay-opt-plan"
                   onClick={async () => {
                     const rb = coinShortage.rebind!;
-                    setCoinShortage(null);
+                    closeShortage("rebind");
                     await applyBoundModel(rb.providerId, rb.model);
                     push({
                       type: "notice",
@@ -7096,7 +7114,7 @@ export function App() {
                   <button
                     className="pay-opt pay-opt-plan"
                     onClick={() => {
-                      setCoinShortage(null);
+                      closeShortage("upgrade");
                       setPlanOpen(true);
                     }}
                   >
@@ -7119,7 +7137,7 @@ export function App() {
               <button
                 className="pay-opt pay-opt-pack"
                 onClick={() => {
-                  setCoinShortage(null);
+                  closeShortage("buy_pack");
                   setCoinPackOpen(true);
                 }}
               >
@@ -7139,7 +7157,7 @@ export function App() {
             </div>
             <div className="pay-foot">
               <button onClick={() => void refreshWuweiForShortage(coinShortage.message)}>{lang === "en" ? "↻ Refresh balance" : "↻ 刷新余额"}</button>
-              <button onClick={() => setCoinShortage(null)}>{lang === "en" ? "Not now" : "暂不需要"}</button>
+              <button onClick={() => closeShortage("close")}>{lang === "en" ? "Not now" : "暂不需要"}</button>
             </div>
           </div>
         </div>
