@@ -45,6 +45,7 @@ jobs:
 
       # Windows 代码签名，三档优先级（互斥，从上到下命中即用）：
       #   1) EVSIGN_KEY 已配置       → EV Sign(evsign.cn) 云签名。下载 CLI，用 build/evsign.js 钩子
+      #                                (electron-builder 26 字段 = win.signtoolOptions.sign，非老的 win.sign)
       #                                在打包过程中逐个文件签名(见该文件注释：保证 latest.yml 的 sha512 正确)。
       #   2) AZURE_TS_ENDPOINT 已配置 → Azure Trusted Signing（electron-builder 26 原生支持）。
       #   3) 都没配(默认)            → 打未签名包，行为与接入前完全一致，绝不破坏发版。
@@ -67,7 +68,15 @@ jobs:
             }
             if (-not $ok) { Write-Error 'evsign-client CLI 下载失败，中止发版（避免发出未签名包）'; exit 1 }
             $env:EVSIGN_CLIENT = $cli
-            npx electron-builder @common '-c.win.sign=build/evsign.js'
+            npx electron-builder @common '-c.win.signtoolOptions.sign=build/evsign.cjs'
+            if ($LASTEXITCODE -ne 0) { Write-Error 'electron-builder 打包失败'; exit 1 }
+            # electron-builder 对"签名失败"只跳过不报错(queue continue)，会静默产出未签名包。
+            # 打包后强制验签：安装包必须是 Valid 签名，否则中止发版(绝不发未签名却以为已签的包)。
+            $setup = Get-ChildItem release\*-setup.exe | Select-Object -First 1
+            $sig = Get-AuthenticodeSignature $setup.FullName
+            Write-Host "验签 $($setup.Name): $($sig.Status)"
+            if ($sig.Status -ne 'Valid') { Write-Error "签名校验失败($($sig.Status))，中止发版"; exit 1 }
+            Write-Host "签名有效，签发者: $($sig.SignerCertificate.Subject)"
           } elseif ($env:AZURE_TS_ENDPOINT) {
             Write-Host 'Azure Trusted Signing 已配置 -> 打签名包'
             npx electron-builder @common `
