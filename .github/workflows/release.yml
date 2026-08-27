@@ -43,30 +43,44 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false # 无签名证书：跳过签名，产出未签名 dmg
 
-      # Windows 代码签名：Azure Trusted Signing（electron-builder 26 原生支持，打包时自动 Install-Module TrustedSigning）。
-      # 开关 = 是否配置了 AZURE_TS_ENDPOINT secret：
-      #   · 未配置(默认) → 走原始未签名命令，行为与接入前完全一致，绝不破坏现有发版。
-      #   · 已配置       → 用 -c.win.azureSignOptions.* 注入签名参数（值全部来自 secrets，不落库），
-      #                    产出「发布者=公司名」的已签名 exe，用户不再见 SmartScreen「发布者未知」警告。
-      # 需在仓库 Secrets 配齐 7 项：AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET
-      #   / AZURE_TS_ENDPOINT / AZURE_TS_ACCOUNT / AZURE_TS_PROFILE / AZURE_PUBLISHER_NAME
+      # Windows 代码签名，三档优先级（互斥，从上到下命中即用）：
+      #   1) EVSIGN_KEY 已配置       → EV Sign(evsign.cn) 云签名。下载 CLI，用 build/evsign.js 钩子
+      #                                在打包过程中逐个文件签名(见该文件注释：保证 latest.yml 的 sha512 正确)。
+      #   2) AZURE_TS_ENDPOINT 已配置 → Azure Trusted Signing（electron-builder 26 原生支持）。
+      #   3) 都没配(默认)            → 打未签名包，行为与接入前完全一致，绝不破坏发版。
+      # EV Sign 只需 1 个 secret：EVSIGN_KEY（许可证 UUID）。Azure 需 7 项 AZURE_*。
       - name: Package Windows (exe)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           $common = @('--win', '--config', 'electron-builder.wuwei.yml', '--publish', 'never')
-          if ($env:AZURE_TS_ENDPOINT) {
-            Write-Host 'Azure Trusted Signing 已配置 → 打签名包'
+          if ($env:EVSIGN_KEY) {
+            Write-Host 'EV Sign 已配置 -> 下载 CLI 并打云签名包'
+            $cli = Join-Path $env:RUNNER_TEMP 'evsign-client.exe'
+            # evsign.cn 在国内、GitHub runner 在境外，下载可能慢：给 120s 超时 + 重试一次
+            $ok = $false
+            foreach ($i in 1..2) {
+              try {
+                Invoke-WebRequest -Uri 'https://mc.evsign.cn/evsign-client-cli-windows-latest' -OutFile $cli -TimeoutSec 120 -UseBasicParsing
+                if ((Get-Item $cli).Length -gt 0) { $ok = $true; break }
+              } catch { Write-Host "download evsign-client attempt $i failed: $_" }
+            }
+            if (-not $ok) { Write-Error 'evsign-client CLI 下载失败，中止发版（避免发出未签名包）'; exit 1 }
+            $env:EVSIGN_CLIENT = $cli
+            npx electron-builder @common '-c.win.sign=build/evsign.js'
+          } elseif ($env:AZURE_TS_ENDPOINT) {
+            Write-Host 'Azure Trusted Signing 已配置 -> 打签名包'
             npx electron-builder @common `
               "-c.win.azureSignOptions.endpoint=$env:AZURE_TS_ENDPOINT" `
               "-c.win.azureSignOptions.codeSigningAccountName=$env:AZURE_TS_ACCOUNT" `
               "-c.win.azureSignOptions.certificateProfileName=$env:AZURE_TS_PROFILE" `
               "-c.win.azureSignOptions.publisherName=$env:AZURE_PUBLISHER_NAME"
           } else {
-            Write-Host '未配置 Azure Trusted Signing → 打未签名包（行为同接入前）'
+            Write-Host '未配置任何签名 -> 打未签名包（行为同接入前）'
             npx electron-builder @common
           }
         env:
+          EVSIGN_KEY: ${{ secrets.EVSIGN_KEY }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
