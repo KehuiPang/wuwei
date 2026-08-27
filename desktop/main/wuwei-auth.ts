@@ -232,6 +232,41 @@ export async function trackProductEvent(
   }
 }
 
+// ——「发送诊断信息」用户开关（默认开，用户可在设置里关）。关掉后 trackClientLog 一律不发。
+let diagConsent = true;
+export function setDiagConsent(v: boolean): void {
+  diagConsent = v;
+}
+/** 客户端诊断日志上报：早期用于分析「用户为啥没怎么用/是否报错」。三层开关拦截：
+ *  ① 用户设置「发送诊断信息」(diagConsent，默认开) ② 后台 diag.enabled 总开关 ③ 后台留存/消息捕获。
+ *  隐私红线：默认只发 报错信息 + 调用画像(模型/成功失败/耗时)，绝不发对话正文(除非后台单独开 capture_messages)。
+ *  纯 fire-and-forget：失败静默，绝不拖累客户端。 */
+export async function trackClientLog(
+  level: "info" | "warn" | "error",
+  event: string,
+  opts: { message?: string; meta?: Record<string, unknown>; accessToken?: string | null; version?: string } = {},
+): Promise<void> {
+  try {
+    if (!diagConsent || !event) return; // 用户关了诊断上报 → 一条不发
+    const platform = process.platform === "win32" ? "win" : process.platform === "darwin" ? "mac" : process.platform === "linux" ? "linux" : String(process.platform);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (opts.accessToken) headers.Authorization = `Bearer ${opts.accessToken}`;
+    await fetch(`${SITE}/api/client-log`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        level,
+        event,
+        device_id: getDeviceId(),
+        message: opts.message ?? null,
+        meta: { platform, version: opts.version || "", ...(opts.meta || {}) },
+      }),
+    });
+  } catch {
+    /* 诊断上报失败静默 */
+  }
+}
+
 /** 上报「非托管」（订阅 / 自配 key）用量，供后台统计——网关物理上看不到这类请求（它们直连厂商），
  *  故由客户端每轮结束后自报一次。隐私红线：只发 token 计数 + 模型/平台标识 + 匿名 anon_id + 版本/系统，
  *  绝不发对话内容、也不发用户自己的 API key。登录用户带上 access_token(Authorization)，服务端据此归到 user_id；

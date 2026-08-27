@@ -85,6 +85,7 @@ import {
   brainEnabled,
   brainDocsEnabled,
   resumeDetectEnabled,
+  telemetryEnabled,
   type Settings,
   type SessionBal,
 } from "./settings.js";
@@ -115,6 +116,8 @@ import {
   reportClientLogin,
   reportClientEvent,
   trackProductEvent,
+  trackClientLog,
+  setDiagConsent,
   reportExternalUsage,
   type WuweiSession,
 } from "./wuwei-auth.js";
@@ -124,8 +127,8 @@ import { getDeviceId } from "../../src/device-id.js";
 import { log, LOG_FILE } from "./logger.js";
 
 log("boot", `${APP_NAME} 主进程启动 (edition=${EDITION})`, "日志文件:", LOG_FILE);
-process.on("uncaughtException", (e) => log("uncaught", e?.stack || String(e)));
-process.on("unhandledRejection", (e) => log("unhandledRejection", String(e)));
+process.on("uncaughtException", (e) => { log("uncaught", e?.stack || String(e)); void trackClientLog("error", "error", { message: `uncaughtException: ${e?.message || String(e)}`, meta: { stack: (e?.stack || "").slice(0, 800) } }); });
+process.on("unhandledRejection", (e) => { log("unhandledRejection", String(e)); void trackClientLog("error", "error", { message: `unhandledRejection: ${String(e)}`.slice(0, 500) }); });
 
 // __dirname 由 electron-vite 为 ESM 输出自动注入，无需手动声明
 
@@ -2082,6 +2085,9 @@ function startClientTelemetry(): void {
     void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null);
     // 产品行为埋点：打开客户端（一次会话开始）
     void trackProductEvent("app_open", { sessionId: APP_SESSION_ID, version, accessToken: loadWuweiSession()?.accessToken ?? null });
+    // 诊断日志：按用户「发送诊断信息」开关(默认开)决定是否上报；启动上报一条 app_start
+    setDiagConsent(telemetryEnabled(loadSettings()));
+    void trackClientLog("info", "app_start", { version, accessToken: loadWuweiSession()?.accessToken ?? null, meta: { session_id: APP_SESSION_ID } });
     // 每 5 分钟补报，覆盖长时间挂机用户 + 累积活跃时长；unref 不阻止进程退出
     heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null), HEARTBEAT_INTERVAL_MS);
     if (heartbeatTimer.unref) heartbeatTimer.unref();
@@ -2844,6 +2850,7 @@ ipcMain.on("settings:set-app", (_e, patch: Record<string, boolean | string>) => 
     /* ignore */
   }
   syncBrainDocsFlag(s);
+  setDiagConsent(telemetryEnabled(s)); // 「发送诊断信息」开关变了当场生效
   sysPrompt = buildSysPrompt(cwd, modelLabel, s.providerId);
   for (const a of agents.values()) a.setSystem(sysPrompt);
   refreshAgentTools();

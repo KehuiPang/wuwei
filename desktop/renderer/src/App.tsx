@@ -10441,6 +10441,7 @@ function SettingsModal({
   const [brainOn, setBrainOn] = useState(true); // 启用本地脑网络 Brain
   const [brainDocsOn, setBrainDocsOn] = useState(true); // recall 连带扫描『相关文档』
   const [resumeDetect, setResumeDetect] = useState(true); // 启动时检测被中断/干到一半的任务并提示恢复
+  const [telemetry, setTelemetry] = useState(true); // 发送诊断信息用于改善体验(默认开，可关)
   const setAppToggle = (patch: Record<string, boolean>) => {
     const cur = loadedRef.current || {};
     loadedRef.current = { ...cur, app: { ...(cur.app || {}), ...patch } }; // 同步本地，避免后续「保存」把开关刷回
@@ -10864,6 +10865,7 @@ function SettingsModal({
       setBrainOn(s.app?.brainEnabled !== false);
       setBrainDocsOn(s.app?.brainDocs !== false);
       setResumeDetect(s.app?.resumeDetect !== false);
+      setTelemetry(s.app?.telemetry !== false);
       const sts: Station[] = s.customStations || [];
       setStations(sts);
       stationsRef.current = sts;
@@ -11547,6 +11549,27 @@ function SettingsModal({
                   onChange={(e) => {
                     setResumeDetect(e.target.checked);
                     setAppToggle({ resumeDetect: e.target.checked });
+                  }}
+                />
+              </div>
+
+              <div className="app-set-group">{lang === "en" ? "Privacy & diagnostics" : "隐私与诊断"}</div>
+              <div className="app-set-row" style={{ cursor: "default", marginBottom: "16px" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">{lang === "en" ? "Send diagnostics to improve the app" : "发送诊断信息用于改善体验"}</div>
+                  <div className="app-set-hint">
+                    {lang === "en"
+                      ? "Sends anonymous error and usage diagnostics (no conversation content) to help us find and fix problems. You can turn this off anytime."
+                      : "上报匿名的报错与使用诊断（不含对话内容），帮助我们发现并修复问题。可随时关闭。"}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={telemetry}
+                  onChange={(e) => {
+                    setTelemetry(e.target.checked);
+                    setAppToggle({ telemetry: e.target.checked });
                   }}
                 />
               </div>
