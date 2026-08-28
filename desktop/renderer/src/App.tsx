@@ -9137,6 +9137,7 @@ type Kind = "codex" | "anthropic-oauth" | "anthropic-apikey" | "openai";
 interface Preset {
   id: string;
   label: string;
+  labelEn?: string; // 后台 ai_provider.label_en：英文界面优先显示。缺省回退 PRESET_EN 或中文 label
   kind: Kind;
   baseUrl: string;
   keyUrl: string;
@@ -9573,7 +9574,8 @@ const PRESET_EN: Record<string, { label?: string; note?: string; keyHint?: strin
   grok: { label: "Grok (xAI)", note: "grok-4.x is natively multimodal (text+image); grok-4.3 is the 1M-context flagship" },
   custom: { label: "Local / self-hosted endpoint (vLLM, Ollama, etc.)", keyHint: "Can be left blank locally", note: "Any OpenAI-compatible endpoint — just fill your Base URL + model name" },
 };
-const pLabel = (p: Preset, lang: Lang) => (lang === "en" && PRESET_EN[p.id]?.label) || p.label;
+// 英文标签优先级：PRESET_EN 硬编码覆盖(老平台专属文案) > 后台 label_en(catalog，新平台/后台改名) > 中文 label。
+const pLabel = (p: Preset, lang: Lang) => (lang === "en" && (PRESET_EN[p.id]?.label || p.labelEn)) || p.label;
 const pKeyHint = (p: Preset, lang: Lang) => (lang === "en" && PRESET_EN[p.id]?.keyHint) || p.keyHint;
 const pNote = (p: Preset, lang: Lang) => (lang === "en" ? PRESET_EN[p.id]?.note ?? p.note : p.note);
 
@@ -9638,11 +9640,13 @@ function mergeCatalogIntoPresets(
     const local = byId.get(c.id);
     if (local) {
       // 已知平台：保留本地元数据，模型用 catalog 覆盖；anon(未登录可见)由后台控制，跟随 catalog。
-      out.push({ ...local, ...(models.length ? { models } : {}), anon: c.anon });
+      // labelEn 跟随 catalog(后台 label_en)，让后台新增/改名的英文标签即时生效。
+      out.push({ ...local, ...(models.length ? { models } : {}), anon: c.anon, labelEn: c.labelEn ?? local.labelEn });
     } else {
       out.push({
         id: c.id,
         label: c.label,
+        labelEn: c.labelEn ?? undefined, // 后台英文名：英文界面下拉直接用，缺省再回退中文
         kind: (c.kind as Kind) || "openai",
         baseUrl: c.baseUrl,
         keyUrl: c.keyUrl,
