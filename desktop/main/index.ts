@@ -154,6 +154,10 @@ let ctxWindow = 1_000_000; // 当前模型上下文窗口(占用条用真实值)
 let subFlag = false; // 当前后端是否订阅类(决定前端是否显示 5小时/周额度)
 let cwd = process.cwd();
 const agents = new Map<string, Agent>();
+// 每会话绑定的后端平台(providerId)。完全独立的关键索引：切平台/模型只动当前会话，token 续期只热更「同后端」的
+// 会话——据此判断哪些会话属于同一后端，绝不把 A 会话的 provider 换成 B 会话切过去的平台。建 Agent 时按当时全局
+// 平台登记，之后仅在「显式切换该会话」时更新，别处一律不改。
+const backendBySid = new Map<string, string>();
 // 每会话最近一轮的自足用量（onUsage 的 round），供「非托管」平台每轮结束后自报统计（见 reportExternalUsage 调用处）。
 const lastRoundBySid = new Map<string, { input: number; output: number; cacheHit: number; steps: number }>();
 let currentId = "";
@@ -1034,21 +1038,21 @@ function applySettings(sIn: Settings, forceSid?: string) {
   const credChanged =
     (prev.oauthToken || "") !== (s.oauthToken || "") || (prev.apiKey || "") !== (s.apiKey || "");
   const credRefreshOnly = sameBackend && credChanged;
+  // 完全独立：切平台/模型只作用于「目标会话」——用户当前聚焦或显式切换(forceSid，settings:set 恒传 currentId)的
+  // 那一个。其余会话(无论空闲还是正在跑)绝不被动它们的 provider，各自守着自己的平台/模型跑各自的任务。
+  const target = forceSid || currentId;
+  const newPid = s.providerId || "";
   for (const [sid, a] of agents) {
-    // 用户对「当前会话」的显式切换(forceSid) → 即使它正在跑/智能继续也强制换：这是用户主动要求，
-    // 不换的话它会继续用旧平台(如仍走无为托管扣无为币，而用户以为已切到 Claude 订阅)。
-    const forcedActive = !!forceSid && sid === forceSid;
-    // 其余正在跑的会话绝不换 provider/系统提示：否则在别的会话切模型会把这个正在跑的会话(如订阅版
-    // 自主推进中)从它自己的模型换掉→下一步用了别的模型→撞余额/报错中断。智能继续(contSessions)两步
-    // 之间会短暂离开 runs，也一并跳过。
-    if ((runs.has(sid) || contSessions.has(sid)) && !forcedActive) {
-      // 例外：纯凭证刷新(同平台同模型、只是 token/key 变)时，也给正在跑的会话热更带新 token 的
-      // provider(只换 token、不动模型/系统提示)，修复"token 过期重新授权后正在重试的会话一直报未授权"。
-      if (credRefreshOnly) a.setProvider(provider);
+    if (sid === target) {
+      a.setProvider(provider);
+      a.setSystem(sysPrompt); // 热更该会话的系统提示，问"你是什么模型"能答对
+      backendBySid.set(sid, newPid); // 目标会话的后端随之更新
       continue;
     }
-    a.setProvider(provider);
-    a.setSystem(sysPrompt); // 热更每个会话的系统提示，问"你是什么模型"能答对
+    // 例外：纯凭证刷新(同平台同模型、只是 token/key 变)时，把新 token 热更给「同一后端」的其它会话——
+    // 同账号多开时，别处刷新了 token，这些会话也得拿到新 token，否则会一直报"未授权"。仅换 token、不动模型/提示。
+    if (credRefreshOnly && backendBySid.get(sid) === newPid) a.setProvider(provider);
+    // 其余(不同后端 / 非凭证刷新)一律不碰：这正是"在别的会话切平台/模型不影响这个正在跑的会话"的保证。
   }
   refreshAgentTools(); // 「知识网络」开关变了→即时给所有会话加/摘 brain_* 工具
   send("evt:ready", { backend: backendLabel, model: modelLabel, cwd, sub: subFlag, ctxWindow });
@@ -1074,7 +1078,8 @@ function clearDeadClaudeOAuth(why: string): void {
   saveSettings(s);
   applyEnvFromSettings(s);
   provider = makeProvider(loadConfig());
-  for (const a of agents.values()) a.setProvider(provider);
+  // 只热更「绑在 Claude 订阅」的会话——别把清 token 后重建的 provider 塞给别的平台会话，破坏独立性。
+  for (const [sid, a] of agents) if (backendBySid.get(sid) === "claude-oauth") a.setProvider(provider);
   send("evt:error", {
     message: tt(
       "Claude 订阅授权已过期，已自动清除失效 token。请在设置里重新授权，或改用 API Key。",
@@ -1117,8 +1122,9 @@ async function ensureFreshClaudeOAuth(): Promise<void> {
       saveSettings(s);
       applyEnvFromSettings(s);
       provider = makeProvider(loadConfig());
-      for (const a of agents.values()) a.setProvider(provider); // 热更所有会话，用新 token
-      log("claudeOAuth", "✓ 已续期并热更 provider");
+      // 续期只热更「绑在 Claude 订阅」的会话，用新 token；别的平台会话保持独立、绝不被换成 Claude。
+      for (const [sid, a] of agents) if (backendBySid.get(sid) === "claude-oauth") a.setProvider(provider);
+      log("claudeOAuth", "✓ 已续期并热更 Claude 订阅会话 provider");
     } finally {
       refreshingClaude = null;
     }
@@ -1443,6 +1449,8 @@ function getAgent(id: string): Agent | null {
     const meta = listSessions().find((s) => s.id === id); // 恢复该会话的用量
     if (meta?.usage) a.setUsage(meta.usage);
     agents.set(id, a);
+    // 登记该会话此刻绑定的后端：优先它自己存过的平台(切回老会话时用回它自己的)，否则用当前全局平台。
+    backendBySid.set(id, meta?.providerId || curProviderId());
   }
   return a;
 }
@@ -2163,7 +2171,9 @@ function reportLoginOnce(): void {
 // 托管平台每轮开跑前：把网关的 apiKey 注入并重建 provider。
 //  - 已登录：apiKey = 新鲜的无为 access_token(快过期先续期) → 按 token 扣无为币。
 //  - 未登录：apiKey = anon-<设备id> → 匿名试用分支(仅 anon 平台的 free 模型可用，网关按设备/IP 每日护栏)。
-async function ensureHostedProviderReady(): Promise<void> {
+// targetSid：只把新鲜网关 token 的 provider 热更给「这一个即将开跑的会话」——保持完全独立，别顺手把别的会话
+// (可能绑在别的平台/别的托管模型)也换掉。不传(如连通性 ping)则只重建全局 provider、不动任何会话。
+async function ensureHostedProviderReady(targetSid?: string): Promise<void> {
   const st = loadSettings();
   if (!st || !isHostedProvider(st.providerId)) return;
   applyEnvFromSettings(st); // 平台 baseUrl(网关)等按设置
@@ -2172,7 +2182,10 @@ async function ensureHostedProviderReady(): Promise<void> {
   process.env.WUWEI_API_KEY = key; // 网关的"key"(只 env、不落 config)
   process.env.MINICC_API_KEY = key; // 兼容：config.ts 仍读旧名，过渡期内双写
   provider = makeProvider(loadConfig());
-  for (const a of agents.values()) a.setProvider(provider);
+  if (targetSid) {
+    const a = agents.get(targetSid);
+    if (a) { a.setProvider(provider); backendBySid.set(targetSid, st.providerId || ""); }
+  }
 }
 // 托管平台每轮结束后：拉最新余额推给渲染层(账号菜单余额随扣币刷新)。
 // 会员态变更 → 脑网络可用性变 → 热更所有会话的工具集 + 系统提示（brain_* 与说明随之加/摘）。
@@ -2208,7 +2221,7 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     return;
   }
   await ensureFreshClaudeOAuth(); // Claude 订阅 OAuth 快过期则先静默续期，避免本轮请求 401
-  await ensureHostedProviderReady(); // 无为托管平台：注入新鲜无为 token 为网关 key
+  await ensureHostedProviderReady(useId); // 无为托管平台：只给这个即将开跑的会话注入新鲜无为 token 为网关 key
   // 每轮开跑前刷新系统提示词，让上一轮 remember 写入的记忆立即生效(日报等场景用 sysOverride 注入聚合内容)
   agent.setSystem(sysOverride ?? buildSysPrompt(cwd, modelLabel, loadSettings()?.providerId));
   const ac = new AbortController();
@@ -2598,6 +2611,7 @@ ipcMain.on("session:delete", (_e, id: string) => {
   runs.delete(id);
   deleteSession(id);
   agents.delete(id);
+  backendBySid.delete(id);
   if (currentId === id) {
     const list = listSessions();
     currentId = list[0]?.id ?? randomUUID();
