@@ -39,6 +39,10 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.ico
+  # 关闭 electron-updater 的 Windows 验签：从「未签名(≤1.6.19)」升到「EV 签名(1.6.20+)」时，
+  # 默认验签会因发布者不匹配而静默失败 → 用户永远收不到更新提示。安装包完整性仍由 latest.yml 的
+  # sha512 校验保证（下载源是自家 OSS + HTTPS），关掉发布者验签只是让签名切换/证书续期不再卡更新。
+  verifyUpdateCodeSignature: false
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

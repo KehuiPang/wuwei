@@ -6141,6 +6141,8 @@ export function App() {
                 onClick={(e) => {
                   // 访客门禁：未登录且当前不是免费体验 → 点模型也引导登录
                   if (!wuwei && !curPreset?.anon) { setShowLoginIntro(true); return; }
+                  // 打开切换器时重新拉一次后台目录：后台上新/下架模型(如豆包上线、牛来下架)即时可见，不用重启
+                  if (!showModelMenu) window.wuwei.wuweiCatalog?.().then((c) => setCatalog(c && c.length ? c : null)).catch(() => {});
                   openMqMenu(e);
                   setShowModelMenu((v) => !v);
                 }}

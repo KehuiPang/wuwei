@@ -3519,11 +3519,28 @@ function setupUpdater(): void {
     send("evt:update-downloaded", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
   });
   autoUpdater.on("error", (e) => log("updater", "更新出错", String(e?.message || e)));
+  cleanOldUpdaterCache(); // 清理旧版本下载残留，只保留最新一个安装包（用户反馈旧缓存囤积）
   // 启动后延迟自动查一次（静默；有新版即等待下载完成后主动推「就绪」，不依赖原生 update-downloaded 事件）
   setTimeout(() => { void checkAndPrepareUpdate(); }, 8000);
   // 之后每 5min 轮询一次更新源：发版后老用户最迟 5 分钟就能收到「新版就绪」提示，不用等重启。
   // checkAndPrepareUpdate 内部已吞错(离线/超时静默跳过)，轮询无副作用；发现新版会自动后台下载并推「升级重启」。
   setInterval(() => { void checkAndPrepareUpdate(); }, 5 * 60 * 1000);
+}
+
+// 清理 electron-updater 下载缓存：只保留最新(改动时间最新)的一个安装包，删掉旧版本残留。
+// 缓存目录 = %LOCALAPPDATA%/wuwei-updater/pending（updaterCacheDirName=wuwei-updater，见 app-update.yml）。
+function cleanOldUpdaterCache(): void {
+  try {
+    const base = process.env.LOCALAPPDATA || join(app.getPath("home"), "AppData", "Local");
+    const dir = join(base, "wuwei-updater", "pending");
+    if (!existsSync(dir)) return;
+    const files = readdirSync(dir)
+      .filter((f) => /\.(exe|dmg|zip|AppImage|deb|blockmap)$/i.test(f))
+      .map((f) => ({ f, t: statSync(join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t);
+    for (const { f } of files.slice(1)) { try { unlinkSync(join(dir, f)); } catch { /* 单个删失败忽略 */ } }
+    if (files.length > 1) log("updater", `清理旧更新缓存 ${files.length - 1} 个，保留最新`);
+  } catch { /* 清理失败不影响更新 */ }
 }
 
 // 检查更新 + 等待下载完成（已缓存则立即完成）后主动推「就绪」。返回 {available, downloaded, version, notes}。
