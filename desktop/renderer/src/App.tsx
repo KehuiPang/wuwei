@@ -2610,6 +2610,9 @@ export function App() {
   const [updateChipHidden, setUpdateChipHidden] = useState<string>(() => { try { return localStorage.getItem("wuwei_dismissed_update_chip") || ""; } catch { return ""; } });
   const [dlProgress, setDlProgress] = useState<{ percent: number; bytesPerSecond: number } | null>(null); // 更新下载进度(0-100)，下载完清空
   async function refreshWuweiForShortage(message: string) {
+    // 去抖：自主推进/智能继续的会话会连续重试，每次撞余额都会调这里 → 弹窗弹好几次。
+    // 3 秒内已弹过就跳过(点「刷新余额」按钮走的是同函数，但那是用户主动、间隔一般 >3s，不受影响)。
+    if (coinShortage && Date.now() - shortageShownAt.current < 3000) return;
     // 若当前绑的是「无为托管·Claude」且已授权 Claude 订阅 → 提供一键改用订阅继续（订阅直连 Anthropic、走账号额度、不扣无为币）。
     // 托管 GPT → Codex 订阅同理，但 Codex 登录态在 ~/.codex、渲染层不易可靠判定，暂只做 Claude（正是本次触发场景）。
     let rebind: { providerId: string; model: string; label: string } | undefined;

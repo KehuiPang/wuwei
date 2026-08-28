@@ -1007,8 +1007,10 @@ function initProvider() {
   subFlag = isSub(st?.providerId) || (!st && cfg.provider === "codex");
 }
 
-// 运行时切换模型后端：保存设置、重建 provider、更新所有会话 Agent
-function applySettings(sIn: Settings) {
+// 运行时切换模型后端：保存设置、重建 provider、更新所有会话 Agent。
+// forceSid：用户在底栏「显式切换」当前会话的平台/模型时传当前会话 id —— 该会话即使正在跑/智能继续
+// 也强制换 provider(否则它会继续用旧平台，出现"选了 Claude 订阅却还扣无为币"的 bug)；其余正在跑的会话仍不动。
+function applySettings(sIn: Settings, forceSid?: string) {
   // 合并到磁盘现有配置:调用方只需传自己要改的字段,其余(会话提醒/保留条数/输出方式/主题/app 等
   // 各走独立 IPC 存的设置)一律保留、不被整体替换覆盖。显式传 undefined 仍可清字段(切平台清 key 用)。
   const prev: Partial<Settings> = loadSettings() || {};
@@ -1033,11 +1035,13 @@ function applySettings(sIn: Settings) {
     (prev.oauthToken || "") !== (s.oauthToken || "") || (prev.apiKey || "") !== (s.apiKey || "");
   const credRefreshOnly = sameBackend && credChanged;
   for (const [sid, a] of agents) {
-    // 正在跑的会话绝不换 provider/系统提示：否则在别的会话切模型(含每会话绑定自动切)会把
-    // 这个正在跑的会话(如订阅版自主推进中)从它自己的模型换掉→下一步用了别的模型→撞余额/报错中断。
-    // 它跑完后下次轮到它(startTurn 前会按会话绑定重建)自然会用回自己的模型。
-    // 智能继续中的会话(contSessions)两步之间会短暂离开 runs，也一并跳过，避免那个空隙被切模型中断
-    if (runs.has(sid) || contSessions.has(sid)) {
+    // 用户对「当前会话」的显式切换(forceSid) → 即使它正在跑/智能继续也强制换：这是用户主动要求，
+    // 不换的话它会继续用旧平台(如仍走无为托管扣无为币，而用户以为已切到 Claude 订阅)。
+    const forcedActive = !!forceSid && sid === forceSid;
+    // 其余正在跑的会话绝不换 provider/系统提示：否则在别的会话切模型会把这个正在跑的会话(如订阅版
+    // 自主推进中)从它自己的模型换掉→下一步用了别的模型→撞余额/报错中断。智能继续(contSessions)两步
+    // 之间会短暂离开 runs，也一并跳过。
+    if ((runs.has(sid) || contSessions.has(sid)) && !forcedActive) {
       // 例外：纯凭证刷新(同平台同模型、只是 token/key 变)时，也给正在跑的会话热更带新 token 的
       // provider(只换 token、不动模型/系统提示)，修复"token 过期重新授权后正在重试的会话一直报未授权"。
       if (credRefreshOnly) a.setProvider(provider);
@@ -2809,7 +2813,8 @@ ipcMain.on("settings:set-secrets-prompt", (_e, text: string | null) => {
 
 ipcMain.on("settings:set", (_e, s: Settings) => {
   try {
-    applySettings(s);
+    // 显式切换：强制应用到当前活动会话(即使它正在智能继续)，避免"切了平台但正在跑的会话没跟着换"
+    applySettings(s, currentId || undefined);
     // 每会话绑定模型：把这次选的模型/平台记到当前会话，切走再切回自动用回它(新会话首轮后才有元信息)
     if (currentId && (s?.model || s?.providerId)) {
       const cfg = loadConfig();
