@@ -325,9 +325,13 @@ function friendlyError(raw: string, t: T): string {
   if (/gateway_not_configured/i.test(r)) return t("err.gatewayNotConfigured", "无为托管暂不可用（服务维护中）：请稍后再试，或切换到其它模型。");
   if (/unknown_hosted_model/i.test(r)) return t("err.unknownModel", "该无为托管模型暂不可用，请换一个模型。");
   if (/upstream_error/i.test(r)) return t("err.upstream", "模型服务商暂时不可用：请稍后重试。");
+  // 模型名不对（自建/中转端点没有该模型）：常见于切到「自建端点」却没填模型，默认名在该端点不存在。
+  // 明确指路去设置改模型名，而不是甩一句 "model 'xxx' not found 404"。
+  if (/no such model|model[\s'"]*[\w.\-/]*[\s'"]*(not found|does not exist)|model_not_found|unknown[_ ]model|invalid model/i.test(r))
+    return t("err.modelNotFound", "出错：当前端点没有这个模型，请在设置里把模型名改成该平台/端点支持的名称。");
   if (/gateway_error[\s\S]*(invalid_token|no_token)/i.test(r))
     return t("err.tokenExpired", "无为账号登录已过期：请重新登录后再用托管模型。");
-  if (/authentication method|apiKey or authToken|x-api-key|unauthorized|\b401\b|invalid.*key|api key/i.test(r))
+  if (/authentication method|apiKey or authToken|x-api-key|unauthorized|\b401\b|invalid.*key|api key|no credentials|isn't authorized|not authorized|未配置凭证/i.test(r))
     return t("err.auth", "出错：当前模型未授权或缺少凭证（API Key / 订阅授权），请先完成授权。");
   // 上下文超限：必须排在限流规则之前。服务端原文常含 "exceed"，会被下面的 429 规则误吞成「触发限流」，
   // 于是用户干等半天也没用——真正的解法是开新会话或删消息。能解析出数字就把「已用/上限」摆出来。
@@ -383,7 +387,7 @@ function keyRejected(reason: string): boolean {
 
 // 报错文案是否属于「缺鉴权」（据此显示一键授权条；兼容英文原文与翻译后的中文）
 function isAuthErrorText(text: string): boolean {
-  return /authentication method|apiKey or authToken|x-api-key|unauthorized|401|缺少模型凭证|未初始化|未授权|缺少凭证|授权/i.test(
+  return /authentication method|apiKey or authToken|x-api-key|unauthorized|401|no credentials|isn't authorized|not authorized|缺少模型凭证|未初始化|未授权|未配置凭证|缺少凭证|授权/i.test(
     text,
   );
 }
@@ -2903,6 +2907,12 @@ export function App() {
     try {
       const r = await window.wuwei.checkConn();
       setConn(r);
+      // 需登录/配 Key 的平台(非托管)一旦红灯且属「缺凭证/未授权」→ 主动亮一键授权引导条，
+      // 别让用户对着红灯反复重试却不知道要先登录(线上见过选 Codex 没登录 ChatGPT 就卡死循环)。
+      if (r.status === "red" && curPreset && !curPreset.hosted && isAuthErrorText(r.reason || "")) {
+        setNeedAuth(true);
+        setAuthDismissed(false);
+      }
       // 产品行为埋点：模型连通检测结果(green=通/其它=不通)，诊断「选了模型能不能用」
       void window.wuwei.track?.("model_connect", { ok: r.status === "green", status: r.status }, r.reason?.slice(0, 500));
     } catch {
@@ -3418,8 +3428,13 @@ export function App() {
             if (last && last.type === "notice" && last.text === friendly) return p;
             return [...p, { type: "notice", text: friendly }];
           });
+          // 订阅平台(Codex/Claude 订阅)没登录时，上游常回 404「page not found」/ 未授权——不是标准 401，
+          // 走不到 isAuthErrorText 就只甩一句生僻报错，用户不知道要登录。这里补判：订阅平台 + 连接类失败 → 也当缺授权。
+          const subNoLogin =
+            (curPreset?.kind === "codex" || curPreset?.kind === "anthropic-oauth") &&
+            /\b404\b|not found|page not found|no credentials|isn't authorized|not authorized/i.test(rawMsg);
           // 鉴权类错误：授权条常驻(重置手动关闭态，让它重新出现)；灯转红/黄
-          if (isAuthErrorText(friendly)) {
+          if (isAuthErrorText(friendly) || subNoLogin) {
             setNeedAuth(true);
             setAuthDismissed(false);
             setConn({ status: "red", reason: friendly });
@@ -5843,6 +5858,23 @@ export function App() {
                     <button onClick={() => setShowSettings(true)}>{lang === "en" ? "Set key in Settings" : "去设置填 Key"}</button>
                   </div>
                 </>
+              )}
+              {/* 逃生入口：不想现在登录/配 Key 的用户，一键切到「免费体验（免登录）」先把产品跑起来，
+                  避免对着红灯反复重试却走不下去(线上见过选订阅平台没登录就卡死)。当前已是免费体验则不显示。 */}
+              {curProviderId !== "wuwei-free" && (
+                <div style={{ marginTop: 6 }}>
+                  <button
+                    onClick={() => {
+                      const free = PRESETS.find((x) => x.id === "wuwei-free");
+                      if (free) void quickProvider(free);
+                      setNeedAuth(false);
+                      setAuthDismissed(false);
+                    }}
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", opacity: 0.75, textDecoration: "underline", fontSize: "inherit" }}
+                  >
+                    {lang === "en" ? "or try the free tier first (no login) →" : "或先免费体验（无需登录）→"}
+                  </button>
+                </div>
               )}
             </div>
           )}
