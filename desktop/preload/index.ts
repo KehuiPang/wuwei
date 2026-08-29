@@ -278,6 +278,9 @@ const api = {
   // 客服留言：留言内容 + 图片(data URL) + 联系方式 → 后端(wuwei-site 留言管理可见)
   submitSupportMessage: (payload: { message: string; contact: string; images: string[] }) =>
     ipcRenderer.invoke("support:message", payload) as Promise<{ ok?: boolean; error?: string }>,
+  // 在线客服 thread：拉当前用户与客服的完整对话 + 未读数（seen=true 清未读）
+  supportThread: (seen?: boolean) =>
+    ipcRenderer.invoke("support:thread", seen) as Promise<{ messages: { id: number; sender: string; message: string; images: string[]; at: string }[]; unread: number }>,
   // 每日签到（幂等）：返回 {success, amount, balanceAfter, streak, message} 或 null
   checkin: () =>
     ipcRenderer.invoke("account:checkin") as Promise<{ success?: boolean; amount?: number; balanceAfter?: number; streak?: number; message?: string } | null>,

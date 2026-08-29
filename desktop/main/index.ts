@@ -3644,6 +3644,23 @@ ipcMain.handle(
     }
   },
 );
+// 在线客服 thread：拉当前用户与客服的完整对话 + 未读数。seen=true 时清未读。未登录 → 空。
+ipcMain.handle("support:thread", async (_e, seen?: boolean) => {
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const sess = loadWuweiSession();
+    if (!sess) return { messages: [], unread: 0 };
+    const res = await fetch(`${site}/api/support/thread${seen ? "?seen=1" : ""}`, {
+      headers: { Authorization: `Bearer ${sess.accessToken}`, "X-Device-Id": getDeviceId() },
+    });
+    const j = (await res.json().catch(() => null)) as { messages?: unknown[]; unread?: number } | null;
+    if (!res.ok || !j) return { messages: [], unread: 0 };
+    return { messages: j.messages ?? [], unread: j.unread ?? 0 };
+  } catch (e) {
+    log("support", "thread 拉取异常", String(e));
+    return { messages: [], unread: 0 };
+  }
+});
 // 消息中心：拉取当前用户消息 + 未读数。未登录 → 空列表。带 token 后端按 user_id 过滤。
 ipcMain.handle("messages:list", async () => {
   const empty = { messages: [], unread: 0 };

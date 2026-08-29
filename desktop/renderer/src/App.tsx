@@ -775,7 +775,7 @@ const WECHAT_PAY_ENABLED = false;
 // 客服微信号（二维码 WECHAT_CS_QR 从 ./wechatCsQr 引入，默认显示大成微信码）。
 const WECHAT_CS_ID = "dacheng8803";
 // 联系客服弹窗（共享）：支付遇到问题 / 账号菜单都可打开。扫码或搜号加客服微信，加不上可点「直接留言」进留言表单。
-function ContactSupportModal({ onClose, onLeaveMessage, t }: { onClose: () => void; onLeaveMessage: () => void; t: T }) {
+function ContactSupportModal({ onClose, onLeaveMessage, onChat, t }: { onClose: () => void; onLeaveMessage: () => void; onChat?: () => void; t: T }) {
   const [copied, setCopied] = useState(false);
   const copyId = () => {
     void navigator.clipboard
@@ -795,6 +795,16 @@ function ContactSupportModal({ onClose, onLeaveMessage, t }: { onClose: () => vo
           <h2>{t("pay.support.title", "联系客服")}</h2>
         </div>
         <div style={{ padding: "0 30px 28px" }}>
+        {onChat && (
+          // 在线对话（推荐）：实时收发，客服回复即刻显示
+          <button
+            onClick={onChat}
+            className="allow"
+            style={{ display: "block", width: "100%", border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, borderRadius: 10, padding: "11px 0", cursor: "pointer", marginBottom: 16 }}
+          >
+            {getLang() === "en" ? "Chat with support (live)" : "在线对话（实时收发）"}
+          </button>
+        )}
         {getLang() === "en" ? (
           // 英文版：海外不用微信，只给留言反馈入口
           <>
@@ -865,6 +875,92 @@ function ContactSupportModal({ onClose, onLeaveMessage, t }: { onClose: () => vo
             </p>
           </>
         )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// 在线客服：与客服的实时对话窗（轮询 support:thread）。用户发文字+图片，客服后台回复即刻显示在这里。
+// 需登录才能收到 threaded 回复（未登录仍可发，走留言，但回复不回流）。
+function SupportChatModal({ onClose, loggedIn, t }: { onClose: () => void; loggedIn: boolean; t: T }) {
+  const en = getLang() === "en";
+  const [msgs, setMsgs] = useState<{ id: number; sender: string; message: string; images: string[]; at: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [imgs, setImgs] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    const r = await window.wuwei.supportThread(true).catch(() => null);
+    if (r) { setMsgs(r.messages); }
+    setLoaded(true);
+  };
+  useEffect(() => {
+    if (!loggedIn) { setLoaded(true); return; }
+    void load();
+    const iv = setInterval(() => void load(), 4000);
+    return () => clearInterval(iv);
+  }, [loggedIn]);
+  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs.length, sending]);
+
+  const pickImgs = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).slice(0, 4 - imgs.length).forEach((f) => {
+      const rd = new FileReader();
+      rd.onload = () => setImgs((p) => (p.length >= 4 ? p : [...p, String(rd.result)]));
+      rd.readAsDataURL(f);
+    });
+  };
+  const send = async () => {
+    const text = input.trim();
+    if ((!text && imgs.length === 0) || sending) return;
+    setSending(true);
+    const r = await window.wuwei.submitSupportMessage({ message: text || (en ? "(image)" : "（图片）"), contact: "", images: imgs }).catch(() => null);
+    setSending(false);
+    if (r?.ok !== false) { setInput(""); setImgs([]); void load(); }
+  };
+
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
+      <div className="pay-card sc-card" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="sc-head">
+          <PayEnso size={30} />
+          <div><div className="sc-title">{en ? "Support chat" : "在线客服"}</div><div className="sc-sub">{en ? "We'll reply as soon as we can" : "客服会尽快回复你"}</div></div>
+        </div>
+        <div className="sc-list" ref={listRef}>
+          {!loaded ? (
+            <div className="sc-empty">{en ? "Loading…" : "加载中…"}</div>
+          ) : msgs.length === 0 ? (
+            <div className="sc-empty">
+              {en ? "Send us a message — describe your issue, attach a screenshot if it helps." : "有问题直接说 —— 可附上截图，客服会尽快回复。"}
+              {!loggedIn && <div className="sc-empty-hint">{en ? "Sign in so our replies show up here." : "登录后，客服的回复会显示在这里。"}</div>}
+            </div>
+          ) : (
+            msgs.map((m) => (
+              <div key={m.id} className={"sc-row " + (m.sender === "admin" ? "in" : "out")}>
+                <div className="sc-bubble">
+                  {m.message && <div className="sc-txt">{m.message}</div>}
+                  {m.images?.map((src, i) => (<img key={i} src={src} className="sc-img" alt="" />))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        {imgs.length > 0 && (
+          <div className="sc-imgrow">{imgs.map((src, i) => (<div key={i} className="sc-thumb"><img src={src} alt="" /><button onClick={() => setImgs((p) => p.filter((_, j) => j !== i))}>×</button></div>))}</div>
+        )}
+        <div className="sc-input">
+          <button className="sc-attach" title={en ? "Attach image" : "发图片"} onClick={() => fileRef.current?.click()}>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49" /></svg>
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { pickImgs(e.target.files); e.currentTarget.value = ""; }} />
+          <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={en ? "Type a message…" : "输入消息…"} rows={1}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
+          <button className="sc-send" onClick={() => void send()} disabled={sending || (!input.trim() && imgs.length === 0)}>{en ? "Send" : "发送"}</button>
         </div>
       </div>
     </div>
@@ -2671,6 +2767,7 @@ export function App() {
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
   const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
+  const [showSupportChat, setShowSupportChat] = useState(false); // 在线客服实时对话窗
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」/ 账号菜单「留言反馈」进入）
   const [leaveMsgFromSupport, setLeaveMsgFromSupport] = useState(false); // 区分来源：从客服弹窗进=显返回；从菜单直接进=无返回
   const [showMsgCenter, setShowMsgCenter] = useState(false); // 消息中心弹窗
@@ -5085,7 +5182,7 @@ export function App() {
                                 onClick={() => {
                                   void window.wuwei.track?.("menu_item_click", { item: "support" });
                                   setShowAcctMenu(false);
-                                  setShowSupport(true);
+                                  setShowSupportChat(true); // 账号菜单「联系客服」直接开在线对话窗（实时收发）
                                 }}
                               >
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -7114,12 +7211,16 @@ export function App() {
         <ContactSupportModal
           t={t}
           onClose={() => setShowSupport(false)}
+          onChat={() => { setShowSupport(false); setShowSupportChat(true); }}
           onLeaveMessage={() => {
             setShowSupport(false);
             setLeaveMsgFromSupport(true);
             setShowLeaveMsg(true);
           }}
         />
+      )}
+      {showSupportChat && (
+        <SupportChatModal t={t} loggedIn={!!wuwei} onClose={() => setShowSupportChat(false)} />
       )}
       {/* 留言表单：客服弹窗点「直接留言」进入(带返回)；账号菜单「留言反馈」直接进入(无返回) */}
       {showLeaveMsg && (
