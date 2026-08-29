@@ -3650,7 +3650,7 @@ ipcMain.handle("support:thread", async (_e, seen?: boolean) => {
     const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
     const sess = loadWuweiSession();
     if (!sess) return { messages: [], unread: 0 };
-    const res = await fetch(`${site}/api/support/thread${seen ? "?seen=1" : ""}`, {
+    const res = await fetch(`${site}/api/support/chat${seen ? "?seen=1" : ""}`, {
       headers: { Authorization: `Bearer ${sess.accessToken}`, "X-Device-Id": getDeviceId() },
     });
     const j = (await res.json().catch(() => null)) as { messages?: unknown[]; unread?: number } | null;
@@ -3659,6 +3659,25 @@ ipcMain.handle("support:thread", async (_e, seen?: boolean) => {
   } catch (e) {
     log("support", "thread 拉取异常", String(e));
     return { messages: [], unread: 0 };
+  }
+});
+// 在线客服：发一条实时消息(独立于留言)。需登录。
+ipcMain.handle("support:chat-send", async (_e, payload: { message: string; images: string[] }) => {
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const sess = loadWuweiSession();
+    if (!sess) return { ok: false, error: "not_logged_in" };
+    const res = await fetch(`${site}/api/support/chat`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sess.accessToken}`, "Content-Type": "application/json", "X-Device-Id": getDeviceId() },
+      body: JSON.stringify({ message: payload?.message || "", images: Array.isArray(payload?.images) ? payload.images.slice(0, 4) : [] }),
+    });
+    const j = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    if (!res.ok || !j) return { ok: false, error: j?.error || `http_${res.status}` };
+    return { ok: j.ok !== false, error: j.error };
+  } catch (e) {
+    log("support", "chat 发送异常", String(e));
+    return { ok: false, error: "network" };
   }
 });
 // 消息中心：拉取当前用户消息 + 未读数。未登录 → 空列表。带 token 后端按 user_id 过滤。

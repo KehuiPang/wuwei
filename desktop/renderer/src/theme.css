@@ -3899,7 +3899,7 @@ body {
 .pay-bal-v small { font-size: 13px; color: #8a9099; font-weight: 600; margin-left: 4px; }
 /* ¥1/$1 体验弹窗：宽版两栏（左二维码/付款 · 右套餐详情） */
 .pay-card.pay-card-wide { width: 640px; }
-.trial-rebind { margin: 0 30px 14px; }
+.pay-opt.trial-rebind { box-sizing: border-box; width: calc(100% - 60px); margin: 0 30px 14px; }
 .trial-grid { display: flex; gap: 18px; margin: 4px 30px 18px; align-items: stretch; }
 .trial-pay { flex: 0 0 236px; min-height: 236px; box-sizing: border-box; border-radius: 16px; background: #f4f6f8; border: 1px solid rgba(22, 25, 30, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
 .trial-scan { font-size: 12px; color: #5a616b; text-align: center; line-height: 1.5; }
@@ -3932,17 +3932,27 @@ body {
   .trial-pay { flex-basis: auto; min-height: 200px; }
 }
 /* 在线客服实时对话窗 */
-.pay-card.sc-card { width: 440px; display: flex; flex-direction: column; max-height: min(620px, calc(100vh - 40px)); }
-.sc-head { display: flex; align-items: center; gap: 10px; padding: 20px 26px 12px; border-bottom: 1px solid rgba(22, 25, 30, 0.07); }
-.sc-title { font-size: 16px; font-weight: 750; color: #16191e; }
-.sc-sub { font-size: 11.5px; color: #8a9099; margin-top: 1px; }
+.pay-card.sc-card { width: 440px; height: min(600px, calc(100vh - 56px)); display: flex; flex-direction: column; overflow: hidden; border: none; border-radius: 10px; }
+.sc-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: linear-gradient(135deg, #2a2f37, #16191e); color: #fff; }
+.sc-ava { position: relative; width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); color: #fff; display: grid; place-items: center; flex: 0 0 auto; }
+.sc-dot { position: absolute; right: 0; bottom: 0; width: 10px; height: 10px; border-radius: 50%; background: #3ecf8e; border: 2px solid #1a1e25; }
+.sc-head-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+.sc-head .sc-title { font-size: 15px; font-weight: 700; color: #fff; line-height: 1.1; }
+.sc-head .sc-sub { font-size: 11px; color: rgba(255, 255, 255, 0.55); display: flex; align-items: center; gap: 5px; line-height: 1.1; }
+.sc-online { width: 6px; height: 6px; border-radius: 50%; background: #3ecf8e; display: inline-block; flex: 0 0 auto; }
+.sc-close { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; border: none; background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.75); cursor: pointer; display: grid; place-items: center; }
+.sc-close:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
 .sc-list { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; background: #f7f8fa; min-height: 180px; }
 .sc-empty { margin: auto; text-align: center; color: #8a9099; font-size: 12.5px; line-height: 1.6; max-width: 260px; padding: 20px 0; }
 .sc-empty-hint { margin-top: 8px; font-size: 11.5px; color: #c05f3c; }
 .sc-row { display: flex; }
 .sc-row.out { justify-content: flex-end; }
 .sc-row.in { justify-content: flex-start; }
-.sc-bubble { max-width: 76%; padding: 8px 11px; border-radius: 13px; font-size: 13px; line-height: 1.5; word-break: break-word; }
+.sc-col { display: flex; flex-direction: column; max-width: 78%; }
+.sc-row.out .sc-col { align-items: flex-end; }
+.sc-row.in .sc-col { align-items: flex-start; }
+.sc-time { font-size: 10.5px; color: #a8adb4; margin-top: 3px; padding: 0 3px; }
+.sc-bubble { max-width: 100%; padding: 8px 11px; border-radius: 13px; font-size: 13px; line-height: 1.5; word-break: break-word; }
 .sc-row.out .sc-bubble { background: #c05f3c; color: #fff; border-bottom-right-radius: 4px; }
 .sc-row.in .sc-bubble { background: #fff; color: #16191e; border: 1px solid rgba(22, 25, 30, 0.09); border-bottom-left-radius: 4px; }
 .sc-txt { white-space: pre-wrap; }
@@ -3958,6 +3968,18 @@ body {
 .sc-input textarea:focus { border-color: rgba(192, 95, 60, 0.5); }
 .sc-send { flex: 0 0 auto; padding: 0 16px; height: 34px; border-radius: 10px; border: none; background: #c05f3c; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
 .sc-send:disabled { opacity: 0.5; cursor: default; }
+.sc-lightbox { position: fixed; inset: 0; z-index: 1400; background: rgba(0, 0, 0, 0.82); display: flex; align-items: center; justify-content: center; cursor: zoom-out; padding: 32px; }
+.sc-lightbox img { max-width: 92%; max-height: 92%; object-fit: contain; border-radius: 8px; box-shadow: 0 10px 44px rgba(0, 0, 0, 0.5); cursor: default; }
+.sc-lb-close { position: fixed; top: 18px; right: 20px; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.14); color: #fff; cursor: pointer; display: grid; place-items: center; }
+.sc-lb-close:hover { background: rgba(255, 255, 255, 0.26); }
+/* 右下角悬浮客服球 */
+.sc-launcher-wrap { position: fixed; right: 22px; bottom: 22px; z-index: 45; }
+.sc-launcher-wrap:hover .sc-launcher-x { opacity: 1; pointer-events: auto; }
+.sc-launcher { position: relative; width: 50px; height: 50px; border-radius: 50%; border: none; background: linear-gradient(135deg, #2a2f37, #16191e); color: #fff; cursor: pointer; display: grid; place-items: center; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32); transition: transform 0.12s; }
+.sc-launcher:hover { transform: translateY(-2px); }
+.sc-launcher-dot { position: absolute; top: -3px; right: -3px; min-width: 18px; height: 18px; padding: 0 4px; box-sizing: border-box; border-radius: 9px; background: #e5484d; color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; border: 2px solid var(--bg, #0e0f12); }
+.sc-launcher-x { position: absolute; top: -6px; left: -6px; width: 20px; height: 20px; border-radius: 50%; border: none; background: #4a5058; color: #fff; cursor: pointer; display: grid; place-items: center; opacity: 0; pointer-events: none; transition: opacity 0.12s; }
+.sc-launcher-x:hover { background: #5a616b; }
 /* 弹窗两选项 */
 .pay-opts { padding: 0 26px 8px; display: flex; flex-direction: column; gap: 13px; }
 .pay-opt {

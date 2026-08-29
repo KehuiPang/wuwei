@@ -281,6 +281,9 @@ const api = {
   // 在线客服 thread：拉当前用户与客服的完整对话 + 未读数（seen=true 清未读）
   supportThread: (seen?: boolean) =>
     ipcRenderer.invoke("support:thread", seen) as Promise<{ messages: { id: number; sender: string; message: string; images: string[]; at: string }[]; unread: number }>,
+  // 在线客服：发一条实时消息（独立于留言）
+  supportChatSend: (payload: { message: string; images: string[] }) =>
+    ipcRenderer.invoke("support:chat-send", payload) as Promise<{ ok?: boolean; error?: string }>,
   // 每日签到（幂等）：返回 {success, amount, balanceAfter, streak, message} 或 null
   checkin: () =>
     ipcRenderer.invoke("account:checkin") as Promise<{ success?: boolean; amount?: number; balanceAfter?: number; streak?: number; message?: string } | null>,

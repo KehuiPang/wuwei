@@ -890,12 +890,16 @@ function SupportChatModal({ onClose, loggedIn, t }: { onClose: () => void; logge
   const [imgs, setImgs] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null); // 点开看大图
   const listRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const tmpId = useRef(-1); // 乐观消息临时 id(负数，避免与真实 id 撞)
 
-  const load = async () => {
+  const load = async (dropTemp = false) => {
     const r = await window.wuwei.supportThread(true).catch(() => null);
-    if (r) { setMsgs(r.messages); }
+    // dropTemp=true(发送成功后)：直接用服务器权威列表，撤掉乐观占位，避免重复。
+    // dropTemp=false(定时轮询)：保留尚未回流的乐观条(负 id)，避免刚发那条被刷新闪掉。
+    if (r) setMsgs((prev) => (dropTemp ? r.messages : [...r.messages, ...prev.filter((m) => m.id < 0)]));
     setLoaded(true);
   };
   useEffect(() => {
@@ -904,9 +908,9 @@ function SupportChatModal({ onClose, loggedIn, t }: { onClose: () => void; logge
     const iv = setInterval(() => void load(), 4000);
     return () => clearInterval(iv);
   }, [loggedIn]);
-  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs.length, sending]);
+  useEffect(() => { const el = listRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs.length, sending, imgs.length]);
 
-  const pickImgs = (files: FileList | null) => {
+  const pickImgs = (files: ArrayLike<File> | null) => {
     if (!files) return;
     Array.from(files).slice(0, 4 - imgs.length).forEach((f) => {
       const rd = new FileReader();
@@ -917,19 +921,38 @@ function SupportChatModal({ onClose, loggedIn, t }: { onClose: () => void; logge
   const send = async () => {
     const text = input.trim();
     if ((!text && imgs.length === 0) || sending) return;
-    setSending(true);
-    const r = await window.wuwei.submitSupportMessage({ message: text || (en ? "(image)" : "（图片）"), contact: "", images: imgs }).catch(() => null);
+    // 乐观更新：立刻上屏，不等服务器。清空输入 → 手感即时。
+    const optimistic = { id: tmpId.current--, sender: "user", message: text, images: imgs, at: new Date().toISOString() };
+    setMsgs((p) => [...p, optimistic]);
+    setInput(""); setImgs([]); setSending(true);
+    const r = await window.wuwei.supportChatSend({ message: text || (en ? "(image)" : "（图片）"), images: optimistic.images }).catch(() => null);
     setSending(false);
-    if (r?.ok !== false) { setInput(""); setImgs([]); void load(); }
+    if (r?.ok !== false) {
+      void load(true); // 拉权威列表，撤掉乐观占位(此时服务器已有这条)
+    } else {
+      // 发送失败：撤回该乐观条 + 回填内容，让用户可重发
+      setMsgs((p) => p.filter((m) => m.id !== optimistic.id));
+      setInput(text); setImgs(optimistic.images);
+    }
   };
 
   return (
     <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
       <div className="pay-card sc-card" onClick={(e) => e.stopPropagation()}>
-        <PayCloseX onClick={onClose} />
         <div className="sc-head">
-          <PayEnso size={30} />
-          <div><div className="sc-title">{en ? "Support chat" : "在线客服"}</div><div className="sc-sub">{en ? "We'll reply as soon as we can" : "客服会尽快回复你"}</div></div>
+          <div className="sc-ava">
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 13v-1a8 8 0 0 1 16 0v1" /><rect x="2.5" y="13" width="4" height="6" rx="1.6" /><rect x="17.5" y="13" width="4" height="6" rx="1.6" /><path d="M20 19a4 4 0 0 1-4 4h-2" />
+            </svg>
+            <span className="sc-dot" />
+          </div>
+          <div className="sc-head-txt">
+            <div className="sc-title">{en ? "Wuwei Support" : "无为客服"}</div>
+            <div className="sc-sub"><span className="sc-online" />{en ? "Online · usually replies in minutes" : "在线 · 通常几分钟内回复"}</div>
+          </div>
+          <button className="sc-close" onClick={onClose} aria-label="close">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
         </div>
         <div className="sc-list" ref={listRef}>
           {!loaded ? (
@@ -942,27 +965,42 @@ function SupportChatModal({ onClose, loggedIn, t }: { onClose: () => void; logge
           ) : (
             msgs.map((m) => (
               <div key={m.id} className={"sc-row " + (m.sender === "admin" ? "in" : "out")}>
-                <div className="sc-bubble">
+                <div className="sc-bubble" title={relTime(new Date(m.at).getTime(), Date.now())}>
                   {m.message && <div className="sc-txt">{m.message}</div>}
-                  {m.images?.map((src, i) => (<img key={i} src={src} className="sc-img" alt="" />))}
+                  {m.images?.map((src, i) => (<img key={i} src={src} className="sc-img" alt="" onClick={() => setPreview(src)} title={en ? "View" : "点开看大图"} />))}
                 </div>
               </div>
             ))
           )}
         </div>
         {imgs.length > 0 && (
-          <div className="sc-imgrow">{imgs.map((src, i) => (<div key={i} className="sc-thumb"><img src={src} alt="" /><button onClick={() => setImgs((p) => p.filter((_, j) => j !== i))}>×</button></div>))}</div>
+          <div className="sc-imgrow">{imgs.map((src, i) => (<div key={i} className="sc-thumb"><img src={src} alt="" onClick={() => setPreview(src)} /><button onClick={() => setImgs((p) => p.filter((_, j) => j !== i))}>×</button></div>))}</div>
         )}
         <div className="sc-input">
           <button className="sc-attach" title={en ? "Attach image" : "发图片"} onClick={() => fileRef.current?.click()}>
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.49-8.49" /></svg>
           </button>
           <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => { pickImgs(e.target.files); e.currentTarget.value = ""; }} />
-          <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={en ? "Type a message…" : "输入消息…"} rows={1}
+          <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={en ? "Type a message… (paste screenshots directly)" : "输入消息…（可直接粘贴截图）"} rows={1}
+            onPaste={(e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              const files: File[] = [];
+              for (let i = 0; i < items.length; i++) { const it = items[i]; if (it.type.startsWith("image/")) { const f = it.getAsFile(); if (f) files.push(f); } }
+              if (files.length) { e.preventDefault(); pickImgs(files); }
+            }}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }} />
           <button className="sc-send" onClick={() => void send()} disabled={sending || (!input.trim() && imgs.length === 0)}>{en ? "Send" : "发送"}</button>
         </div>
       </div>
+      {preview && (
+        <div className="sc-lightbox" onClick={(e) => { e.stopPropagation(); setPreview(null); }}>
+          <img src={preview} alt="" onClick={(e) => e.stopPropagation()} />
+          <button className="sc-lb-close" onClick={(e) => { e.stopPropagation(); setPreview(null); }} aria-label="close">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1496,14 +1534,13 @@ function TrialPayModal({
 }) {
   const price = en ? "$1" : "¥1";
   const perks = en
-    ? ["All hosted models — Claude / GPT / Gemini / GLM …", "250 credits weekly quota", "Daily check-in: +20 credits"]
-    : ["全部托管模型任选（Claude / GPT / Gemini / GLM …）", "每周 250 无为币托管额度", "每日签到再领 20 无为币"];
+    ? ["All hosted models (Claude / GPT / Gemini / GLM …)", "Brain network with permanent memory (remembers you across chats)", "Ample weekly hosted quota, plus daily check-in rewards"]
+    : ["全部托管模型任选（Claude / GPT / Gemini / GLM …）", "永久记忆的脑网络（跨对话记住你的偏好和项目）", "每周托管额度充足，每日签到还有奖励"];
   const [qr, setQr] = useState("");
   const [orderId, setOrderId] = useState("");
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [errMsg, setErrMsg] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
-  const [showCs, setShowCs] = useState(false);
 
   // 国内：进来即下单出支付宝码；海外不出码(走 Paddle 按钮)。
   useEffect(() => {
@@ -1589,12 +1626,9 @@ function TrialPayModal({
             <div className="trial-plan-price">{price}<small>{en ? " / 7 days" : " / 7 天"}</small></div>
             <ul className="trial-perks">{perks.map((p, i) => (<li key={i}><Check /> <span>{p}</span></li>))}</ul>
             <div className="trial-note">{en ? "One-time · first purchase only · no auto-renew" : "首购限一次 · 一次性付款 · 不自动续费"}</div>
-            <button className="trial-cs" onClick={() => (en ? onContact() : setShowCs((s) => !s))}>
+            <button className="trial-cs" onClick={onContact}>
               {en ? "Payment issue? Contact support" : "支付遇到问题？联系客服"}
             </button>
-            {showCs && !en && (
-              <div className="trial-cs-qr">{WECHAT_CS_QR ? <img src={WECHAT_CS_QR} alt="客服微信二维码" /> : null}<span>微信扫码加客服</span></div>
-            )}
           </div>
         </div>
 
@@ -2768,6 +2802,8 @@ export function App() {
   const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
   const [showSupportChat, setShowSupportChat] = useState(false); // 在线客服实时对话窗
+  const [supportUnread, setSupportUnread] = useState(0); // 客服未读回复数（悬浮球红点）
+  const [scLauncherHidden, setScLauncherHidden] = useState(() => localStorage.getItem("wuwei-sc-launcher-hidden") === "1"); // 用户关掉了悬浮球
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」/ 账号菜单「留言反馈」进入）
   const [leaveMsgFromSupport, setLeaveMsgFromSupport] = useState(false); // 区分来源：从客服弹窗进=显返回；从菜单直接进=无返回
   const [showMsgCenter, setShowMsgCenter] = useState(false); // 消息中心弹窗
@@ -2816,6 +2852,15 @@ export function App() {
     flags?: string[];
     providers?: { hidden?: string[] };
   } | null>(null);
+  // 后台轮询客服未读（不清未读）：登录 且 聊天窗未开时，每 20s 查一次，有回复亮红点
+  useEffect(() => {
+    if (!wuwei || showSupportChat) return;
+    let alive = true;
+    const check = async () => { const r = await window.wuwei.supportThread(false).catch(() => null); if (alive && r) setSupportUnread(r.unread || 0); };
+    void check();
+    const iv = setInterval(check, 20000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [wuwei, showSupportChat]);
   // 灰度开关（C2）：订阅版是否显示，完全由后端 flags 决定，默认隐藏。客户端只渲染不判定。
   const showSubscription = !!wuwei?.flags?.includes("subscription");
   const isPro = (wuwei?.membership?.tier ?? "free") !== "free"; // 会员态：脑网络等专享功能门控
@@ -7222,6 +7267,28 @@ export function App() {
       {showSupportChat && (
         <SupportChatModal t={t} loggedIn={!!wuwei} onClose={() => setShowSupportChat(false)} />
       )}
+      {/* 右下角悬浮客服球：常驻入口 + 有回复亮红点。可一键关掉(记住)，之后走账号菜单「联系客服」。 */}
+      {wuwei && !showSupportChat && !scLauncherHidden && (
+        <div className="sc-launcher-wrap">
+          <button
+            className="sc-launcher"
+            title={lang === "en" ? "Support chat" : "在线客服"}
+            onClick={() => { setSupportUnread(0); setShowSupportChat(true); }}
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 13v-1a8 8 0 0 1 16 0v1" /><rect x="2.5" y="13" width="4" height="6" rx="1.6" /><rect x="17.5" y="13" width="4" height="6" rx="1.6" /><path d="M20 19a4 4 0 0 1-4 4h-2" />
+            </svg>
+            {supportUnread > 0 && <span className="sc-launcher-dot">{supportUnread > 9 ? "9+" : supportUnread}</span>}
+          </button>
+          <button
+            className="sc-launcher-x"
+            title={lang === "en" ? "Hide (reach via account menu)" : "隐藏（之后从账号菜单「联系客服」进入）"}
+            onClick={() => { setScLauncherHidden(true); localStorage.setItem("wuwei-sc-launcher-hidden", "1"); }}
+          >
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
       {/* 留言表单：客服弹窗点「直接留言」进入(带返回)；账号菜单「留言反馈」直接进入(无返回) */}
       {showLeaveMsg && (
         <LeaveMessageModal
@@ -7344,7 +7411,7 @@ export function App() {
           }}
           onPaddle={() => { closeShortage("trial_paddle"); startEnCheckout("plan_trial"); }}
           onMore={() => { closeShortage("more"); setPlanOpen(true); }}
-          onContact={() => { closeShortage("contact"); setShowSupport(true); }}
+          onContact={() => { closeShortage("contact"); setShowSupportChat(true); }}
           onNeedLogin={() => {
             closeShortage("need_login");
             setWuwei(null);
@@ -11853,28 +11920,32 @@ function SettingsModal({
               <StopRulesSettings lang={lang} />
               <div className="app-set-hint" style={{ marginBottom: "16px" }} />
 
-              {/* AGI 板块(实验性)：默认关，开了侧栏才出现「数字婴儿」入口 */}
-              <div className="app-set-group">{lang === "en" ? "AGI (experimental)" : "AGI 板块（实验性）"}</div>
-              <div className="app-set-row" style={{ cursor: "default", marginBottom: "6px" }}>
-                <div className="app-set-text">
-                  <div className="app-set-label">{lang === "en" ? "Show AGI section (Digital Baby) in the sidebar" : "在侧边栏显示 AGI 板块（数字婴儿）"}</div>
-                  <div className="app-set-hint">
-                    {lang === "en"
-                      ? "A curiosity-driven digital baby that self-learns, grows and chats. Needs a local Python backend — set agi.babyDir & agi.python in ~/.wuwei/config.json."
-                      : "好奇心驱动、自主学习成长并能聊天的数字婴儿。依赖本地 Python 后端——需在 ~/.wuwei/config.json 配 agi.babyDir 与 agi.python。"}
+              {/* AGI 板块(实验性)：暂时隐藏（false 包裹，保留代码以便日后恢复） */}
+              {false && (
+                <>
+                  <div className="app-set-group">{lang === "en" ? "AGI (experimental)" : "AGI 板块（实验性）"}</div>
+                  <div className="app-set-row" style={{ cursor: "default", marginBottom: "6px" }}>
+                    <div className="app-set-text">
+                      <div className="app-set-label">{lang === "en" ? "Show AGI section (Digital Baby) in the sidebar" : "在侧边栏显示 AGI 板块（数字婴儿）"}</div>
+                      <div className="app-set-hint">
+                        {lang === "en"
+                          ? "A curiosity-driven digital baby that self-learns, grows and chats. Needs a local Python backend — set agi.babyDir & agi.python in ~/.wuwei/config.json."
+                          : "好奇心驱动、自主学习成长并能聊天的数字婴儿。依赖本地 Python 后端——需在 ~/.wuwei/config.json 配 agi.babyDir 与 agi.python。"}
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="app-set-toggle"
+                      defaultChecked={localStorage.getItem("wuwei-agi-enabled") === "1"}
+                      onChange={(e) => {
+                        localStorage.setItem("wuwei-agi-enabled", e.target.checked ? "1" : "0");
+                        window.dispatchEvent(new CustomEvent("wuwei-agi-toggle", { detail: e.target.checked }));
+                      }}
+                    />
                   </div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="app-set-toggle"
-                  defaultChecked={localStorage.getItem("wuwei-agi-enabled") === "1"}
-                  onChange={(e) => {
-                    localStorage.setItem("wuwei-agi-enabled", e.target.checked ? "1" : "0");
-                    window.dispatchEvent(new CustomEvent("wuwei-agi-toggle", { detail: e.target.checked }));
-                  }}
-                />
-              </div>
-              <div className="app-set-hint" style={{ marginBottom: "16px" }} />
+                  <div className="app-set-hint" style={{ marginBottom: "16px" }} />
+                </>
+              )}
             </>
           )}
 

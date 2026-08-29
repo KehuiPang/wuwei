@@ -199,6 +199,7 @@ export interface WuweiApi {
   rememberClearPassword(email: string): Promise<boolean>;
   submitSupportMessage(payload: { message: string; contact: string; images: string[] }): Promise<{ ok?: boolean; error?: string }>;
   supportThread(seen?: boolean): Promise<{ messages: { id: number; sender: string; message: string; images: string[]; at: string }[]; unread: number }>;
+  supportChatSend(payload: { message: string; images: string[] }): Promise<{ ok?: boolean; error?: string }>;
   checkin(): Promise<{ success?: boolean; amount?: number; balanceAfter?: number; streak?: number; message?: string } | null>;
   payCreate(
     sku: string,
