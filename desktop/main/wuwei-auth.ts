@@ -47,6 +47,7 @@ export interface CatalogModelDto {
   labelEn?: string | null;
   label_en?: string | null; // 兼容旧/直出 snake_case catalog 字段
   free: boolean;
+  anon?: boolean; // 未登录是否可用；false=展示但需登录(免费列表里灰置引导登录)。缺省视为 true
   badge?: string | null; // 角标（如「快」），下拉里显示，提醒用户
 }
 export interface CatalogProviderDto {

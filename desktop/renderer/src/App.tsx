@@ -3129,7 +3129,8 @@ export function App() {
   const badgeEn = (b: string) => BADGE_EN[b] ?? BADGE_EN[b.toLowerCase()] ?? (/[一-鿿]/.test(b) ? "" : b);
   const modelLabels = new Map<string, string>(); // 后台配的模型显示名(如 gpt-5.6→"GPT-5.6 Sol")，下拉里优先显示 label
   const modelLabelsEn = new Map<string, string>(); // 后台配的英文显示名(ai_model.label_en)，英文界面优先显示
-  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels, modelLabelsEn);
+  const loginReqModelIds = new Set<string>(); // 免费列表里「需登录才可用」的便宜模型 id（匿名灰置引导登录）
+  const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels, modelLabelsEn, loginReqModelIds);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerListRaw = arrangePresets(
     // 托管平台需登录可见；anon(免登录)平台未登录也可见；后台隐藏的一律不显示(供应商上下架由后台控制)
@@ -6574,15 +6575,24 @@ export function App() {
                       )}
                     </div>
                     {shownModels.length === 0 && <div className="mq-empty">{lang === "en" ? "No preset models — add one in Settings" : "无预设模型，去设置里填"}</div>}
-                    {shownModels.map((m) => (
+                    {shownModels.map((m) => {
+                      const gated = !wuwei && loginReqModelIds.has(m); // 未登录 + 需登录模型 → 灰置引导
+                      return (
                       <button
                         key={m}
                         className={"mq-item" + (m === meta.model ? " on" : "")}
-                        onClick={() => quickModel(m)}
+                        style={gated ? { opacity: 0.5 } : undefined}
+                        title={gated ? (lang === "en" ? "Sign in to use free" : "登录后可免费使用") : undefined}
+                        onClick={() => { if (gated) { setShowModelMenu(false); setShowLoginIntro(true); return; } quickModel(m); }}
                       >
                         <span>
                           {MODEL_LABEL_OVERRIDES[m] || (lang === "en" && modelLabelsEn.get(m)) || modelLabels.get(m) || m}
-                          {freeModelIds.has(m) && (
+                          {gated && (
+                            <span style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "#6b7280", color: "#fff", verticalAlign: "middle" }}>
+                              {lang === "en" ? "Sign in" : "登录可用"}
+                            </span>
+                          )}
+                          {!gated && freeModelIds.has(m) && (
                             <span
                               style={{
                                 marginLeft: 6,
@@ -6607,7 +6617,8 @@ export function App() {
                         </span>
                         {m === meta.model && <span className="mq-check">✓</span>}
                       </button>
-                    ))}
+                      );
+                    })}
                     <div className="mq-sep" />
                     <button
                       className="mq-item mq-more"
@@ -9881,6 +9892,7 @@ function mergeCatalogIntoPresets(
   badgeMap?: Map<string, string>,
   labelMap?: Map<string, string>,
   labelEnMap?: Map<string, string>,
+  loginReqSet?: Set<string>,
 ): Preset[] {
   if (!catalog || catalog.length === 0) return base;
   const byId = new Map(base.map((p) => [p.id, p]));
@@ -9889,6 +9901,8 @@ function mergeCatalogIntoPresets(
   for (const c of catalog) {
     for (const m of c.models) {
       if (m.free) freeSet.add(m.id);
+      // 免费列表里 anon=false 的便宜模型：展示但需登录（下拉灰置 + 点击引导登录）
+      if (loginReqSet && m.free && m.anon === false) loginReqSet.add(m.id);
       if (m.badge && badgeMap) badgeMap.set(m.id, m.badge);
       // 后台配了显示名且与 id 不同 → 记下，下拉里优先显示 label(如 gpt-5.6→"GPT-5.6 Sol")
       if (labelMap && m.label && m.label !== m.id) labelMap.set(m.id, m.label);
