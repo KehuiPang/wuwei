@@ -3897,6 +3897,40 @@ body {
 .pay-bal-l { font-size: 11px; color: #5a616b; font-weight: 600; letter-spacing: 0.4px; }
 .pay-bal-v { font-size: 30px; font-weight: 750; color: #c05f3c; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .pay-bal-v small { font-size: 13px; color: #8a9099; font-weight: 600; margin-left: 4px; }
+/* ¥1/$1 体验弹窗：宽版两栏（左二维码/付款 · 右套餐详情） */
+.pay-card.pay-card-wide { width: 640px; }
+.trial-rebind { margin: 0 30px 14px; }
+.trial-grid { display: flex; gap: 18px; margin: 4px 30px 18px; align-items: stretch; }
+.trial-pay { flex: 0 0 236px; min-height: 236px; box-sizing: border-box; border-radius: 16px; background: #f4f6f8; border: 1px solid rgba(22, 25, 30, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
+.trial-scan { font-size: 12px; color: #5a616b; text-align: center; line-height: 1.5; }
+.trial-scan b { color: #c05f3c; }
+.trial-msg { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #8a9099; font-size: 12.5px; text-align: center; }
+.trial-msg.err { color: #c0392b; }
+.trial-msg button { margin-top: 2px; border: 1px solid rgba(192, 57, 43, 0.4); background: #fff; color: #c0392b; border-radius: 8px; padding: 3px 14px; cursor: pointer; font-size: 12px; }
+.trial-spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid #eceff2; border-top-color: #c05f3c; animation: tspin 0.8s linear infinite; }
+.trial-paddle { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.trial-paddle-price { font-size: 34px; font-weight: 800; color: #16191e; }
+.trial-paddle-price small { font-size: 14px; color: #8a9099; font-weight: 600; }
+.trial-pay-btn { padding: 11px 22px; font-size: 14px; }
+.trial-sub2 { font-size: 11.5px; color: #8a9099; }
+.trial-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; padding: 4px 2px; }
+.trial-plan-nm { font-size: 15px; font-weight: 750; color: #16191e; }
+.trial-plan-price { font-size: 26px; font-weight: 800; color: #c05f3c; margin: 2px 0 12px; font-variant-numeric: tabular-nums; }
+.trial-plan-price small { font-size: 13px; color: #8a9099; font-weight: 600; }
+.trial-perks { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.trial-perks li { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: #3a4048; line-height: 1.4; }
+.trial-perks li svg { margin-top: 1px; flex: 0 0 auto; }
+.trial-note { font-size: 11px; color: #8a9099; margin-top: auto; padding-top: 8px; }
+.trial-cs { margin-top: 8px; align-self: flex-start; background: none; border: none; color: #c05f3c; font-size: 12px; cursor: pointer; padding: 2px 0; text-decoration: underline; }
+.trial-cs-qr { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.trial-cs-qr img { width: 118px; height: 118px; object-fit: contain; border-radius: 8px; border: 1px solid rgba(22, 25, 30, 0.08); }
+.trial-cs-qr span { font-size: 11px; color: #8a9099; }
+.trial-foot { display: flex; justify-content: center; gap: 18px; }
+@media (max-width: 560px) {
+  .pay-card.pay-card-wide { width: 416px; }
+  .trial-grid { flex-direction: column; }
+  .trial-pay { flex-basis: auto; min-height: 200px; }
+}
 /* 弹窗两选项 */
 .pay-opts { padding: 0 26px 8px; display: flex; flex-direction: column; gap: 13px; }
 .pay-opt {

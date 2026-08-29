@@ -514,6 +514,7 @@ function PackIcon({ size = 20 }: { size?: number }) {
 const money = (en: boolean, cn: number, usd: number): string => (en ? `$${usd}` : `¥${cn}`);
 // 客户端(人民币)sku → 网页 Paddle 的美元 sku。英文用户走网页结账(系统浏览器)。
 const EN_SKU: Record<string, string> = {
+  plan_trial: "plan_trial_en", // $1 · 7天 Pro 体验（海外 Paddle，待建价后可用）
   plan_pro: "plan_pro_en",
   plan_pro_5x: "plan_plus_en",
   plan_pro_50x: "plan_max_en",
@@ -1375,6 +1376,135 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
         </div>
         <div className="paych-alt">
           <button onClick={onContactSupport}>{en ? "Payment issue?" : "支付遇到问题？"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ¥1/$1 体验弹窗：缺币时默认弹这个——环节最少、默认「7天 Pro 体验」。国内当场出支付宝码(左)+详情(右)，
+// 海外一键 $1 走 Paddle。用户看到「1块钱7天会员」直接扫码/点付；试爽了再引导升更高档。
+function TrialPayModal({
+  en, balance, rebind, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
+}: {
+  en: boolean;
+  balance: number;
+  rebind?: { providerId: string; model: string; label: string } | null;
+  onClose: () => void;
+  onPaid: (balance?: number, orderId?: string) => void;
+  onNeedLogin: () => void;
+  onRebind?: () => void;
+  onPaddle: () => void;
+  onMore: () => void;
+  onContact: () => void;
+}) {
+  const price = en ? "$1" : "¥1";
+  const perks = en
+    ? ["All hosted models — Claude / GPT / Gemini / GLM …", "250 credits weekly quota", "Daily check-in: +20 credits"]
+    : ["全部托管模型任选（Claude / GPT / Gemini / GLM …）", "每周 250 无为币托管额度", "每日签到再领 20 无为币"];
+  const [qr, setQr] = useState("");
+  const [orderId, setOrderId] = useState("");
+  const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
+  const [errMsg, setErrMsg] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [showCs, setShowCs] = useState(false);
+
+  // 国内：进来即下单出支付宝码；海外不出码(走 Paddle 按钮)。
+  useEffect(() => {
+    if (en) return;
+    let alive = true;
+    setPhase("loading"); setQr(""); setOrderId(""); setErrMsg("");
+    window.wuwei
+      .payCreate("plan_trial", "alipay")
+      .then((r) => {
+        if (!alive) return;
+        if (r?.error === "not_logged_in") { onNeedLogin(); return; }
+        if (r?.error === "trial_used") { setPhase("error"); setErrMsg("你已用过体验包，换个套餐吧"); return; }
+        if (!r || r.error || !r.qr || !r.orderId) { setPhase("error"); setErrMsg(payErrMsg(r?.error)); return; }
+        setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
+      })
+      .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
+    return () => { alive = false; };
+  }, [en, reloadKey]);
+
+  // 轮询到账
+  useEffect(() => {
+    if (phase !== "ready" || !orderId) return;
+    let alive = true;
+    const t = setInterval(async () => {
+      const s = await window.wuwei.payStatus(orderId).catch(() => null);
+      if (!alive || !s) return;
+      if (s.status === "paid") { clearInterval(t); onPaid(s.balance, orderId); }
+      else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg(en ? "Order expired, reopen to retry" : "订单已失效，请重新打开"); }
+    }, 2500);
+    return () => { alive = false; clearInterval(t); };
+  }, [phase, orderId]);
+
+  const Check = () => (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#3E9E6E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+  );
+
+  return (
+    <div className="perm-overlay pay-overlay" onClick={onClose}>
+      <div className="pay-card pay-card-wide" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 2 }}>
+          <PayEnso size={44} />
+          <h2>{en ? "Out of credits" : "无为币不足"}</h2>
+          <p>{en ? "Try Pro for just $1 / 7 days — keep going right away." : "升级会员继续体验 —— 仅 ¥1 畅享 7 天 Pro。"}</p>
+        </div>
+        <div className="pay-bal" style={{ marginTop: 2 }}>
+          <div className="pay-bal-l">{en ? "Available balance" : "当前可用余额"}</div>
+          <div className="pay-bal-v"><span className="pay-coin" /> {balance}<small>{en ? "credits" : "无为币"}</small></div>
+        </div>
+
+        {rebind && (
+          <button className="pay-opt pay-opt-plan trial-rebind" onClick={onRebind}>
+            <span className="pay-badge">{en ? "No credits" : "不扣币"}</span>
+            <span className="pay-oi"><PaySpark size={18} /></span>
+            <span style={{ minWidth: 0 }}>
+              <span className="pay-ot">{en ? `Continue with ${rebind.label}` : `改用${rebind.label}继续`}</span>
+              <span className="pay-os" style={{ display: "block" }}>{en ? "Direct to your subscription — no credits used" : "直连你的订阅账号 · 不消耗无为币"}</span>
+            </span>
+            <span className="pay-arr"><PayArrow /></span>
+          </button>
+        )}
+
+        <div className="trial-grid">
+          {/* 左：国内二维码 / 海外 Paddle 按钮 */}
+          <div className="trial-pay">
+            {en ? (
+              <div className="trial-paddle">
+                <div className="trial-paddle-price">{price}<small> / 7d</small></div>
+                <button className="allow trial-pay-btn" onClick={onPaddle}>Pay $1 · start 7-day Pro</button>
+                <div className="trial-sub2">Secure checkout via Paddle</div>
+              </div>
+            ) : phase === "ready" && qr ? (
+              <><QRCodeSVG value={qr} size={182} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码支付 <b>¥1</b> · 到账自动开通</div></>
+            ) : phase === "error" ? (
+              <div className="trial-msg err"><span>{errMsg}</span><button onClick={() => setReloadKey((k) => k + 1)}>重试</button></div>
+            ) : (
+              <div className="trial-msg"><div className="trial-spin" /><span>生成支付二维码…</span></div>
+            )}
+          </div>
+          {/* 右：套餐详情 + 状态 + 注意 + 联系客服 */}
+          <div className="trial-detail">
+            <div className="trial-plan-nm">{en ? "Wuwei Pro · 7-day trial" : "无为 Pro 体验 · 7 天"}</div>
+            <div className="trial-plan-price">{price}<small>{en ? " / 7 days" : " / 7 天"}</small></div>
+            <ul className="trial-perks">{perks.map((p, i) => (<li key={i}><Check /> <span>{p}</span></li>))}</ul>
+            <div className="trial-note">{en ? "One-time · first purchase only · no auto-renew" : "首购限一次 · 一次性付款 · 不自动续费"}</div>
+            <button className="trial-cs" onClick={() => (en ? onContact() : setShowCs((s) => !s))}>
+              {en ? "Payment issue? Contact support" : "支付遇到问题？联系客服"}
+            </button>
+            {showCs && !en && (
+              <div className="trial-cs-qr">{WECHAT_CS_QR ? <img src={WECHAT_CS_QR} alt="客服微信二维码" /> : null}<span>微信扫码加客服</span></div>
+            )}
+          </div>
+        </div>
+
+        <div className="pay-foot trial-foot">
+          <button onClick={onMore}>{en ? "Other plans / packs" : "其他套餐 / 积分包"}</button>
+          <button onClick={onClose}>{en ? "Not now" : "暂不需要"}</button>
         </div>
       </div>
     </div>
@@ -7094,117 +7224,46 @@ export function App() {
       })()}
       {/* ① 无为币不足触发弹窗（v2）：金色升级Pro在上(更划算) + 朱色购买积分包在下 */}
       {coinShortage && (
-        <div className="perm-overlay pay-overlay" onClick={() => closeShortage("close")}>
-          <div className="pay-card" onClick={(e) => e.stopPropagation()}>
-            <PayCloseX onClick={() => closeShortage("close")} />
-            <div className="pay-top">
-              <PayEnso />
-              <h2>{lang === "en" ? "Out of credits" : "无为币不足"}</h2>
-              {/* 只一句、升级口径。余额在下方独立行、动作在下方卡片，都不重复；绝不透传网关原文(含「请前往充值…」那句啰嗦文案)。 */}
-              <p>
-                {curPreset?.hosted && !curPreset?.anon
-                  ? (lang === "en"
-                      ? `This chat runs on ${pLabel(curPreset, lang)} (pay-per-token). Upgrade to keep going.`
-                      : `当前对话走「${pLabel(curPreset, lang)}」按量计费，升级后可继续`)
-                  : (lang === "en" ? "Hosted quota used up — upgrade to keep going." : "无为托管额度已用完，升级后可继续")}
-              </p>
-            </div>
-            <div className="pay-bal">
-              <div className="pay-bal-l">{lang === "en" ? "Available balance" : "当前可用余额"}</div>
-              <div className="pay-bal-v">
-                <span className="pay-coin" /> {coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
-                <small>{lang === "en" ? "credits" : "无为币"}</small>
-              </div>
-            </div>
-            <div className="pay-opts">
-              {coinShortage.rebind && (
-                <button
-                  className="pay-opt pay-opt-plan"
-                  onClick={async () => {
-                    const rb = coinShortage.rebind!;
-                    closeShortage("rebind");
-                    await applyBoundModel(rb.providerId, rb.model);
-                    push({
-                      type: "notice",
-                      text:
-                        lang === "en"
-                          ? `Switched this chat to ${rb.label} (direct, no credits used). Resend to continue.`
-                          : `已把当前对话改用${rb.label}（直连、不扣无为币）。重新发送即可继续。`,
-                    });
-                  }}
-                >
-                  <span className="pay-badge">{lang === "en" ? "No credits" : "不扣币"}</span>
-                  <span className="pay-oi">
-                    <PaySpark size={20} />
-                  </span>
-                  <span style={{ minWidth: 0 }}>
-                    <span className="pay-ot">{lang === "en" ? `Continue with ${coinShortage.rebind.label}` : `改用${coinShortage.rebind.label}继续`}</span>
-                    <span className="pay-os" style={{ display: "block" }}>
-                      {lang === "en" ? "Direct to your subscription — uses account quota, not credits" : "直连你的订阅账号 · 走订阅额度，不消耗无为币"}
-                    </span>
-                  </span>
-                  <span className="pay-arr">
-                    <PayArrow />
-                  </span>
-                </button>
-              )}
-              {(() => {
-                // 按当前会员等级显示"下一级"：free/未登录→Pro，Pro→Plus，Plus→Max；Max 已顶配→不显升级卡
-                const cur = wuwei?.membership?.plan ?? null; // 服务端给的档位名 Pro/Plus/Max，free 时 null
-                const nextTier = cur === "Max" ? null : cur === "Plus" ? "Max" : cur === "Pro" ? "Plus" : "Pro";
-                const nextPlan = nextTier ? PRO_PLANS.find((p) => p.nameEn === "Wuwei " + nextTier) : null;
-                if (!nextPlan) return null; // 已是 Max：无更高等级，只保留购买积分包
-                return (
-                  <button
-                    className="pay-opt pay-opt-plan"
-                    onClick={() => {
-                      closeShortage("upgrade");
-                      setPlanOpen(true);
-                    }}
-                  >
-                    <span className="pay-badge">{lang === "en" ? "Better value" : "更划算"}</span>
-                    <span className="pay-oi">
-                      <PaySpark size={20} />
-                    </span>
-                    <span style={{ minWidth: 0 }}>
-                      <span className="pay-ot">{lang === "en" ? `Upgrade to ${nextPlan.nameEn}` : `升级${nextPlan.name}`}</span>
-                      <span className="pay-os" style={{ display: "block" }}>
-                        {lang === "en" ? `From $${nextPlan.priceUsd}/mo · hosted quota, resets weekly` : `¥${nextPlan.price}/月 · 托管额度 · 每周重置`}
-                      </span>
-                    </span>
-                    <span className="pay-arr">
-                      <PayArrow />
-                    </span>
-                  </button>
-                );
-              })()}
-              <button
-                className="pay-opt pay-opt-pack"
-                onClick={() => {
-                  closeShortage("buy_pack");
-                  setCoinPackOpen(true);
-                }}
-              >
-                <span className="pay-oi">
-                  <PackIcon size={21} />
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span className="pay-ot">{lang === "en" ? "Buy a credit pack" : "购买积分包"}</span>
-                  <span className="pay-os" style={{ display: "block" }}>
-                    {lang === "en" ? "Top up as needed — pay for what you use, instant" : "按需充值，用多少买多少，即充即用"}
-                  </span>
-                </span>
-                <span className="pay-arr">
-                  <PayArrow />
-                </span>
-              </button>
-            </div>
-            <div className="pay-foot">
-              <button onClick={() => void refreshWuweiForShortage(coinShortage.message)}>{lang === "en" ? "↻ Refresh balance" : "↻ 刷新余额"}</button>
-              <button onClick={() => closeShortage("close")}>{lang === "en" ? "Not now" : "暂不需要"}</button>
-            </div>
-          </div>
-        </div>
+        <TrialPayModal
+          en={lang === "en"}
+          balance={coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
+          rebind={coinShortage.rebind}
+          onClose={() => closeShortage("close")}
+          onRebind={async () => {
+            const rb = coinShortage.rebind!;
+            closeShortage("rebind");
+            await applyBoundModel(rb.providerId, rb.model);
+            push({
+              type: "notice",
+              text:
+                lang === "en"
+                  ? `Switched this chat to ${rb.label} (direct, no credits used). Resend to continue.`
+                  : `已把当前对话改用${rb.label}（直连、不扣无为币）。重新发送即可继续。`,
+            });
+          }}
+          onPaddle={() => { closeShortage("trial_paddle"); startEnCheckout("plan_trial"); }}
+          onMore={() => { closeShortage("more"); setPlanOpen(true); }}
+          onContact={() => { closeShortage("contact"); setShowSupport(true); }}
+          onNeedLogin={() => {
+            closeShortage("need_login");
+            setWuwei(null);
+            setLoginResume(false);
+            setShowLoginForm(true);
+          }}
+          onPaid={(balance, orderId) => {
+            closeShortage("trial_paid");
+            setPayResult({
+              kind: "pro",
+              planName: lang === "en" ? "Wuwei Pro · 7-day trial" : "无为 Pro 体验 · 7天",
+              expire: fmtDate(new Date(Date.now() + 7 * 24 * 3600_000)), // 体验：+7 天
+              giftCoins: 0,
+              signin: 20,
+              perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt),
+              order: orderId || "",
+            });
+            void window.wuwei.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新会员/余额
+          }}
+        />
       )}
       {coinPackOpen && (
         <CoinPackModal
