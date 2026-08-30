@@ -54,6 +54,24 @@ export interface AgentHooks {
   onCompactArchive?(dropped: Message[]): void; // 压缩前把将被丢弃的原始消息交出去，供上层归档(永不压缩的完整日志)
   onStep?(): void; // 每完成一段(助手消息/工具结果)后回调：用于即时落盘，重启不丢进度
   onRecover?(cleanedText: string): void; // 模型把工具调用当文本吐出→兜底解析后，回传清理后的正文供前端修正显示
+  onRetry?(attempt: number, delayMs: number, reason: string): void; // 网络中断静默重试：第几次/等多久/原因，供上层清半截+记日志
+}
+
+// 网络中断类瞬时错误：自动退避重试(静默)，全部失败才抛给上层提示。
+const NET_RETRY_DELAYS_MS = [1000, 3000, 5000, 10000, 30000, 60000, 120000, 300000, 600000];
+function isTransientNetErr(e: unknown): boolean {
+  const status = Number((e as { status?: number })?.status || 0);
+  if (status === 429 || (status >= 500 && status < 600)) return true; // 限流/服务端错误也当瞬时
+  const m = String((e as { message?: string })?.message || e).toLowerCase();
+  return /terminated|premature close|other side closed|econnreset|socket hang|fetch failed|etimedout|eai_again|\bnetwork\b|enotfound|connection|stream (error|closed)|read econn/.test(m);
+}
+function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error("aborted"));
+    const onAbort = () => { clearTimeout(t); reject(new Error("aborted")); };
+    const t = setTimeout(() => { signal?.removeEventListener("abort", onAbort); resolve(); }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 // 去掉落单的短英文噪音文本块(如 "count")：模型偶发把杂词和工具调用一起吐出。
@@ -302,11 +320,25 @@ export class Agent {
       // 上下文过长则先压缩，再请求模型（省 token / 防撑爆）
       await this.maybeCompact(hooks);
 
-      const result = await this.provider.complete(this.system, this.messages, this.tools, {
-        onText: hooks.onText,
-        onRecover: hooks.onRecover,
-        signal,
-      });
+      // 长回复/网络中断自动退避重试(静默)：1s→3s→…→10min，全部失败才抛给上层提示手动重试。
+      let result: Awaited<ReturnType<typeof this.provider.complete>>;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          result = await this.provider.complete(this.system, this.messages, this.tools, {
+            onText: hooks.onText,
+            onRecover: hooks.onRecover,
+            signal,
+          });
+          break;
+        } catch (e) {
+          if (signal?.aborted) throw e; // 用户主动停止 → 不重试
+          if (!isTransientNetErr(e) || attempt >= NET_RETRY_DELAYS_MS.length) throw e; // 非瞬时错/重试用尽 → 抛出提示
+          const delay = NET_RETRY_DELAYS_MS[attempt];
+          hooks.onRetry?.(attempt + 1, delay, String((e as { message?: string })?.message || e).slice(0, 200));
+          hooks.onRecover?.(""); // 清掉本步已流式显示的半截，避免与重试后新内容拼接乱掉
+          try { await sleepAbortable(delay, signal); } catch { throw e; } // 睡眠期间被停止 → 抛原错(上层按停止处理)
+        }
+      }
 
       this.usage.totalSteps += 1; // 每次模型请求算一步(不管有没有返回 usage)
       this.round.steps += 1;

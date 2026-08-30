@@ -2101,7 +2101,7 @@ function startClientTelemetry(): void {
     void trackProductEvent("app_open", { sessionId: APP_SESSION_ID, version, accessToken: loadWuweiSession()?.accessToken ?? null });
     // 诊断日志：按用户「发送诊断信息」开关(默认开)决定是否上报；启动上报一条 app_start
     setDiagConsent(telemetryEnabled(loadSettings()));
-    void trackClientLog("info", "app_start", { version, accessToken: loadWuweiSession()?.accessToken ?? null, meta: { session_id: APP_SESSION_ID } });
+    void trackClientLog("info", "app_start", { version, accessToken: loadWuweiSession()?.accessToken ?? null, meta: { session_id: APP_SESSION_ID, os: `${process.platform} ${process.arch}`, osVer: process.getSystemVersion?.() ?? "", electron: process.versions.electron } });
     // 每 5 分钟补报，覆盖长时间挂机用户 + 累积活跃时长；unref 不阻止进程退出
     heartbeatTimer = setInterval(() => void reportClientEvent("heartbeat", version, isClientActive(), loadWuweiSession()?.accessToken ?? null), HEARTBEAT_INTERVAL_MS);
     if (heartbeatTimer.unref) heartbeatTimer.unref();
@@ -2273,6 +2273,14 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
         },
         onCompact: (b, a) => send("evt:compact", { sid: useId, before: b, after: a }),
         onCompactArchive: (dropped) => archiveMessages(useId, dropped), // 压缩前把原始消息追加进完整日志(永不压缩)
+        onRetry: (attempt, delayMs, reason) => {
+          streamDrafts.delete(useId); // 清掉断掉的半截草稿
+          // 诊断日志：网络中断自动退避重试(warn) —— 第几次/等多久/原因/模型
+          try {
+            const cc = loadConfig();
+            void trackClientLog("warn", "error", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, message: `net_retry #${attempt} in ${Math.round(delayMs / 1000)}s: ${reason}`.slice(0, 300), meta: { node: "net_retry", attempt, delay_s: Math.round(delayMs / 1000), model: cc.model, provider: loadSettings()?.providerId || cc.provider } });
+          } catch { /* ignore */ }
+        },
         onAssistantDone: () => send("evt:done", { sid: useId }),
       },
       ac.signal,
@@ -2298,11 +2306,12 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
         );
       }
     }
-    // 诊断日志：本轮模型调用画像(成功) —— 模型/平台/耗时/token，不含对话正文
+    // 诊断日志：本轮模型调用画像(成功) —— 模型/平台/耗时/token/缓存/上下文，不含对话正文
     try {
       const rd = lastRoundBySid.get(useId);
       const cc = loadConfig();
-      void trackClientLog("info", "api_call", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, meta: { model: cc.model, provider: loadSettings()?.providerId || cc.provider, ok: true, ms: Date.now() - turnT0, in: rd?.input ?? 0, out: rd?.output ?? 0, steps: rd?.steps ?? 0 } });
+      const st2 = loadSettings();
+      void trackClientLog("info", "api_call", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, meta: { model: cc.model, provider: st2?.providerId || cc.provider, kind: st2?.kind || cc.provider, ok: true, ms: Date.now() - turnT0, in: rd?.input ?? 0, out: rd?.output ?? 0, cache: rd?.cacheHit ?? 0, steps: rd?.steps ?? 0, sub: subFlag, ctxWin: ctxWindow } });
     } catch { /* 诊断失败不影响主流程 */ }
     lastRoundBySid.delete(useId); // 已消费，避免下轮误用旧值
     if (runs.get(useId) === ac)
