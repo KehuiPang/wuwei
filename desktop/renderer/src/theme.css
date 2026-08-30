@@ -3911,7 +3911,10 @@ body {
 .trial-paddle { text-align: center; display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .trial-paddle-price { font-size: 34px; font-weight: 800; color: #16191e; }
 .trial-paddle-price small { font-size: 14px; color: #8a9099; font-weight: 600; }
-.trial-pay-btn { padding: 11px 22px; font-size: 14px; }
+.trial-pay-btn { display: inline-flex; align-items: center; gap: 7px; padding: 11px 24px; font-size: 14px; font-weight: 650; color: #fff; border: none; border-radius: 12px; cursor: pointer; background: linear-gradient(135deg, #d9714a, #c05f3c); box-shadow: 0 8px 18px -6px rgba(192, 95, 60, 0.55); transition: transform 0.12s, box-shadow 0.12s; }
+.trial-pay-btn:hover { transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(192, 95, 60, 0.7); }
+.trial-pay-btn:active { transform: translateY(0); }
+.trial-pay-btn svg { width: 15px; height: 15px; }
 .trial-sub2 { font-size: 11.5px; color: #8a9099; }
 .trial-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; padding: 4px 2px; }
 .trial-plan-nm { font-size: 15px; font-weight: 750; color: #16191e; }

@@ -368,7 +368,7 @@ function friendlyError(raw: string, t: T): string {
 }
 
 function isCoinShortage(raw: string): boolean {
-  return /insufficient_balance|无为币余额不足|积分余额不足|余额不足/i.test(raw || "");
+  return /insufficient_balance|无为币余额不足|积分余额不足|余额不足|free_daily_cap_reached|今日免费额度已用完|free allowance is used up/i.test(raw || "");
 }
 
 // 粗判是否像 API Key：无空白、可见 ASCII、够长(真正闸门是连通测试)
@@ -1638,7 +1638,7 @@ function TrialPayModal({
             {en ? (
               <div className="trial-paddle">
                 <div className="trial-paddle-price">{price}<small>{cfg.unitEn}</small></div>
-                <button className="allow trial-pay-btn" onClick={onPaddle}>{`Pay ${price} · ${cfg.planNameEn}`}</button>
+                <button className="trial-pay-btn" onClick={onPaddle}>{`Pay ${price}`}<PayArrow /></button>
                 <div className="trial-sub2">Secure checkout via Paddle</div>
               </div>
             ) : phase === "ready" && qr ? (
@@ -5148,7 +5148,7 @@ export function App() {
                               <div className="acct-wallet-row">
                                 <div>
                                   <div className="acct-wallet-lbl">
-                                    <CoinIcon size={14} /> {t("usage.coinBal", "无为币余额")}
+                                    <CoinIcon size={14} /> {t("usage.coinBal", "余额")}
                                   </div>
                                   <div className="acct-bal">
                                     {bal.toLocaleString()}

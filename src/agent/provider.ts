@@ -53,10 +53,13 @@ function humanizeGatewayError(status: number, rawBody: string): string | null {
         "免费体验额度已用完。登录并充值即可继续使用付费模型，或换其它免费模型。",
         "Free trial quota used up. Sign in and top up to use paid models, or switch to another free model.",
       );
+    case "free_daily_cap_reached":
+      return tt("今日免费额度已用完（每人每天有额度上限）。升级会员即可继续，或明天再来。", "Today's free allowance is used up (daily cap per user). Upgrade to keep going, or come back tomorrow.");
     case "free_trial_disabled":
       return tt("免费体验暂时关闭，请登录后使用。", "Free trial is currently off. Please sign in.");
     case "anon_not_allowed":
-      return tt("该模型需登录后使用，请先登录。", "This model requires sign-in. Please log in first.");
+    case "anon_login_required":
+      return tt("该模型需登录后免费使用，请先登录。", "Sign in to use this model for free. Please log in first.");
     case "model_not_priced":
     case "unknown_hosted_model":
       return tt("该模型暂不可用，请换一个模型。", "This model is unavailable. Please pick another one.");
@@ -507,7 +510,10 @@ class OpenAIProvider implements Provider {
     // 死循环熔断：取消底层读取(让模型停) + 清掉尾部重复串 + onRecover 替换已显示的脏内容 + 标注。
     if (truncated) {
       try { await reader.cancel(); } catch { /* ignore */ }
-      const note = "\n\n⚠️ 已自动停止：检测到模型在重复输出（可能陷入死循环）。请换个模型或重述需求。";
+      const note = tt(
+        "\n\n⚠️ 已自动停止：检测到模型在重复输出（可能陷入死循环）。请换个模型或重述需求。",
+        "\n\n⚠️ Auto-stopped: the model kept repeating (possible loop). Try another model or rephrase.",
+      );
       text = cleanRepeatTail(text) + note;
       handlers.onRecover?.(text); // 把界面上累积的重复串替换成清理后的正文
     }

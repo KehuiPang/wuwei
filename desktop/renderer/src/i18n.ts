@@ -477,7 +477,7 @@ const DICT_EN: Record<string, string> = {
   "usage.confirm": "Confirm",
   "usage.useReset": "Use reset",
   "usage.subNote": "From your subscription quota (refreshes after you send a message).",
-  "usage.coinBal": "Credit balance",
+  "usage.coinBal": "Balance",
   "usage.coinAmount": "{n} credits",
   "usage.sessTokens": "Session tokens",
   "usage.hostedNote": "Hosted: credits charged per token × unit price (balance refreshes as you chat).",
