@@ -3962,6 +3962,8 @@ export function App() {
   // 真正发送一条(立即入队跑)
   function doSend(text: string, imgs: string[]) {
     markFirstAction("send_input");
+    // 每次发消息都埋点(behavior)：字数/是否带图/平台·模型，供分析活跃与使用深度
+    void window.wuwei.track?.("send_message", { len: (text || "").length, images: imgs.length, provider: curProviderId, model: meta.model });
     if (text) {
       history.current.push(text);
       histIdx.current = history.current.length;
@@ -6468,6 +6470,7 @@ export function App() {
                 title={curPreset ? pLabel(curPreset, lang) : meta.backend}
                 onClick={(e) => {
                   openMqMenu(e);
+                  if (!showProviderMenu) void window.wuwei.track?.("open_platform_menu", { provider: curProviderId });
                   setShowProviderMenu((v) => !v);
                 }}
               >
@@ -6482,7 +6485,7 @@ export function App() {
                   // 访客门禁：未登录且当前不是免费体验 → 点模型也引导登录
                   if (!wuwei && !curPreset?.anon) { setShowLoginIntro(true); return; }
                   // 打开切换器时重新拉一次后台目录：后台上新/下架模型(如豆包上线、牛来下架)即时可见，不用重启
-                  if (!showModelMenu) window.wuwei.wuweiCatalog?.().then((c) => setCatalog(c && c.length ? c : null)).catch(() => {});
+                  if (!showModelMenu) { window.wuwei.wuweiCatalog?.().then((c) => setCatalog(c && c.length ? c : null)).catch(() => {}); void window.wuwei.track?.("open_model_menu", { provider: curProviderId, model: meta.model }); }
                   openMqMenu(e);
                   setShowModelMenu((v) => !v);
                 }}
