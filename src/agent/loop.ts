@@ -304,6 +304,7 @@ export class Agent {
 
       const result = await this.provider.complete(this.system, this.messages, this.tools, {
         onText: hooks.onText,
+        onRecover: hooks.onRecover,
         signal,
       });
 

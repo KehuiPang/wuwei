@@ -64,6 +64,7 @@ export interface Tool extends ToolSpec {
 // Provider 抽象：一次"请求模型 → 拿到助手回复（文本增量 + 可能的 tool_use）"
 export interface ProviderStreamHandlers {
   onText?: (delta: string) => void; // 文本流式增量
+  onRecover?: (cleanedText: string) => void; // 兜底清理后回传完整正文供前端替换显示(如死循环重复串被清掉)
   signal?: AbortSignal; // 中断信号：用户点停止时 abort，provider 传给 fetch/stream
 }
 
