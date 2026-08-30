@@ -1020,6 +1020,8 @@ function applySettings(sIn: Settings, forceSid?: string) {
   const prev: Partial<Settings> = loadSettings() || {};
   const s: Settings = { ...prev, ...sIn };
   log("applySettings", "平台=", s.providerId, "模型=", s.model, "有key=", !!s.apiKey);
+  // 诊断日志：切平台/模型 关键节点(不含 key)
+  try { void trackClientLog("info", "action", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, meta: { node: "switch_model", provider: s.providerId, model: s.model, forced: !!forceSid } }); } catch { /* ignore */ }
   saveSettings(s);
   applyEnvFromSettings(s);
   syncBrainDocsFlag(s);
@@ -2114,6 +2116,10 @@ app.on("window-all-closed", () => {
 // 退出前把异步合并写里还没落盘的会话同步刷完，别丢最后一段
 app.on("before-quit", () => {
   quitting = true; // 自动更新 quitAndInstall / 系统关机等触发退出时放行 close，避免卡在托盘隐藏无法退出
+  // 诊断日志：退出 —— 本次会话时长，配合 app_start 看使用时长
+  try {
+    void trackClientLog("info", "app_exit", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, meta: { session_id: APP_SESSION_ID, uptime_s: Math.round(process.uptime()) } });
+  } catch { /* ignore */ }
   try {
     flushAllSessionsSync();
   } catch {
@@ -2166,7 +2172,10 @@ let loginReportedThisProc = false;
 function reportLoginOnce(): void {
   if (loginReportedThisProc) return;
   loginReportedThisProc = true;
-  void reportClientLogin(app.getVersion(), loadWuweiSession()?.accessToken ?? null);
+  const tok = loadWuweiSession()?.accessToken ?? null;
+  void reportClientLogin(app.getVersion(), tok);
+  // 诊断日志：登录 关键节点
+  try { void trackClientLog("info", "action", { version: app.getVersion(), accessToken: tok, meta: { node: "login" } }); } catch { /* ignore */ }
 }
 // 托管平台每轮开跑前：把网关的 apiKey 注入并重建 provider。
 //  - 已登录：apiKey = 新鲜的无为 access_token(快过期先续期) → 按 token 扣无为币。
@@ -2227,6 +2236,7 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
   const ac = new AbortController();
   runs.set(useId, ac);
   emitTasks();
+  const turnT0 = Date.now(); // 本轮耗时起点（诊断日志 api_call.ms 用）
   try {
     const runP = agent.send(
       text,
@@ -2288,6 +2298,12 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
         );
       }
     }
+    // 诊断日志：本轮模型调用画像(成功) —— 模型/平台/耗时/token，不含对话正文
+    try {
+      const rd = lastRoundBySid.get(useId);
+      const cc = loadConfig();
+      void trackClientLog("info", "api_call", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, meta: { model: cc.model, provider: loadSettings()?.providerId || cc.provider, ok: true, ms: Date.now() - turnT0, in: rd?.input ?? 0, out: rd?.output ?? 0, steps: rd?.steps ?? 0 } });
+    } catch { /* 诊断失败不影响主流程 */ }
     lastRoundBySid.delete(useId); // 已消费，避免下轮误用旧值
     if (runs.get(useId) === ac)
       send(ac.signal.aborted ? "evt:stopped" : "evt:done", { sid: useId }); // 中断后 loop 干净返回也算停止
@@ -2306,6 +2322,11 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
         // 光靠 expiresAt 判断会漏——在别处撤销授权时，时间还没到但 token 已经废了。
         if (loadSettings()?.kind === "anthropic-oauth" && isOAuthDead(e)) clearDeadClaudeOAuth("http-401");
         send("evt:error", { sid: useId, message: e.message });
+        // 诊断日志：本轮报错(非用户主动停止) —— 错误原文 + 模型/平台/状态码/耗时，便于排障
+        try {
+          const cc = loadConfig();
+          void trackClientLog("error", "error", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, message: String(e?.message || e).slice(0, 500), meta: { model: cc.model, provider: loadSettings()?.providerId || cc.provider, ok: false, ms: Date.now() - turnT0, status: e?.status ?? null } });
+        } catch { /* ignore */ }
       }
     }
   } finally {
