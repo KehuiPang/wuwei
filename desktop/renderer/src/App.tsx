@@ -1518,12 +1518,43 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
 
 // ¥1/$1 体验弹窗：缺币时默认弹这个——环节最少、默认「7天 Pro 体验」。国内当场出支付宝码(左)+详情(右)，
 // 海外一键 $1 走 Paddle。用户看到「1块钱7天会员」直接扫码/点付；试爽了再引导升更高档。
+// 缺币付款弹窗（两态）：新用户没买过→「¥1 体验7天」；用过了/已付费→「升级正式会员」。
+// 都走同一套：默认选中一个套餐、国内当场出支付宝码(左)+详情(右)、海外一键 Paddle。环节最少。
+type PayNowCfg = {
+  sku: string; // plan_trial | plan_pro
+  days: number; // 会员时长(用于成功页到期计算)
+  price: string; priceEn: string; // ¥1 / ¥29 ; $1 / $6.99
+  unit: string; unitEn: string; // / 7天 ; / 月
+  planName: string; planNameEn: string;
+  headline: string; headlineEn: string;
+  note: string; noteEn: string;
+  perks: string[]; perksEn: string[];
+};
+const PAYNOW_PERKS = ["全部托管模型任选（Claude / GPT / Gemini / GLM …）", "永久记忆的脑网络（跨对话记住你的偏好和项目）", "每周托管额度充足，每日签到还有奖励"];
+const PAYNOW_PERKS_EN = ["All hosted models (Claude / GPT / Gemini / GLM …)", "Brain network with permanent memory (remembers you across chats)", "Ample weekly hosted quota, plus daily check-in rewards"];
+// 新用户没买过 → ¥1 体验 7 天
+const TRIAL_CFG: PayNowCfg = {
+  sku: "plan_trial", days: 7, price: "¥1", priceEn: "$1", unit: " / 7 天", unitEn: " / 7 days",
+  planName: "无为 Pro 体验 · 7 天", planNameEn: "Wuwei Pro · 7-day trial",
+  headline: "升级会员继续体验，仅 ¥1 畅享 7 天 Pro。", headlineEn: "Try Pro for just $1 / 7 days, keep going right away.",
+  note: "首购限一次 · 一次性付款 · 不自动续费", noteEn: "One-time · first purchase only · no auto-renew",
+  perks: PAYNOW_PERKS, perksEn: PAYNOW_PERKS_EN,
+};
+// 已用过体验/已付费 → 升级正式会员
+const UPGRADE_CFG: PayNowCfg = {
+  sku: "plan_pro", days: 30, price: "¥29", priceEn: "$6.99", unit: " / 月", unitEn: " / mo",
+  planName: "无为 Pro · 月付", planNameEn: "Wuwei Pro · Monthly",
+  headline: "升级正式会员，继续畅用无为托管模型。", headlineEn: "Upgrade to Pro to keep using Wuwei hosted models.",
+  note: "开通 30 天 Pro 会员 · 到期可再续", noteEn: "30 days of Pro membership · renew anytime",
+  perks: PAYNOW_PERKS, perksEn: PAYNOW_PERKS_EN,
+};
 function TrialPayModal({
-  en, balance, rebind, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
+  en, balance, rebind, cfg, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
 }: {
   en: boolean;
   balance: number;
   rebind?: { providerId: string; model: string; label: string } | null;
+  cfg: PayNowCfg;
   onClose: () => void;
   onPaid: (balance?: number, orderId?: string) => void;
   onNeedLogin: () => void;
@@ -1532,10 +1563,8 @@ function TrialPayModal({
   onMore: () => void;
   onContact: () => void;
 }) {
-  const price = en ? "$1" : "¥1";
-  const perks = en
-    ? ["All hosted models (Claude / GPT / Gemini / GLM …)", "Brain network with permanent memory (remembers you across chats)", "Ample weekly hosted quota, plus daily check-in rewards"]
-    : ["全部托管模型任选（Claude / GPT / Gemini / GLM …）", "永久记忆的脑网络（跨对话记住你的偏好和项目）", "每周托管额度充足，每日签到还有奖励"];
+  const price = en ? cfg.priceEn : cfg.price;
+  const perks = en ? cfg.perksEn : cfg.perks;
   const [qr, setQr] = useState("");
   const [orderId, setOrderId] = useState("");
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
@@ -1548,7 +1577,7 @@ function TrialPayModal({
     let alive = true;
     setPhase("loading"); setQr(""); setOrderId(""); setErrMsg("");
     window.wuwei
-      .payCreate("plan_trial", "alipay")
+      .payCreate(cfg.sku, "alipay")
       .then((r) => {
         if (!alive) return;
         if (r?.error === "not_logged_in") { onNeedLogin(); return; }
@@ -1558,7 +1587,7 @@ function TrialPayModal({
       })
       .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
     return () => { alive = false; };
-  }, [en, reloadKey]);
+  }, [en, reloadKey, cfg.sku]);
 
   // 轮询到账
   useEffect(() => {
@@ -1584,7 +1613,7 @@ function TrialPayModal({
         <div className="pay-top" style={{ paddingBottom: 2 }}>
           <PayEnso size={44} />
           <h2>{en ? "Out of credits" : "无为币不足"}</h2>
-          <p>{en ? "Try Pro for just $1 / 7 days — keep going right away." : "升级会员继续体验 —— 仅 ¥1 畅享 7 天 Pro。"}</p>
+          <p>{en ? cfg.headlineEn : cfg.headline}</p>
         </div>
         <div className="pay-bal" style={{ marginTop: 2 }}>
           <div className="pay-bal-l">{en ? "Available balance" : "当前可用余额"}</div>
@@ -1608,12 +1637,12 @@ function TrialPayModal({
           <div className="trial-pay">
             {en ? (
               <div className="trial-paddle">
-                <div className="trial-paddle-price">{price}<small> / 7d</small></div>
-                <button className="allow trial-pay-btn" onClick={onPaddle}>Pay $1 · start 7-day Pro</button>
+                <div className="trial-paddle-price">{price}<small>{cfg.unitEn}</small></div>
+                <button className="allow trial-pay-btn" onClick={onPaddle}>{`Pay ${price} · ${cfg.planNameEn}`}</button>
                 <div className="trial-sub2">Secure checkout via Paddle</div>
               </div>
             ) : phase === "ready" && qr ? (
-              <><QRCodeSVG value={qr} size={182} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码支付 <b>¥1</b> · 到账自动开通</div></>
+              <><QRCodeSVG value={qr} size={182} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码支付 <b>{price}</b> · 到账自动开通</div></>
             ) : phase === "error" ? (
               <div className="trial-msg err"><span>{errMsg}</span><button onClick={() => setReloadKey((k) => k + 1)}>重试</button></div>
             ) : (
@@ -1622,10 +1651,10 @@ function TrialPayModal({
           </div>
           {/* 右：套餐详情 + 状态 + 注意 + 联系客服 */}
           <div className="trial-detail">
-            <div className="trial-plan-nm">{en ? "Wuwei Pro · 7-day trial" : "无为 Pro 体验 · 7 天"}</div>
-            <div className="trial-plan-price">{price}<small>{en ? " / 7 days" : " / 7 天"}</small></div>
+            <div className="trial-plan-nm">{en ? cfg.planNameEn : cfg.planName}</div>
+            <div className="trial-plan-price">{price}<small>{en ? cfg.unitEn : cfg.unit}</small></div>
             <ul className="trial-perks">{perks.map((p, i) => (<li key={i}><Check /> <span>{p}</span></li>))}</ul>
-            <div className="trial-note">{en ? "One-time · first purchase only · no auto-renew" : "首购限一次 · 一次性付款 · 不自动续费"}</div>
+            <div className="trial-note">{en ? cfg.noteEn : cfg.note}</div>
             <button className="trial-cs" onClick={onContact}>
               {en ? "Payment issue? Contact support" : "支付遇到问题？联系客服"}
             </button>
@@ -2850,6 +2879,7 @@ export function App() {
       weeklyQuota?: { active: boolean; remainingPct: number; resetsAt: string | null };
     };
     flags?: string[];
+    trialEligible?: boolean; // 从未付费 → 缺币弹 ¥1 体验；否则弹「升级正式会员」
     providers?: { hidden?: string[] };
   } | null>(null);
   // 后台轮询客服未读（不清未读）：登录 且 聊天窗未开时，每 20s 查一次，有回复亮红点
@@ -3130,6 +3160,8 @@ export function App() {
   const modelLabels = new Map<string, string>(); // 后台配的模型显示名(如 gpt-5.6→"GPT-5.6 Sol")，下拉里优先显示 label
   const modelLabelsEn = new Map<string, string>(); // 后台配的英文显示名(ai_model.label_en)，英文界面优先显示
   const loginReqModelIds = new Set<string>(); // 免费列表里「需登录才可用」的便宜模型 id（匿名灰置引导登录）
+  // 缺币付款两态：从未付费(trialEligible)→¥1 体验；否则→升级正式会员。未登录/老后端缺省按体验。
+  const payCfg = wuwei?.trialEligible === false ? UPGRADE_CFG : TRIAL_CFG;
   const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels, modelLabelsEn, loginReqModelIds);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerListRaw = arrangePresets(
@@ -7407,6 +7439,7 @@ export function App() {
           en={lang === "en"}
           balance={coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
           rebind={coinShortage.rebind}
+          cfg={payCfg}
           onClose={() => closeShortage("close")}
           onRebind={async () => {
             const rb = coinShortage.rebind!;
@@ -7420,7 +7453,7 @@ export function App() {
                   : `已把当前对话改用${rb.label}（直连、不扣无为币）。重新发送即可继续。`,
             });
           }}
-          onPaddle={() => { closeShortage("trial_paddle"); startEnCheckout("plan_trial"); }}
+          onPaddle={() => { closeShortage("pay_paddle"); startEnCheckout(payCfg.sku); }}
           onMore={() => { closeShortage("more"); setPlanOpen(true); }}
           onContact={() => { closeShortage("contact"); setShowSupportChat(true); }}
           onNeedLogin={() => {
@@ -7430,11 +7463,11 @@ export function App() {
             setShowLoginForm(true);
           }}
           onPaid={(balance, orderId) => {
-            closeShortage("trial_paid");
+            closeShortage("pay_paid");
             setPayResult({
               kind: "pro",
-              planName: lang === "en" ? "Wuwei Pro · 7-day trial" : "无为 Pro 体验 · 7天",
-              expire: fmtDate(new Date(Date.now() + 7 * 24 * 3600_000)), // 体验：+7 天
+              planName: lang === "en" ? payCfg.planNameEn : payCfg.planName,
+              expire: fmtDate(new Date(Date.now() + payCfg.days * 24 * 3600_000)),
               giftCoins: 0,
               signin: 20,
               perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt),

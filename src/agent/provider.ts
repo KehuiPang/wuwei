@@ -378,6 +378,21 @@ class OpenAIProvider implements Provider {
     let text = "";
     let sawTool = false;
     let reasoningOpen = false; // 推理模型的 reasoning_content 流：包成 <think>…</think> 让渲染统一折叠
+    // 死循环熔断：模型陷入重复轰炸(如无限吐"card")或输出超长时立即停止读取，避免卡死界面。
+    const MAX_STREAM_CHARS = 120_000; // 单轮输出上限(约≥3万 token)，超了必是异常
+    const MAX_REPEAT = 50; // 同一短行连续重复超过此数 = 判定死循环
+    let repUnit = "";
+    let repCount = 0;
+    let truncated = false;
+    const guardRunaway = (chunk: string): boolean => {
+      if (text.length > MAX_STREAM_CHARS) return true;
+      const u = chunk.trim();
+      if (u && u.length <= 24) {
+        if (u === repUnit) { if (++repCount >= MAX_REPEAT) return true; }
+        else { repUnit = u; repCount = 1; }
+      } else { repUnit = ""; repCount = 0; }
+      return false;
+    };
     const toolAcc: Record<number, { id?: string; name?: string; args: string }> = {};
     let usage: {
       inputTokens: number;
@@ -437,6 +452,7 @@ class OpenAIProvider implements Provider {
           }
           text += rc;
           handlers.onText?.(rc);
+          if (guardRunaway(rc)) { truncated = true; break outer; }
         }
         if (typeof d.content === "string" && d.content) {
           if (reasoningOpen) {
@@ -446,6 +462,7 @@ class OpenAIProvider implements Provider {
           }
           text += d.content;
           handlers.onText?.(d.content); // 逐块推给渲染进程
+          if (guardRunaway(d.content)) { truncated = true; break outer; }
         }
         for (const tc of d.tool_calls ?? []) {
           sawTool = true;
@@ -463,6 +480,13 @@ class OpenAIProvider implements Provider {
       reasoningOpen = false;
       text += "</think>\n";
       handlers.onText?.("</think>\n");
+    }
+    // 死循环熔断：取消底层读取(让模型停) + 尾部标注，避免这条卡死后每次重开都复现。
+    if (truncated) {
+      try { await reader.cancel(); } catch { /* ignore */ }
+      const note = "\n\n⚠️ 已自动停止：检测到模型在重复输出（可能陷入死循环）。请换个模型或重述需求。";
+      text += note;
+      handlers.onText?.(note);
     }
     const content: ContentBlock[] = [];
     if (text) content.push({ type: "text", text });

@@ -38,6 +38,7 @@ export interface WuweiMe {
   // 灰度开关（C2）：后端按 用户+设备指纹 返回的功能白名单，如 ["subscription"]。
   // 缺省/未含对应项 = 隐藏。客户端只渲染、不判定；判定全在后端。
   flags?: string[];
+  trialEligible?: boolean; // 从未付费 → 缺币弹 ¥1 体验；否则弹「升级正式会员」
 }
 
 // AI 提供商目录（/api/catalog，脱敏）：后台可配的平台顺序/显隐/模型。客户端拿它当默认序 + 模型源，拉不到则回退硬编码 PRESETS。
