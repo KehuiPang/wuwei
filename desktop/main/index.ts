@@ -3514,6 +3514,17 @@ ipcMain.handle("account:wuwei-catalog", async () => {
   }
   return cat;
 });
+// 模型费用说明：从 wuwei-site 拉定价数据(公开、无需登录)。走主进程避免 CORS。
+ipcMain.handle("model-pricing:get", async () => {
+  try {
+    const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+    const res = await fetch(`${site}/api/model-pricing`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+});
 // 记住登录：多账号加密存储，供登录框自动填充 + 账号下拉历史。
 ipcMain.handle("login:remember-get", () => loadRemember());
 ipcMain.handle("login:remember-set", (_e, email: string, password: string) => {

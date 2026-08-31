@@ -68,6 +68,33 @@ export interface CatalogProviderDto {
   models: CatalogModelDto[];
 }
 
+// 模型费用说明弹窗数据（/api/model-pricing）
+export interface PricingModelDto {
+  id: string;
+  label: string;
+  labelEn: string | null;
+  free: boolean;
+  inCoins: number | null;
+  outCoins: number | null;
+  hitCoins: number | null;
+}
+export interface PricingProviderDto {
+  id: string;
+  label: string;
+  labelEn: string | null;
+  hosted: boolean;
+  models: PricingModelDto[];
+}
+export interface ModelPricingData {
+  noteZh: string;
+  noteEn: string;
+  footerZh: string;
+  footerEn: string;
+  cnyPerCoin: number;
+  coinPerUsd: number;
+  providers: PricingProviderDto[];
+}
+
 // 本地 /cb 页面：把 URL fragment 里的 token 转成对本地的 query 请求（浏览器不把 # 发给 server）
 // 写成函数而非常量：文案要在请求发生的那一刻按当前界面语言渲染
 const hashBridgeHtml = () => `<!doctype html><meta charset="utf-8"><title>${tt("无为登录", "Sign in to Wuwei")}</title>

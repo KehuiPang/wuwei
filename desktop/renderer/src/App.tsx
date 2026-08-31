@@ -1548,6 +1548,110 @@ const UPGRADE_CFG: PayNowCfg = {
   note: "开通 30 天 Pro 会员 · 到期可再续", noteEn: "30 days of Pro membership · renew anytime",
   perks: PAYNOW_PERKS, perksEn: PAYNOW_PERKS_EN,
 };
+// 模型费用说明弹窗：免费/付费模型按平台分组，输入/输出/缓存命中价，可切无为币/人民币/美元。
+type PricingUnit = "coin" | "cny" | "usd";
+type PricingModel = { id: string; label: string; labelEn: string | null; free: boolean; inCoins: number | null; outCoins: number | null; hitCoins: number | null };
+type PricingProvider = { id: string; label: string; labelEn: string | null; hosted: boolean; models: PricingModel[] };
+type PricingData = { noteZh: string; noteEn: string; footerZh: string; footerEn: string; cnyPerCoin: number; coinPerUsd: number; providers: PricingProvider[] };
+
+function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: () => void; onContact: () => void }) {
+  const en = lang === "en";
+  const [data, setData] = useState<PricingData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [unit, setUnit] = useState<PricingUnit>(en ? "usd" : "coin");
+  useEffect(() => {
+    let stop = false;
+    window.wuwei.modelPricing?.().then((d) => { if (!stop) { setData((d as PricingData) || null); setLoading(false); } }).catch(() => { if (!stop) setLoading(false); });
+    return () => { stop = true; };
+  }, []);
+  const mLabel = (m: { label: string; labelEn: string | null }) => (en && m.labelEn) || m.label;
+  const fmt = (coins: number | null): string => {
+    if (coins == null) return "—";
+    if (unit === "coin") return `${coins}`;
+    if (unit === "cny") return `¥${(coins * (data?.cnyPerCoin ?? 0.01)).toFixed(2)}`;
+    const usd = coins / (data?.coinPerUsd ?? 759.6);
+    return `$${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}`;
+  };
+  const freeModels = (data?.providers ?? []).flatMap((p) => p.models.filter((m) => m.free).map((m) => ({ ...m, provider: p })));
+  const paidProviders = (data?.providers ?? []).map((p) => ({ ...p, models: p.models.filter((m) => !m.free) })).filter((p) => p.models.length > 0);
+  const unitLabel = en ? { coin: "Coins", cny: "RMB", usd: "USD" } : { coin: "无为币", cny: "人民币", usd: "美元" };
+
+  return (
+    <div className="modal-mask" onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#1B1F26", color: "#E7EAED", border: "1px solid #2A3038", borderRadius: 14, width: "min(720px,96vw)", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #2A3038" }}>
+          <b style={{ fontSize: 15 }}>{en ? "Model pricing" : "模型费用说明"}</b>
+          <button onClick={onClose} style={{ border: "none", background: "none", color: "#8A939B", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        {/* 顶部说明（重要）：不在模型上挣钱，只赚会员/积分 */}
+        <div style={{ padding: "12px 20px", fontSize: 12.5, lineHeight: 1.7, color: "#AEB6BD", background: "#181C22", borderBottom: "1px solid #2A3038" }}>
+          {en ? data?.noteEn ?? "" : data?.noteZh ?? ""}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 20px 0" }}>
+          <span style={{ fontSize: 12, color: "#8A939B" }}>{en ? "Unit (per 1M tokens)" : "单位（每百万 token）"}</span>
+          <div style={{ display: "inline-flex", border: "1px solid #2A3038", borderRadius: 7, overflow: "hidden" }}>
+            {(["coin", "cny", "usd"] as PricingUnit[]).map((u) => (
+              <button key={u} onClick={() => setUnit(u)} style={{ padding: "4px 12px", fontSize: 12, border: "none", cursor: "pointer", background: unit === u ? "#C05F3C" : "transparent", color: unit === u ? "#fff" : "#AEB6BD" }}>{unitLabel[u]}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: "14px 20px 20px" }}>
+          {loading && <div style={{ color: "#8A939B", textAlign: "center", padding: 30 }}>{en ? "Loading…" : "加载中…"}</div>}
+          {!loading && !data && <div style={{ color: "#8A939B", textAlign: "center", padding: 30 }}>{en ? "Failed to load pricing." : "定价加载失败，请稍后再试。"}</div>}
+          {data && (
+            <>
+              {freeModels.length > 0 && (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#16a34a", marginBottom: 8 }}>{en ? "Free models (0 cost)" : "免费模型（0 费用）"}</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {freeModels.map((m) => (
+                      <span key={m.id} style={{ fontSize: 12.5, padding: "4px 10px", borderRadius: 999, background: "#14301F", color: "#7CE0A3", border: "1px solid #1F4A31" }}>{mLabel(m)}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {paidProviders.map((p) => (
+                <div key={p.id} style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+                    {(en && p.labelEn) || p.label}
+                    {p.hosted && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 999, background: "#243244", color: "#7FB0E0" }}>{en ? "hosted" : "托管"}</span>}
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                      <thead>
+                        <tr style={{ color: "#8A939B" }}>
+                          <th style={{ textAlign: "left", padding: "5px 8px", fontWeight: 600 }}>{en ? "Model" : "模型"}</th>
+                          <th style={{ textAlign: "right", padding: "5px 8px", fontWeight: 600 }}>{en ? "Input" : "输入"}</th>
+                          <th style={{ textAlign: "right", padding: "5px 8px", fontWeight: 600 }}>{en ? "Output" : "输出"}</th>
+                          <th style={{ textAlign: "right", padding: "5px 8px", fontWeight: 600 }}>{en ? "Cache hit" : "缓存命中"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {p.models.map((m) => (
+                          <tr key={m.id} style={{ borderTop: "1px solid #23282F" }}>
+                            <td style={{ padding: "5px 8px" }}>{mLabel(m)}</td>
+                            <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmt(m.inCoins)}</td>
+                            <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmt(m.outCoins)}</td>
+                            <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: "#8A939B" }}>{fmt(m.hitCoins)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #2A3038", fontSize: 12.5, color: "#AEB6BD", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <span>{en ? data?.footerEn ?? "" : data?.footerZh ?? ""}</span>
+          <button onClick={onContact} style={{ flex: "0 0 auto", padding: "6px 14px", borderRadius: 8, border: "none", background: "#C05F3C", color: "#fff", fontSize: 12.5, cursor: "pointer" }}>{en ? "Message support" : "给客服留言"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TrialPayModal({
   en, balance, rebind, cfg, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
 }: {
@@ -2705,6 +2809,7 @@ export function App() {
   const [curProviderId, setCurProviderId] = useState("");
   const [liveModels, setLiveModels] = useState<Record<string, string[]>>({}); // 各平台实时拉到的模型
   const [showAllModels, setShowAllModels] = useState(false); // 切换模型下拉：false=常用(预设旗舰) true=全部(含实时拉取)
+  const [showModelPricing, setShowModelPricing] = useState(false); // 模型费用说明弹窗
   const [stations, setStations] = useState<Station[]>([]); // 自定义中转站
   const [providerOrder, setProviderOrder] = useState<string[]>([]); // 平台自定义顺序
   const [catalog, setCatalog] = useState<CatalogProviderDto[] | null>(null); // 后台 AI 提供商目录(默认序/显隐/模型)，null=回退硬编码 PRESETS
@@ -6575,11 +6680,19 @@ export function App() {
                   <div className="mq-menu" style={{ left: mqMenuLeft }}>
                     <div
                       className="mq-head"
-                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
                     >
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {t("mq.switchModel", "切换模型")} · {curPreset ? pLabel(curPreset, lang) : meta.backend}
                       </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowModelPricing(true); void window.wuwei.track?.("open_model_pricing"); }}
+                        title={lang === "en" ? "Model pricing" : "模型费用说明"}
+                        style={{ flex: "0 0 auto", display: "inline-flex", alignItems: "center", gap: 3, padding: "1px 7px", borderRadius: 5, border: "none", cursor: "pointer", background: "transparent", color: "inherit", opacity: 0.65, fontSize: 11 }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 16v-5M12 8h.01" /></svg>
+                        {lang === "en" ? "Pricing" : "费用说明"}
+                      </button>
                       {hasMoreModels && (
                         <span style={{ display: "inline-flex", gap: 2, flex: "0 0 auto" }}>
                           {[
@@ -7312,6 +7425,13 @@ export function App() {
       )}
       {showSupportChat && (
         <SupportChatModal t={t} loggedIn={!!wuwei} onClose={() => setShowSupportChat(false)} />
+      )}
+      {showModelPricing && (
+        <ModelPricingModal
+          lang={lang}
+          onClose={() => setShowModelPricing(false)}
+          onContact={() => { setShowModelPricing(false); setShowSupport(true); }}
+        />
       )}
       {/* 右下角悬浮客服球：常驻入口 + 有回复亮红点。可一键关掉(记住)，之后走账号菜单「联系客服」。 */}
       {wuwei && !showSupportChat && !scLauncherHidden && (
