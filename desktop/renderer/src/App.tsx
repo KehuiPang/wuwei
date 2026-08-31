@@ -790,17 +790,20 @@ function ContactSupportModal({ onClose, onLeaveMessage, onChat, t }: { onClose: 
     <div className="perm-overlay pay-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
       <div className="pay-card" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
         <PayCloseX onClick={onClose} />
-        <div className="pay-top" style={{ paddingBottom: 4 }}>
-          <PayEnso size={44} />
-          <h2>{t("pay.support.title", "联系客服")}</h2>
+        <div className="pay-top" style={{ paddingBottom: 10 }}>
+          <PayEnso size={40} />
+          <h2 style={{ marginTop: 10 }}>{t("pay.support.title", "联系客服")}</h2>
+          <p style={{ fontSize: 12.5, color: "var(--text-muted)", margin: "6px 0 0", lineHeight: 1.5 }}>
+            {getLang() === "en" ? "We're here to help. Pick a way to reach us below." : "有问题随时找我们，选一种方式联系"}
+          </p>
         </div>
-        <div style={{ padding: "0 30px 28px" }}>
+        <div style={{ padding: "18px 30px 30px" }}>
         {onChat && (
           // 在线对话（推荐）：实时收发，客服回复即刻显示
           <button
             onClick={onChat}
             className="allow"
-            style={{ display: "block", width: "100%", border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, borderRadius: 10, padding: "11px 0", cursor: "pointer", marginBottom: 16 }}
+            style={{ display: "block", width: "100%", border: "none", background: "var(--spark)", color: "#fff", fontSize: 14, fontWeight: 600, borderRadius: 10, padding: "12px 0", cursor: "pointer", marginBottom: 20 }}
           >
             {getLang() === "en" ? "Chat with support (live)" : "在线对话（实时收发）"}
           </button>
@@ -1561,7 +1564,9 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
   const [unit, setUnit] = useState<PricingUnit>(en ? "usd" : "coin");
   useEffect(() => {
     let stop = false;
-    window.wuwei.modelPricing?.().then((d) => { if (!stop) { setData((d as PricingData) || null); setLoading(false); } }).catch(() => { if (!stop) setLoading(false); });
+    const fn = window.wuwei.modelPricing;
+    if (typeof fn !== "function") { setLoading(false); setData(null); return; } // 旧版无此接口 → 报错别死等
+    fn().then((d) => { if (!stop) { setData((d as PricingData) || null); setLoading(false); } }).catch(() => { if (!stop) setLoading(false); });
     return () => { stop = true; };
   }, []);
   const mLabel = (m: { label: string; labelEn: string | null }) => (en && m.labelEn) || m.label;
@@ -1578,26 +1583,26 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
 
   return (
     <div className="modal-mask" onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 20 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "#1B1F26", color: "#E7EAED", border: "1px solid #2A3038", borderRadius: 14, width: "min(720px,96vw)", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #2A3038" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 14, width: "min(720px,96vw)", maxHeight: "88vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
           <b style={{ fontSize: 15 }}>{en ? "Model pricing" : "模型费用说明"}</b>
-          <button onClick={onClose} style={{ border: "none", background: "none", color: "#8A939B", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+          <button onClick={onClose} style={{ border: "none", background: "none", color: "var(--text-muted)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
         {/* 顶部说明（重要）：不在模型上挣钱，只赚会员/积分 */}
-        <div style={{ padding: "12px 20px", fontSize: 12.5, lineHeight: 1.7, color: "#AEB6BD", background: "#181C22", borderBottom: "1px solid #2A3038" }}>
+        <div style={{ padding: "12px 20px", fontSize: 12.5, lineHeight: 1.7, color: "var(--text-dim)", background: "var(--bg-soft)", borderBottom: "1px solid var(--border)" }}>
           {en ? data?.noteEn ?? "" : data?.noteZh ?? ""}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 20px 0" }}>
-          <span style={{ fontSize: 12, color: "#8A939B" }}>{en ? "Unit (per 1M tokens)" : "单位（每百万 token）"}</span>
-          <div style={{ display: "inline-flex", border: "1px solid #2A3038", borderRadius: 7, overflow: "hidden" }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{en ? "Unit (per 1M tokens)" : "单位（每百万 token）"}</span>
+          <div style={{ display: "inline-flex", border: "1px solid var(--border)", borderRadius: 7, overflow: "hidden" }}>
             {(["coin", "cny", "usd"] as PricingUnit[]).map((u) => (
-              <button key={u} onClick={() => setUnit(u)} style={{ padding: "4px 12px", fontSize: 12, border: "none", cursor: "pointer", background: unit === u ? "#C05F3C" : "transparent", color: unit === u ? "#fff" : "#AEB6BD" }}>{unitLabel[u]}</button>
+              <button key={u} onClick={() => setUnit(u)} style={{ padding: "4px 12px", fontSize: 12, border: "none", cursor: "pointer", background: unit === u ? "var(--spark)" : "transparent", color: unit === u ? "#fff" : "var(--text-dim)" }}>{unitLabel[u]}</button>
             ))}
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 20px 20px" }}>
-          {loading && <div style={{ color: "#8A939B", textAlign: "center", padding: 30 }}>{en ? "Loading…" : "加载中…"}</div>}
-          {!loading && !data && <div style={{ color: "#8A939B", textAlign: "center", padding: 30 }}>{en ? "Failed to load pricing." : "定价加载失败，请稍后再试。"}</div>}
+          {loading && <div style={{ color: "var(--text-muted)", textAlign: "center", padding: 30 }}>{en ? "Loading…" : "加载中…"}</div>}
+          {!loading && !data && <div style={{ color: "var(--text-muted)", textAlign: "center", padding: 30 }}>{en ? "Failed to load pricing." : "定价加载失败，请稍后再试。"}</div>}
           {data && (
             <>
               {freeModels.length > 0 && (
@@ -1605,7 +1610,7 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
                   <div style={{ fontSize: 13, fontWeight: 700, color: "#16a34a", marginBottom: 8 }}>{en ? "Free models (0 cost)" : "免费模型（0 费用）"}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {freeModels.map((m) => (
-                      <span key={m.id} style={{ fontSize: 12.5, padding: "4px 10px", borderRadius: 999, background: "#14301F", color: "#7CE0A3", border: "1px solid #1F4A31" }}>{mLabel(m)}</span>
+                      <span key={m.id} style={{ fontSize: 12.5, padding: "4px 10px", borderRadius: 999, background: "rgba(22,163,74,.12)", color: "#16a34a", border: "1px solid rgba(22,163,74,.3)" }}>{mLabel(m)}</span>
                     ))}
                   </div>
                 </div>
@@ -1614,12 +1619,12 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
                 <div key={p.id} style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
                     {(en && p.labelEn) || p.label}
-                    {p.hosted && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 999, background: "#243244", color: "#7FB0E0" }}>{en ? "hosted" : "托管"}</span>}
+                    {p.hosted && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 999, background: "rgba(37,99,235,.12)", color: "#2563eb", border: "1px solid rgba(37,99,235,.28)" }}>{en ? "hosted" : "托管"}</span>}
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                       <thead>
-                        <tr style={{ color: "#8A939B" }}>
+                        <tr style={{ color: "var(--text-muted)" }}>
                           <th style={{ textAlign: "left", padding: "5px 8px", fontWeight: 600 }}>{en ? "Model" : "模型"}</th>
                           <th style={{ textAlign: "right", padding: "5px 8px", fontWeight: 600 }}>{en ? "Input" : "输入"}</th>
                           <th style={{ textAlign: "right", padding: "5px 8px", fontWeight: 600 }}>{en ? "Output" : "输出"}</th>
@@ -1628,11 +1633,11 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
                       </thead>
                       <tbody>
                         {p.models.map((m) => (
-                          <tr key={m.id} style={{ borderTop: "1px solid #23282F" }}>
+                          <tr key={m.id} style={{ borderTop: "1px solid var(--border)" }}>
                             <td style={{ padding: "5px 8px" }}>{mLabel(m)}</td>
                             <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmt(m.inCoins)}</td>
                             <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmt(m.outCoins)}</td>
-                            <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: "#8A939B" }}>{fmt(m.hitCoins)}</td>
+                            <td style={{ padding: "5px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: "var(--text-muted)" }}>{fmt(m.hitCoins)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1643,9 +1648,9 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
             </>
           )}
         </div>
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #2A3038", fontSize: 12.5, color: "#AEB6BD", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--border)", fontSize: 12.5, color: "var(--text-dim)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <span>{en ? data?.footerEn ?? "" : data?.footerZh ?? ""}</span>
-          <button onClick={onContact} style={{ flex: "0 0 auto", padding: "6px 14px", borderRadius: 8, border: "none", background: "#C05F3C", color: "#fff", fontSize: 12.5, cursor: "pointer" }}>{en ? "Message support" : "给客服留言"}</button>
+          <button onClick={onContact} style={{ flex: "0 0 auto", padding: "6px 14px", borderRadius: 8, border: "none", background: "var(--spark)", color: "#fff", fontSize: 12.5, cursor: "pointer" }}>{en ? "Message support" : "给客服留言"}</button>
         </div>
       </div>
     </div>
