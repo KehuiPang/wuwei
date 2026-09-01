@@ -3033,6 +3033,7 @@ export function App() {
   const [hasUpdate, setHasUpdate] = useState(false); // 有新版可用(小红点标志)：发现新版即 true
   // 左下角「重启更新」药丸：新版下载好后常驻显示，点主体即装、点叉关闭；关掉的版本记 localStorage，同版本不再弹、更新的版本会重新出现
   const [updateChipHidden, setUpdateChipHidden] = useState<string>(() => { try { return localStorage.getItem("wuwei_dismissed_update_chip") || ""; } catch { return ""; } });
+  const lastUpdCheck = useRef(0); // 发消息时顺带静默检测新版本的节流(2分钟)，多一个触发点
   const [dlProgress, setDlProgress] = useState<{ percent: number; bytesPerSecond: number } | null>(null); // 更新下载进度(0-100)，下载完清空
   const [dlVer, setDlVer] = useState(""); // 正在下载的新版本号（左下角提示用）
   async function refreshWuweiForShortage(message: string) {
@@ -4084,6 +4085,8 @@ export function App() {
     markFirstAction("send_input");
     // 每次发消息都埋点(behavior)：字数/是否带图/平台·模型，供分析活跃与使用深度
     void window.wuwei.track?.("send_message", { len: (text || "").length, images: imgs.length, provider: curProviderId, model: meta.model });
+    // 发消息时顺带静默检测新版本（节流 2 分钟）——多一个触发点，发现新版即在药丸提示，不弹检查窗
+    if (Date.now() - lastUpdCheck.current > 120000) { lastUpdCheck.current = Date.now(); void window.wuwei.checkUpdate?.().catch(() => {}); }
     if (text) {
       history.current.push(text);
       histIdx.current = history.current.length;

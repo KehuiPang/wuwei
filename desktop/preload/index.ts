@@ -3,6 +3,11 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { WuweiMe, CatalogProviderDto, ModelPricingData } from "../main/wuwei-auth.js";
 
 const EVENTS = [
+  // 自动更新事件——之前漏在白名单外，导致 main 发的「发现新版/下载进度/已就绪」全被 preload 拦掉、
+  // 渲染层永远收不到 → 更新药丸永远不显示（用户从来没见过升级提示的真正根因）。
+  "evt:update-available",
+  "evt:update-progress",
+  "evt:update-downloaded",
   "evt:ready",
   "evt:assistant-delta",
   "evt:tool-start",
