@@ -3578,12 +3578,26 @@ function setupUpdater(): void {
     log("updater", "update-downloaded 事件", info.version);
     send("evt:update-downloaded", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
   });
-  autoUpdater.on("error", (e) => log("updater", "更新出错", String(e?.message || e)));
+  autoUpdater.on("error", (e) => {
+    const msg = String(e?.message || e);
+    log("updater", "更新出错", msg);
+    void trackClientLog("error", "update", { message: `更新出错: ${msg}`, meta: { phase: "updater-event" }, accessToken: loadWuweiSession()?.accessToken ?? null }).catch(() => {});
+  });
   cleanOldUpdaterCache(); // 清理旧版本下载残留，只保留最新一个安装包（用户反馈旧缓存囤积）
   // 启动后尽快查一次（2.5s 让窗口先渲染，随即检测→发现新版立刻推「下载中」给界面）
   setTimeout(() => { void checkAndPrepareUpdate(); }, 2500);
-  // 之后每 5min 轮询一次更新源：发版后老用户最迟 5 分钟就能收到「新版就绪」提示，不用等重启。
-  setInterval(() => { void checkAndPrepareUpdate(); }, 5 * 60 * 1000);
+  // 轮询间隔后台可配：拉 /api/client-config 的 updateCheckSec（默认 60s，范围 30..3600），拉不到用默认。
+  // 只拉一次配置(启动时)，改配置下次启动生效；拉的只是几 KB，开销极小。
+  void (async () => {
+    let sec = 60;
+    try {
+      const site = process.env.WUWEI_SITE_URL || "https://wuweiai.io";
+      const res = await fetch(`${site}/api/client-config`);
+      if (res.ok) { const j = await res.json(); const s = Number(j?.updateCheckSec); if (Number.isFinite(s) && s >= 30 && s <= 3600) sec = Math.floor(s); }
+    } catch { /* 拉不到用默认 60s */ }
+    log("updater", `更新轮询间隔 ${sec}s`);
+    setInterval(() => { void checkAndPrepareUpdate(); }, sec * 1000);
+  })();
   // 窗口重新获得焦点时也查一次（用户切回来=大概率停留过一阵，趁机检测；60s 内不重复）
   let lastFocusCheck = 0;
   app.on("browser-window-focus", () => {
@@ -3621,21 +3635,29 @@ async function checkAndPrepareUpdate(): Promise<{ available: boolean; downloaded
     const notes = typeof info.releaseNotes === "string" ? info.releaseNotes : "";
     if (!available) return { available: false, version: info.version };
     log("updater", "发现新版", info.version);
-    // r.downloadPromise：autoDownload 触发的下载；已缓存则立即 resolve
-    if (r.downloadPromise) {
-      try {
-        await r.downloadPromise;
-        log("updater", "下载完成(就绪)", info.version);
+    // 关键修复：安装包已缓存时 checkForUpdates 不返回 downloadPromise，之前会漏推「就绪」→ 界面永远等不到。
+    // 统一 await：新下用 r.downloadPromise；已缓存用 downloadUpdate()(秒 resolve 返回已缓存文件路径)。都保证推 evt:update-downloaded。
+    try {
+      const dl = r.downloadPromise ?? autoUpdater.downloadUpdate();
+      const files = await dl;
+      const ok = files == null || (Array.isArray(files) ? files.length > 0 : true); // downloadPromise 无返回值也算成功
+      if (ok) {
+        log("updater", "下载完成/已缓存就绪", info.version);
         send("evt:update-downloaded", { version: info.version, notes });
         return { available: true, downloaded: true, version: info.version, notes };
-      } catch (e: any) {
-        log("updater", "下载失败", String(e?.message || e));
-        return { available: true, downloaded: false, version: info.version, notes };
       }
+      return { available: true, downloaded: false, version: info.version, notes };
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      log("updater", "下载失败", msg);
+      void trackClientLog("error", "update", { message: `下载失败: ${msg}`, meta: { phase: "download", version: info.version }, accessToken: loadWuweiSession()?.accessToken ?? null }).catch(() => {});
+      return { available: true, downloaded: false, version: info.version, notes };
     }
-    return { available: true, downloaded: false, version: info.version, notes };
   } catch (e: any) {
-    return { available: false, error: String(e?.message || e) };
+    const msg = String(e?.message || e);
+    // 检查更新报错上报后台，供「查看日志」排查（离线/DNS/源 404 等）
+    void trackClientLog("error", "update", { message: `检查更新失败: ${msg}`, meta: { phase: "check" }, accessToken: loadWuweiSession()?.accessToken ?? null }).catch(() => {});
+    return { available: false, error: msg };
   }
 }
 
