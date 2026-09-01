@@ -368,7 +368,8 @@ function friendlyError(raw: string, t: T): string {
 }
 
 function isCoinShortage(raw: string): boolean {
-  return /insufficient_balance|无为币余额不足|积分余额不足|余额不足|free_daily_cap_reached|今日免费额度已用完|free allowance is used up/i.test(raw || "");
+  // 中文/错误码 + 英文人读文案（网关 "Not enough coins for this request ... Please top up ..."）都要能命中，否则不弹一元/升级窗
+  return /insufficient_balance|无为币余额不足|积分余额不足|余额不足|free_daily_cap_reached|今日免费额度已用完|free allowance is used up|not enough coins|need(s)?\s*~?\d+\s*coins|please top up/i.test(raw || "");
 }
 
 // 粗判是否像 API Key：无空白、可见 ASCII、够长(真正闸门是连通测试)
