@@ -7,3 +7,10 @@ release-minicc/
 *.tgz
 .DS_Store
 .env
+
+# 内部推广/营销资料，不进公开开源仓
+推广文案/
+推广_*
+reddit_posts/
+SEO_*登记文案.md
+小红书*/
