@@ -21,6 +21,12 @@ const tt = (zh: string, en: string) => (process.env.WUWEI_LANG === "en" ? en : z
 // 无为托管网关的错误码 → 人话提示。网关出错时会返回 {error:{type:"gateway_error",code,...}}，
 // 直接把原始 JSON 甩给用户看不懂(如「OpenAI 兼容端点报错 402: {...}」)，这里翻成中/英友好文案并给出下一步。
 // 只对无为网关(baseUrl 含 /api/gateway)生效；第三方端点保持原样报错，不误翻。
+// 从网关原始错误体里取稳定错误码（供渲染层按码判定弹窗，语言无关）。
+function gwCode(rawBody: string): string {
+  try { const e = JSON.parse(rawBody)?.error; if (e?.type === "gateway_error") return String(e.code || ""); } catch { /* ignore */ }
+  return "";
+}
+
 function humanizeGatewayError(status: number, rawBody: string): string | null {
   let code = ""; let bal: number | undefined; let est: number | undefined;
   try {
@@ -368,7 +374,12 @@ class OpenAIProvider implements Provider {
       const isWuweiGateway = base.includes("/api/gateway");
       if (isWuweiGateway) {
         const friendly = humanizeGatewayError(res.status, rawBody);
-        if (friendly) throw new Error(friendly);
+        if (friendly) {
+          // 把网关稳定错误码原样带进异常消息(机器标记 [[gw:code]])，让渲染层按「码」判定弹窗，
+          // 而不是脆弱地匹配中/英文案。渲染层显示前会剥掉这个标记。
+          const code = gwCode(rawBody);
+          throw new Error(code ? `[[gw:${code}]] ${friendly}` : friendly);
+        }
       }
       throw new Error(
         `${tt("OpenAI 兼容端点报错", "OpenAI-compatible endpoint error")} ${res.status}: ${rawBody}`,

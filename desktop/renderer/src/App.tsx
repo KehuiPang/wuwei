@@ -363,13 +363,21 @@ function friendlyError(raw: string, t: T): string {
     return t("err.badRequest", "出错：请求有误（可能是模型名或参数不对）。");
   if (/\b5\d\d\b|server error|internal error|overloaded/i.test(r))
     return t("err.server", "出错：服务端错误或繁忙，请稍后重试。");
-  // 未知错误：只取首行 + 截断，加前缀，不整段英文轰炸
-  return t("err.prefix", "出错：") + (r.split("\n")[0] || r).slice(0, 120);
+  // 未知错误：剥掉机器错误码标记后，只取首行 + 截断，加前缀，不整段英文轰炸
+  const clean = r.replace(/\[\[gw:[a-z_]+\]\]\s*/i, "");
+  return t("err.prefix", "出错：") + (clean.split("\n")[0] || clean).slice(0, 120);
 }
 
+// 从错误里取网关稳定错误码（provider.ts 用 [[gw:code]] 机器标记带过来）。语言无关。
+function gatewayCode(raw: string): string {
+  return (String(raw || "").match(/\[\[gw:([a-z_]+)\]\]/i)?.[1] || "").toLowerCase();
+}
+// 无为币不足 / 免费额度用尽 → 该弹一元体验/升级窗。**只按错误码判定**，不匹配任何中英文案（脆）。
 function isCoinShortage(raw: string): boolean {
-  // 中文/错误码 + 英文人读文案（网关 "Not enough coins for this request ... Please top up ..."）都要能命中，否则不弹一元/升级窗
-  return /insufficient_balance|无为币余额不足|积分余额不足|余额不足|free_daily_cap_reached|今日免费额度已用完|free allowance is used up|not enough coins|need(s)?\s*~?\d+\s*coins|please top up/i.test(raw || "");
+  const code = gatewayCode(raw);
+  if (code) return code === "insufficient_balance" || code === "free_daily_cap_reached";
+  // 兜底：没有机器标记的旧格式/非网关错误，仍认错误码关键词（不认人读文案）
+  return /insufficient_balance|free_daily_cap_reached/i.test(raw || "");
 }
 
 // 粗判是否像 API Key：无空白、可见 ASCII、够长(真正闸门是连通测试)
