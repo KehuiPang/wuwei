@@ -3580,11 +3580,18 @@ function setupUpdater(): void {
   });
   autoUpdater.on("error", (e) => log("updater", "更新出错", String(e?.message || e)));
   cleanOldUpdaterCache(); // 清理旧版本下载残留，只保留最新一个安装包（用户反馈旧缓存囤积）
-  // 启动后延迟自动查一次（静默；有新版即等待下载完成后主动推「就绪」，不依赖原生 update-downloaded 事件）
-  setTimeout(() => { void checkAndPrepareUpdate(); }, 8000);
+  // 启动后尽快查一次（2.5s 让窗口先渲染，随即检测→发现新版立刻推「下载中」给界面）
+  setTimeout(() => { void checkAndPrepareUpdate(); }, 2500);
   // 之后每 5min 轮询一次更新源：发版后老用户最迟 5 分钟就能收到「新版就绪」提示，不用等重启。
-  // checkAndPrepareUpdate 内部已吞错(离线/超时静默跳过)，轮询无副作用；发现新版会自动后台下载并推「升级重启」。
   setInterval(() => { void checkAndPrepareUpdate(); }, 5 * 60 * 1000);
+  // 窗口重新获得焦点时也查一次（用户切回来=大概率停留过一阵，趁机检测；60s 内不重复）
+  let lastFocusCheck = 0;
+  app.on("browser-window-focus", () => {
+    const now = Date.now();
+    if (now - lastFocusCheck < 60_000) return;
+    lastFocusCheck = now;
+    void checkAndPrepareUpdate();
+  });
 }
 
 // 清理 electron-updater 下载缓存：只保留最新(改动时间最新)的一个安装包，删掉旧版本残留。

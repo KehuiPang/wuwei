@@ -3025,6 +3025,7 @@ export function App() {
   // 左下角「重启更新」药丸：新版下载好后常驻显示，点主体即装、点叉关闭；关掉的版本记 localStorage，同版本不再弹、更新的版本会重新出现
   const [updateChipHidden, setUpdateChipHidden] = useState<string>(() => { try { return localStorage.getItem("wuwei_dismissed_update_chip") || ""; } catch { return ""; } });
   const [dlProgress, setDlProgress] = useState<{ percent: number; bytesPerSecond: number } | null>(null); // 更新下载进度(0-100)，下载完清空
+  const [dlVer, setDlVer] = useState(""); // 正在下载的新版本号（左下角提示用）
   async function refreshWuweiForShortage(message: string) {
     // 去抖：自主推进/智能继续的会话会连续重试，每次撞余额都会调这里 → 弹窗弹好几次。
     // 3 秒内已弹过就跳过(点「刷新余额」按钮走的是同函数，但那是用户主动、间隔一般 >3s，不受影响)。
@@ -3532,8 +3533,8 @@ export function App() {
   useEffect(() => {
     window.wuwei.getAppVersion().then(setAppVer).catch(() => {});
     const off = window.wuwei.onEvent((ch, p: any) => {
-      // 自动下载不打扰用户，只在「更新」项标小红点；下载好了才弹「升级」提示
-      if (ch === "evt:update-available") setHasUpdate(true);
+      // 发现新版 → 立刻在左下角显示「发现新版·下载中」(不只小红点)；下载好了换成「升级重启」
+      if (ch === "evt:update-available") { setHasUpdate(true); setDlVer(p?.version || ""); setDlProgress((d) => d ?? { percent: 0, bytesPerSecond: 0 }); }
       else if (ch === "evt:update-progress") setDlProgress({ percent: Math.round(p?.percent ?? 0), bytesPerSecond: p?.bytesPerSecond ?? 0 });
       else if (ch === "evt:update-downloaded") { setHasUpdate(true); setDlProgress(null); setUpdateReady({ version: p?.version || "", notes: p?.notes || "" }); }
       else if (ch === "evt:tray-check-update") checkUpdateRef.current(); // 托盘菜单「检查更新」→ 走与账号菜单同一套检查流程
@@ -5108,7 +5109,7 @@ export function App() {
                 <div style={{ padding: "0 10px", marginTop: 12, marginBottom: 4, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
                   <div style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, color: "var(--text-dim)", marginBottom: 6 }}>
-                      <span>{lang === "en" ? "Downloading update…" : "正在下载更新…"}</span>
+                      <span>{lang === "en" ? `New version${dlVer ? ` v${dlVer}` : ""} · downloading…` : `发现新版本${dlVer ? ` v${dlVer}` : ""} · 下载中…`}</span>
                       <span>{dlProgress.percent}%</span>
                     </div>
                     <div style={{ height: 4, borderRadius: 999, background: "var(--bg-raised)", overflow: "hidden" }}>
@@ -12371,7 +12372,7 @@ function SettingsModal({
                       >
                         {claudeBusy ? t("set.m.verifying") : t("set.m.completeAuth")}
                       </button>
-                      <p className="s-note">
+                      <p className="s-note" style={{ marginTop: 14, textAlign: "center" }}>
                         <a className="link-inline" onClick={() => !claudeBusy && setSAwaitCode(false)}>
                           {t("set.m.back")}
                         </a>
