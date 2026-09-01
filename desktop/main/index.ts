@@ -3564,6 +3564,7 @@ function setupUpdater(): void {
   autoUpdater.autoInstallOnAppQuit = false; // 不擅自在退出时装，由用户点「升级」触发
   autoUpdater.on("update-available", (info) => {
     send("evt:update-available", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
+    void trackClientLog("info", "update", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, message: `发现新版 v${info.version}`, meta: { phase: "available", newVersion: info.version } }).catch(() => {});
   });
   // 下载进度：转发给界面显示进度条（percent 0-100 + 速度/已下/总量）
   autoUpdater.on("download-progress", (p) => {
@@ -3577,6 +3578,7 @@ function setupUpdater(): void {
   autoUpdater.on("update-downloaded", (info) => {
     log("updater", "update-downloaded 事件", info.version);
     send("evt:update-downloaded", { version: info.version, notes: typeof info.releaseNotes === "string" ? info.releaseNotes : "" });
+    void trackClientLog("info", "update", { version: app.getVersion(), accessToken: loadWuweiSession()?.accessToken ?? null, message: `新版 v${info.version} 已下载就绪`, meta: { phase: "downloaded", newVersion: info.version } }).catch(() => {});
   });
   autoUpdater.on("error", (e) => {
     const msg = String(e?.message || e);
