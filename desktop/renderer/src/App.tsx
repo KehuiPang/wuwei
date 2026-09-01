@@ -4669,6 +4669,26 @@ export function App() {
 
   return (
     <div className={"shell" + (showBrowser && !browserDetached && browserMode === "full" ? " browser-full" : "")}>
+      {/* 侧栏收起时，更新药丸改为固定浮动在左下角——否则药丸只在侧栏里，收起后用户永远看不到「发现新版本」 */}
+      {collapsed && updateReady && updateReady.version !== updateChipHidden && (
+        <div style={{ position: "fixed", left: 14, bottom: 14, zIndex: 60, width: 190, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+          <div className="update-chip" role="button" onClick={() => setShowUpdateModal(true)} title={lang === "en" ? `New version v${updateReady.version} available` : `发现新版本 v${updateReady.version}`}>
+            <span className="update-chip__icon">
+              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 16.5V8" /><path d="M8.5 11.5 12 8l3.5 3.5" /></svg>
+            </span>
+            <span className="update-chip__text">
+              <span className="update-chip__title">{lang === "en" ? "New version" : "发现新版本"}</span>
+              <span className="update-chip__ver">v{updateReady.version}</span>
+            </span>
+            <span className="update-chip__arrow">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+            </span>
+            <button className="update-chip__x" onClick={(e) => { e.stopPropagation(); const v = updateReady.version; setUpdateChipHidden(v); try { localStorage.setItem("wuwei_dismissed_update_chip", v); } catch {} }} title={lang === "en" ? "Dismiss" : "关闭"} aria-label={lang === "en" ? "Dismiss" : "关闭"}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
       {/* 侧边栏：会话历史（可拖宽/可折叠） */}
       {!collapsed && (
       <div className="sidebar" style={{ width: sidebarW }}>
