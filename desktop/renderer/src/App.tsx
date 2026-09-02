@@ -11962,13 +11962,14 @@ function SettingsModal({
                 <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>
                   {t("set.g.keepRecent")}
                 </div>
+                <span style={{ flex: 1 }} />
                 <input
                   type="number"
                   min={2}
                   max={2000}
                   value={keepRecent}
                   onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); const n = Math.min(2000, Math.max(2, Number(v) || 2)); onKeepRecent(n); }}
-                  style={{ flex: 1, minWidth: 0 }}
+                  style={{ width: 96, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
                 />
                 <div className="app-set-hint" style={{ minWidth: 40, textAlign: "right" }}>
                   {t("set.g.items")}
@@ -11986,7 +11987,7 @@ function SettingsModal({
                   type="number"
                   min={0}
                   defaultValue={(() => { const v = localStorage.getItem("wuwei-transcript-days"); return v === null ? 30 : Math.max(0, Number(v) || 0); })()}
-                  style={{ width: 88, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
+                  style={{ width: 72, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
                   onChange={(e) => localStorage.setItem("wuwei-transcript-days", String(Math.max(0, Math.floor(Number(e.target.value) || 0))))}
                 />
                 <div className="app-set-hint" style={{ minWidth: 48, textAlign: "right" }}>{lang === "en" ? "days" : "天"}</div>
