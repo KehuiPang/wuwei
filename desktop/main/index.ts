@@ -85,6 +85,7 @@ import {
   brainEnabled,
   brainDocsEnabled,
   resumeDetectEnabled,
+  claudeAutoRefreshEnabled,
   telemetryEnabled,
   type Settings,
   type SessionBal,
@@ -1100,6 +1101,7 @@ function isOAuthDead(e: any): boolean {
 async function ensureFreshClaudeOAuth(): Promise<void> {
   const st = loadSettings();
   if (!st || st.kind !== "anthropic-oauth") return;
+  if (!claudeAutoRefreshEnabled(st)) return; // 用户关了自动续期(保护本机 claude CLI 登录)→不续
   const auth = loadClaudeAuth();
   if (!auth?.refreshToken || !auth.expiresAt) {
     // 无 refresh/过期信息(老用户或 sidecar 丢失)：能判定已过期就清掉，否则交给手动重登
@@ -1142,6 +1144,7 @@ function scheduleClaudeRefresh(): void {
   if (claudeRefreshTimer) { clearTimeout(claudeRefreshTimer); claudeRefreshTimer = null; }
   const st = loadSettings();
   if (!st || st.kind !== "anthropic-oauth") return;
+  if (!claudeAutoRefreshEnabled(st)) return; // 用户关了自动续期→不排期
   const auth = loadClaudeAuth();
   if (!auth?.refreshToken || !auth.expiresAt) return; // 老 token 无 refresh/过期信息 → 不排期，靠请求前兜底或手动重登一次
   const BUFFER = 3 * 60 * 1000; // 提前 3 分钟续

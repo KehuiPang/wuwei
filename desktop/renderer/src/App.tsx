@@ -10953,6 +10953,7 @@ function SettingsModal({
   const [brainOn, setBrainOn] = useState(true); // 启用本地脑网络 Brain
   const [brainDocsOn, setBrainDocsOn] = useState(true); // recall 连带扫描『相关文档』
   const [resumeDetect, setResumeDetect] = useState(true); // 启动时检测被中断/干到一半的任务并提示恢复
+  const [claudeAutoRefresh, setClaudeAutoRefresh] = useState(true); // Claude 订阅 token 快过期自动续期
   const [telemetry, setTelemetry] = useState(true); // 发送诊断信息用于改善体验(默认开，可关)
   const setAppToggle = (patch: Record<string, boolean>) => {
     const cur = loadedRef.current || {};
@@ -11379,6 +11380,7 @@ function SettingsModal({
       setBrainOn(s.app?.brainEnabled !== false);
       setBrainDocsOn(s.app?.brainDocs !== false);
       setResumeDetect(s.app?.resumeDetect !== false);
+      setClaudeAutoRefresh(s.app?.claudeAutoRefresh !== false);
       setTelemetry(s.app?.telemetry !== false);
       const sts: Station[] = s.customStations || [];
       setStations(sts);
@@ -12063,6 +12065,24 @@ function SettingsModal({
                     setResumeDetect(e.target.checked);
                     setAppToggle({ resumeDetect: e.target.checked });
                   }}
+                />
+              </div>
+
+              <div className="app-set-group">{lang === "en" ? "Claude subscription auth" : "Claude 订阅授权"}</div>
+              <div className="app-set-row" style={{ cursor: "default", marginBottom: "16px" }}>
+                <div className="app-set-text">
+                  <div className="app-set-label">{lang === "en" ? "Auto-refresh token before expiry" : "令牌过期时自动续期"}</div>
+                  <div className="app-set-hint">
+                    {lang === "en"
+                      ? "Refreshes the Claude subscription token with its refresh token before it expires, so you don't have to re-authorize in every chat. Note: shares one login with the local claude CLI, so refreshing may log the CLI out — turn off if that bothers you."
+                      : "Claude 订阅令牌快到期时用 refreshToken 自动换新，免得每个对话反复重新授权。注意：与本机 claude 命令行共用同一登录，续期可能顶掉命令行的登录态——若你也在终端用 claude 且介意，就关掉。"}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  className="app-set-toggle"
+                  checked={claudeAutoRefresh}
+                  onChange={(e) => { setClaudeAutoRefresh(e.target.checked); setAppToggle({ claudeAutoRefresh: e.target.checked }); }}
                 />
               </div>
 
