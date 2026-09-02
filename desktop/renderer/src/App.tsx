@@ -14075,8 +14075,14 @@ function AppSettingsModal({
   onKeepRecent: (n: number) => void;
 }) {
   const [theme, setTheme] = useState("light");
+  const [compThr, setCompThr] = useState(""); // 压缩·token阈值(空=自动，按模型上下文80%)
+  const [compMsgThr, setCompMsgThr] = useState(""); // 压缩·消息条数阈值(空/0=关，只按token)
   useEffect(() => {
-    window.wuwei.getSettings().then((r: any) => setTheme(resolveTheme(r?.settings?.theme)));
+    window.wuwei.getSettings().then((r: any) => {
+      setTheme(resolveTheme(r?.settings?.theme));
+      const ct = Number(r?.settings?.compactThreshold); if (Number.isFinite(ct) && ct > 0) setCompThr(String(ct));
+      const cm = Number(r?.settings?.compactMsgThreshold); if (Number.isFinite(cm) && cm > 0) setCompMsgThr(String(cm));
+    });
   }, []);
   // 选主题：实时预览 + 立即持久化(spread 现有 settings 只改 theme)
   async function pickTheme(t: string) {
@@ -14168,6 +14174,24 @@ function AppSettingsModal({
         </div>
         <div className="app-set-hint" style={{ marginBottom: "14px" }}>
           上下文超限时，会把更早的消息总结成要点摘要、保留最近这么多条原文。数字越大越不易“失忆”，但更费上下文。
+        </div>
+        <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+          <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>Token 阈值</div>
+          <input type="number" min={0} placeholder="自动（模型上下文80%）" value={compThr}
+            onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompThr(v); window.wuwei.setCompact?.({ threshold: Number(v) || 0 }); }}
+            style={{ flex: 1, minWidth: 0 }} />
+        </div>
+        <div className="app-set-hint" style={{ marginBottom: "10px" }}>
+          上一轮输入 token 超过此值就触发压缩。留空=自动（按当前模型上下文的 80%）。
+        </div>
+        <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+          <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>消息条数阈值</div>
+          <input type="number" min={0} placeholder="0（关，只按 token）" value={compMsgThr}
+            onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompMsgThr(v); window.wuwei.setCompact?.({ msgThreshold: Number(v) || 0 }); }}
+            style={{ flex: 1, minWidth: 0 }} />
+        </div>
+        <div className="app-set-hint" style={{ marginBottom: "14px" }}>
+          消息条数超过此值也触发压缩（与 token 阈值任一命中即压）。0=关闭，只按 token 判断。
         </div>
         <div className="app-set-group">界面主题</div>
         <div className="theme-pick" style={{ marginBottom: "14px" }}>

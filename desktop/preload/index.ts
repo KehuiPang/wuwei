@@ -134,6 +134,7 @@ const api = {
   setStreamOutput: (mode: "typewriter" | "stream" | "instant", speed: number) =>
     ipcRenderer.send("settings:set-stream", mode, speed),
   setKeepRecent: (n: number) => ipcRenderer.send("settings:set-keep-recent", n),
+  setCompact: (p: { threshold?: number; msgThreshold?: number }) => ipcRenderer.send("settings:set-compact", p),
   setAskToast: (autoDismiss: boolean, sec: number) =>
     ipcRenderer.send("settings:set-ask-toast", autoDismiss, sec),
   setAppSettings: (patch: Record<string, boolean>) => ipcRenderer.send("settings:set-app", patch),

@@ -104,6 +104,7 @@ export interface WuweiApi {
   setGroupMode(mode: "manual" | "date" | "project"): void;
   setStreamOutput(mode: "typewriter" | "stream" | "instant", speed: number): void;
   setKeepRecent(n: number): void;
+  setCompact(p: { threshold?: number; msgThreshold?: number }): void;
   setAppSettings(patch: Record<string, boolean | string>): void;
   answerAsk(id: number, answers: unknown): void;
   codexResetCredits(): Promise<{ ok: boolean; availableCount?: number; credits?: any[]; error?: string }>;

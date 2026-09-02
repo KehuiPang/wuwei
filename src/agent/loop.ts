@@ -17,6 +17,7 @@ export type PermissionDecision = "allow" | "deny";
 
 export interface AgentOptions {
   compactThreshold?: number; // 上一轮 input tokens 超过此值触发压缩（0=关闭）
+  compactMsgThreshold?: number; // 消息条数超过此值也触发压缩（0=关闭，只按 token）
   keepRecent?: number; // 压缩时保留最近多少条原始消息
 }
 
@@ -143,6 +144,7 @@ export class Agent {
     totalSteps: 0,
   };
   private compactThreshold: number;
+  private compactMsgThreshold: number;
   private keepRecent: number;
   private lastCompactedLen = 0; // 上次压缩后剩下的消息条数;用于反空转:增长不足前不再压
   private pendingInject: { text: string; images: string[] }[] = []; // 运行中注入的新需求，循环边界取用
@@ -158,6 +160,7 @@ export class Agent {
     opts: AgentOptions = {},
   ) {
     this.compactThreshold = opts.compactThreshold ?? 60000;
+    this.compactMsgThreshold = opts.compactMsgThreshold ?? 0;
     this.keepRecent = opts.keepRecent ?? 6;
   }
 
@@ -268,8 +271,9 @@ export class Agent {
   }
 
   // 运行时调整压缩参数(设置里改"保留最近N条"/阈值时热更)
-  setCompactOpts(opts: { compactThreshold?: number; keepRecent?: number }): void {
+  setCompactOpts(opts: { compactThreshold?: number; compactMsgThreshold?: number; keepRecent?: number }): void {
     if (typeof opts.compactThreshold === "number") this.compactThreshold = opts.compactThreshold;
+    if (typeof opts.compactMsgThreshold === "number") this.compactMsgThreshold = opts.compactMsgThreshold;
     if (typeof opts.keepRecent === "number" && opts.keepRecent > 0) this.keepRecent = opts.keepRecent;
   }
 
@@ -619,8 +623,10 @@ export class Agent {
 
   // —— 上下文压缩 ——
   private async maybeCompact(hooks: AgentHooks): Promise<void> {
-    if (this.compactThreshold <= 0) return;
-    if (this.usage.lastInput < this.compactThreshold) return;
+    // token 阈值 或 消息条数阈值，任一命中就压（两者都可在设置里配；0=该项关闭）
+    const tokenHit = this.compactThreshold > 0 && this.usage.lastInput >= this.compactThreshold;
+    const msgHit = this.compactMsgThreshold > 0 && this.messages.length >= this.compactMsgThreshold;
+    if (!tokenHit && !msgHit) return;
     if (this.messages.length <= this.keepRecent + 1) return;
     // 反空转:上次压缩后消息没增长够 keepRecent 条,说明能摘掉的旧消息极少(退化成"15→13"这类),
     // 压了也几乎不缩上下文、却每次都要花一次昂贵的摘要请求。等积累够新内容再压。

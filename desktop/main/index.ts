@@ -147,7 +147,7 @@ let quitting = false;
 // provider/系统提示全局共享；每个会话一个 Agent（各自 messages）
 let provider: ReturnType<typeof makeProvider> | null = null;
 let sysPrompt = "";
-let agentOpts = { compactThreshold: 60000, keepRecent: 6 };
+let agentOpts = { compactThreshold: 60000, compactMsgThreshold: 0, keepRecent: 6 };
 let backendLabel = "";
 let modelLabel = "";
 let ctxWindow = 1_000_000; // 当前模型上下文窗口(占用条用真实值)
@@ -1004,7 +1004,8 @@ function initProvider() {
   ctxWindow = cfg.contextWindow;
   sysPrompt = buildSysPrompt(cwd, modelLabel, st?.providerId);
   agentOpts = {
-    compactThreshold: cfg.compactThreshold,
+    compactThreshold: st?.compactThreshold && st.compactThreshold > 0 ? st.compactThreshold : cfg.compactThreshold,
+    compactMsgThreshold: st?.compactMsgThreshold && st.compactMsgThreshold > 0 ? st.compactMsgThreshold : 0,
     keepRecent: st?.keepRecent && st.keepRecent > 0 ? st.keepRecent : cfg.keepRecentTurns,
   };
   backendLabel = labelFor(cfg, st?.providerId);
@@ -2924,6 +2925,18 @@ ipcMain.on("settings:set-keep-recent", (_e, n: number) => {
   saveSettings({ ...s, keepRecent: keep });
   agentOpts = { ...agentOpts, keepRecent: keep };
   for (const a of agents.values()) a.setCompactOpts({ keepRecent: keep });
+});
+
+// 上下文压缩阈值(热更)：token 阈值 + 消息条数阈值，0=该项关闭。用户在设置里调，立刻对所有会话生效。
+ipcMain.on("settings:set-compact", (_e, p: { threshold?: number; msgThreshold?: number }) => {
+  const s = loadSettings() || ({} as Settings);
+  const next: Partial<Settings> = {};
+  const patch: { compactThreshold?: number; compactMsgThreshold?: number } = {};
+  if (typeof p?.threshold === "number" && p.threshold >= 0) { next.compactThreshold = Math.floor(p.threshold); patch.compactThreshold = Math.floor(p.threshold); }
+  if (typeof p?.msgThreshold === "number" && p.msgThreshold >= 0) { next.compactMsgThreshold = Math.floor(p.msgThreshold); patch.compactMsgThreshold = Math.floor(p.msgThreshold); }
+  saveSettings({ ...s, ...next });
+  agentOpts = { ...agentOpts, ...patch };
+  for (const a of agents.values()) a.setCompactOpts(patch);
 });
 
 // —— 全局记忆(设置里手动编辑) ——
