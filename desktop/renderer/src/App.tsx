@@ -576,6 +576,7 @@ const MODEL_LABEL_OVERRIDES: Record<string, string> = {
   // Claude 订阅
   "claude-opus-5": "Claude Opus 5",
   "claude-sonnet-5": "Claude Sonnet 5",
+  "claude-fable-5-1": "Claude Fable 5.1",
   "claude-fable-5": "Claude Fable 5",
   "claude-opus-4-8": "Claude Opus 4.8",
   "claude-opus-4-7": "Claude Opus 4.7",
@@ -9786,6 +9787,7 @@ const PRESETS: Preset[] = [
     models: [
       "claude-opus-5",
       "claude-sonnet-5",
+      "claude-fable-5-1",
       "claude-fable-5",
       "claude-opus-4-8",
       "claude-opus-4-7",
@@ -9804,12 +9806,14 @@ const PRESETS: Preset[] = [
     keyUrl: "https://console.anthropic.com/settings/keys",
     keyHint: "sk-ant-...",
     models: [
+      "claude-opus-5",
       "claude-opus-4-8",
       "claude-opus-4-7",
       "claude-opus-4-6",
       "claude-sonnet-5",
       "claude-sonnet-4-6",
       "claude-haiku-4-5",
+      "claude-fable-5-1",
       "claude-fable-5",
     ],
     fixedBaseUrl: true,
