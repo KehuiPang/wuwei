@@ -429,9 +429,9 @@ function WuweiMark({ size = 18 }: { size?: number }) {
 }
 
 // —— 简约 SVG 图标（禁用 emoji，统一线性风、跟随 currentColor）——
-// 深色主题已下线：存量 "dark"/空值一律回退为白色，仅保留 light / gold。
-function resolveTheme(t?: string): string {
-  return t === "light" || t === "gold" ? t : "light";
+// 主题已收敛为单一白色：不再提供切换，任何存量值(dark/gold/空)一律白色。
+function resolveTheme(_t?: string): string {
+  return "light";
 }
 // 签到（未签）：日历 + 加号；已签：日历 + 对勾。线性 currentColor，无为简约风。
 function CheckinIcon({ size = 13 }: { size?: number }) {
@@ -10907,24 +10907,15 @@ function SettingsModal({
   isPro: boolean;
   onBrainLocked: () => void;
 }) {
-  // 界面主题（并入设置页「外观」）
-  const [uiTheme, setUiTheme] = useState("light");
   // 上下文压缩·token/消息条数阈值：本地暂存 + 挂载时从 settings 载入，onChange 走独立 IPC(setCompact)
   const [compThr, setCompThr] = useState(""); // token 阈值(空=自动，按模型上下文80%)
   const [compMsgThr, setCompMsgThr] = useState(""); // 消息条数阈值(空/0=关，只按 token)
   useEffect(() => {
     window.wuwei.getSettings().then((r: any) => {
-      setUiTheme(resolveTheme(r?.settings?.theme));
       const ct = Number(r?.settings?.compactThreshold); if (Number.isFinite(ct) && ct > 0) setCompThr(String(ct));
       const cm = Number(r?.settings?.compactMsgThreshold); if (Number.isFinite(cm) && cm > 0) setCompMsgThr(String(cm));
     });
   }, []);
-  async function pickTheme(t: string) {
-    setUiTheme(t);
-    document.documentElement.setAttribute("data-theme", t);
-    const r: any = await window.wuwei.getSettings();
-    window.wuwei.setSettings({ ...(r?.settings || {}), theme: t });
-  }
   // 会话提醒(自动消失/倒计时)：本页先暂存草稿,点「保存」才提交——走独立 IPC(setAskToast),
   // 与模型/凭证的大配置(settings:set)分开落盘、互不覆盖。弹窗每次开都重新挂载,草稿从 props 初始化=最新已存值。
   const [toastAutoDraft, setToastAutoDraft] = useState(askToastAuto);
@@ -12287,23 +12278,6 @@ function SettingsModal({
               )}
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.d.outputHint")}
-              </div>
-              <div className="app-set-group">{t("set.d.theme")}</div>
-              <div className="theme-pick" style={{ marginBottom: "14px" }}>
-                {[
-                  { id: "light", label: t("set.d.light") },
-                  { id: "gold", label: t("set.d.gold") },
-                ].map((th) => (
-                  <button
-                    key={th.id}
-                    type="button"
-                    className={"theme-opt theme-" + th.id + (uiTheme === th.id ? " on" : "")}
-                    onClick={() => pickTheme(th.id)}
-                  >
-                    <span className="theme-sw" />
-                    {th.label}
-                  </button>
-                ))}
               </div>
             </>
           )}

@@ -32,6 +32,9 @@ const IconGoal = (
 const IconBrain = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4.5a3 3 0 0 0-3 3 3 3 0 0 0-1.5 5.4A3 3 0 0 0 7 18.5a2.5 2.5 0 0 0 2.5 1V4.5z" /><path d="M15 4.5a3 3 0 0 1 3 3 3 3 0 0 1 1.5 5.4A3 3 0 0 1 17 18.5a2.5 2.5 0 0 1-2.5 1V4.5z" /></svg>
 );
+const IconPalace = (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M4 21V9.5l8-5 8 5V21" /><path d="M9 21v-6h6v6M9.5 11.5h.01M14.5 11.5h.01" /></svg>
+);
 const IconCoins = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6.5" rx="7" ry="3" /><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" /></svg>
 );
@@ -219,6 +222,29 @@ export function HelpManualModal({ lang, onClose }: Props) {
       ),
     },
     {
+      id: "palace",
+      icon: IconPalace,
+      label: L("Knowledge Palace", "知识宫殿"),
+      body: (
+        <>
+          <div className="guide-protag">Pro</div>
+          <p className="guide-lead">{L("Point Wuwei at a folder of your own documents — notes, an Obsidian vault, specs, past write-ups — and it becomes a searchable Knowledge Palace. The AI pulls the exact relevant passages on demand instead of you pasting everything in.", "把无为指向一个你自己的文档文件夹——笔记、Obsidian 库、规范、过往文稿——它就变成一座可检索的「知识宫殿」。需要时 AI 只捞出真正相关的段落，你不用再把一堆东西整段贴进去。")}</p>
+          <h4>{L("Set it up", "怎么建")}</h4>
+          <div className="guide-flow">
+            <div className="guide-flow__step"><span>1</span>{L("Settings → Brain Network → Document library", "设置 → 脑网络 → 文档库")}</div>
+            <div className="guide-flow__arrow">→</div>
+            <div className="guide-flow__step"><span>2</span>{L("Browse to your folder, click Build index", "选到你的文件夹，点建索引")}</div>
+            <div className="guide-flow__arrow">→</div>
+            <div className="guide-flow__step"><span>3</span>{L("Rebuild whenever the docs change", "文档有变就重建一次")}</div>
+          </div>
+          <FeatRow badge={<IconPalace2 />} title={L("Indexing (scan + vectorize)", "建索引（扫描 + 向量化）")} desc={L("It scans every document and builds a semantic index. Big libraries take a moment the first time; after that it's instant.", "它扫描每个文档、建立语义索引。第一次库大会花点时间，之后就是秒回。")} />
+          <FeatRow badge={<IconPalace2 />} title={L("Concept extraction (optional)", "概念抽取（可选）")} desc={L("Pull concepts and relations out of the indexed docs into the Brain graph — so your knowledge shows up as a connected map, not just loose text. Runs per-document to save tokens, and can be stopped anytime.", "从已索引文档里抽出概念和关系，填进脑网络图谱——你的知识就成了一张连起来的图，而不只是散落的文本。按文档逐个跑、省 token，随时可停。")} />
+          <FeatRow badge={<IconPalace2 />} title={L("Scan related docs on recall", "检索时扫描相关文档")} desc={L("Keep this sub-toggle on: when the AI recalls memory, it also returns the most relevant original fragments from your Palace — with their file paths.", "保持这个子开关开着：AI 检索记忆时，会连带返回宫殿里最相关的原文片段——并附上文件路径。")} />
+          <Tip tone="pro">{L("At work time it stays lean: recall returns a summary + path, and the AI reads the full document only when it actually needs it (via brain_read_doc). Your whole knowledge base is available without burning tokens on what isn't relevant.", "干活时很省：检索只给「摘要 + 路径」，AI 真正需要时才去读整篇原文（brain_read_doc）。整座知识库随取随用，又不会为无关内容白烧 token。")}</Tip>
+        </>
+      ),
+    },
+    {
       id: "coins",
       icon: IconCoins,
       label: L("Coins & membership", "无为币与会员"),
@@ -265,14 +291,14 @@ export function HelpManualModal({ lang, onClose }: Props) {
           <FeatRow badge={<IconSettings2 />} title={L("Thinking-depth picker", "思考档位选择器")} desc={L("Toggle the Fast / Balanced / Deep selector under the input bar. Lower a notch if tasks keep timing out mid-run.", "开关输入框下方的「快/平衡/深入」档位选择器。任务老在半路超时就调低一档。")} />
 
           <h4>{L("Appearance", "外观")}</h4>
-          <FeatRow badge={<IconSettings2 />} title={L("UI theme", "界面主题")} desc={L("Choose Moonlight (light), Ink-black (dark) or warm Gold — the app restyles instantly.", "月白（浅）、玄墨黑（深）或暖金三套主题，即选即变。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Output style", "输出方式")} desc={L("Choose how replies appear: Stream (shown in batches as they arrive), Typewriter (steady char-by-char, smoothest), or All-at-once (nothing shows until the reply is fully done).", "选回复怎么呈现：流式（收到即整批显示）、打字机（匀速逐字，最丝滑）、回完一次性（回复期间不显示，完成后一次性给出）。")} />
 
           <h4>{L("Model & Platforms", "模型与平台")}</h4>
           <FeatRow badge={<IconSettings2 />} title={L("Model", "模型")} desc={L("Pick the active provider & model, and enter your own API key / base URL / subscription token and thinking depth if you use your own account.", "选当前用哪个供应商和模型；用自己账号时在这填 API Key / Base URL / 订阅令牌和思考档位。")} />
           <FeatRow badge={<IconSettings2 />} title={L("Platform management", "平台管理")} desc={L("Reorder, edit, delete or hide any provider (the eye icon). Add a custom provider or relay. Hidden ones only disappear from the bottom “switch platform” menu — they stay usable here.", "拖动排序、编辑、删除或隐藏任意供应商（眼睛图标），也能添加自定义供应商/中转站。隐藏只影响底部「切换平台」菜单，此处仍可用。")} />
 
           <h4>{L("Personalization", "个性化")}</h4>
-          <FeatRow badge={<IconSettings2 />} title={L("System prompt", "系统提示词")} desc={L("A global instruction that shapes how the AI behaves in every chat — its tone, rules, what to always do or avoid.", "一段全局指令，塑造 AI 在每个对话里的风格、规则、该做/该避免什么。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("System prompt — you're in full control", "系统提示词 —— 完全由你掌控")} desc={L("A global instruction that shapes how the AI behaves in every chat — its tone, rules, what to always do or avoid. Tools like Claude Code and Codex ship a built-in system prompt of tens of thousands of tokens, so even a plain “hello” burns that much before you've started. In Wuwei it's fully yours to edit — you decide exactly what the AI is told, and keep it as lean as you want.", "一段全局指令，塑造 AI 在每个对话里的风格、规则、该做/该避免什么。像 Claude Code、Codex 这类工具，内置系统提示词动辄几万 token——你只发一句「哈喽」，一开口就先烧掉几万 token。无为这里完全交给你自定义：AI 被告知什么、留多精简，全由你说了算，真正完全掌控 AI。")} />
           <FeatRow badge={<IconSettings2 />} title={L("Memory", "记忆")} desc={L("Facts you want it to always know (your stack, names, preferences). Simpler than the Brain Network — it's a plain always-on note you edit by hand.", "你想让它始终记得的事实（技术栈、名字、偏好）。比脑网络简单，就是一段手动编辑、始终生效的备忘。")} />
           <FeatRow badge={<IconSettings2 />} title={L("Brain Network (Pro)", "脑网络（Pro）")} desc={L("The auto-learning long-term memory — graph & pyramid views plus its learning prompt. See the Brain Network section for details.", "自动学习的长期记忆——网络图/金字塔视图 + 学习提示词。详见「脑网络」一节。")} />
 
@@ -333,6 +359,7 @@ function IconCheck() { return <svg width="16" height="16" viewBox="0 0 24 24" fi
 function IconPrio() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4M5 4l11 3-4 4 4 4-11 3" /></svg>; }
 function IconGroup() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h7l2 2h9v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7z" /></svg>; }
 function IconBrain2() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2.4" /><path d="M12 5v4M12 15v4M5 12h4M15 12h4M7 7l2.4 2.4M14.6 14.6L17 17M17 7l-2.4 2.4M9.4 14.6L7 17" /></svg>; }
+function IconPalace2() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M4 21V9.5l8-5 8 5V21" /><path d="M9 21v-6h6v6" /></svg>; }
 function IconBell() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>; }
 function IconHelp2() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 13v-1a8 8 0 0 1 16 0v1" /><rect x="3" y="13" width="4" height="6" rx="1.5" /><rect x="17" y="13" width="4" height="6" rx="1.5" /><path d="M20 19a4 4 0 0 1-4 4h-2" /></svg>; }
 function IconChat() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-11.7 7.9L4 20l1.4-4A8.5 8.5 0 1 1 21 11.5z" /></svg>; }

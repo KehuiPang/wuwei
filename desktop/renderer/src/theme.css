@@ -630,13 +630,12 @@ body {
 .update-chip__icon::after {
   content: "";
   position: absolute;
-  top: -3px;
-  right: -3px;
-  width: 9px;
-  height: 9px;
+  top: -1px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #ef4444;
-  border: 2px solid var(--bg-raised); /* 与侧栏底同色的描边，让红点像浮在上面、干净利落 */
+  background: #ef4444; /* 干净的小实心点，无描边，贴在图标徽章右上角 */
 }
 .update-chip__text {
   display: flex;
