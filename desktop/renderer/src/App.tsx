@@ -4685,9 +4685,8 @@ export function App() {
       {collapsed && updateReady && updateReady.version !== updateChipHidden && (
         <div style={{ position: "fixed", left: 14, bottom: 14, zIndex: 60, width: 190, WebkitAppRegion: "no-drag" } as React.CSSProperties}>
           <div className="update-chip" role="button" onClick={() => setShowUpdateModal(true)} title={lang === "en" ? `New version v${updateReady.version} available` : `发现新版本 v${updateReady.version}`}>
-            <span className="update-chip__icon" style={{ position: "relative" }}>
-              <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 2px var(--bg-raised)" }} aria-hidden />
-              <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 16.5V8" /><path d="M8.5 11.5 12 8l3.5 3.5" /></svg>
+            <span className="update-chip__icon">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 16.5V8" /><path d="M8.5 11.5 12 8l3.5 3.5" /></svg>
             </span>
             <span className="update-chip__text">
               <span className="update-chip__title">{lang === "en" ? "New version" : "发现新版本"}</span>
@@ -5169,9 +5168,8 @@ export function App() {
                     onClick={() => setShowUpdateModal(true)}
                     title={lang === "en" ? `New version v${updateReady.version} available` : `发现新版本 v${updateReady.version}`}
                   >
-                    <span className="update-chip__icon" style={{ position: "relative" }}>
-              <span style={{ position: "absolute", top: -3, right: -3, width: 8, height: 8, borderRadius: "50%", background: "#ef4444", boxShadow: "0 0 0 2px var(--bg-raised)" }} aria-hidden />
-                      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <span className="update-chip__icon">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                         <circle cx="12" cy="12" r="9" />
                         <path d="M12 16.5V8" />
                         <path d="M8.5 11.5 12 8l3.5 3.5" />

@@ -599,24 +599,41 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 11px 7px 11px 10px;
-  border-radius: 10px;
-  background: transparent;
-  border: 1px solid var(--border);
+  padding: 10px 8px 10px 10px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
   cursor: pointer;
+  transition: background 0.16s, border-color 0.16s;
   -webkit-app-region: no-drag;
 }
-.update-chip:hover { background: var(--bg-raised); }
+.update-chip:hover {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+/* 图标收进一个强调色圆角小徽章：整块就是升级信号，无需再叠红点 */
 .update-chip__icon {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: update-chip-breathe 2.6s ease-in-out infinite;
 }
-.update-chip:hover .update-chip__icon { color: var(--accent); }
+.update-chip:hover .update-chip__icon {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  animation: none;
+}
+@keyframes update-chip-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 30%, transparent); }
+  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
 .update-chip__text {
   display: flex;
   flex-direction: column;
