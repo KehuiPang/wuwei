@@ -32,9 +32,6 @@ const IconGoal = (
 const IconBrain = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 4.5a3 3 0 0 0-3 3 3 3 0 0 0-1.5 5.4A3 3 0 0 0 7 18.5a2.5 2.5 0 0 0 2.5 1V4.5z" /><path d="M15 4.5a3 3 0 0 1 3 3 3 3 0 0 1 1.5 5.4A3 3 0 0 1 17 18.5a2.5 2.5 0 0 1-2.5 1V4.5z" /></svg>
 );
-const IconBaby = (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="10" r="6.5" /><path d="M9.5 9.5h.01M14.5 9.5h.01M9.5 13a3 3 0 0 0 5 0" /></svg>
-);
 const IconCoins = (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="6.5" rx="7" ry="3" /><path d="M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" /></svg>
 );
@@ -199,20 +196,6 @@ export function HelpManualModal({ lang, onClose }: Props) {
           <FeatRow badge={<IconBrain2 />} title={L("Recalls across chats", "跨对话回忆")} desc={L("Next time it pulls in your past experience and preferences without you repeating them.", "下次自动调用你过去的经验与偏好，不用你再说一遍。")} />
           <FeatRow badge={<IconBrain2 />} title={L("Gets richer with use", "越用越丰富")} desc={L("Memory isn't capped by a single conversation's length — the more you use it, the more it understands you.", "记忆不受单次对话长度限制，用得越久越懂你。")} />
           <Tip tone="pro">{L("Brain Network is a Pro feature. Open it from the left panel; free users see an intro. Background learning progress shows in the status bar at the bottom.", "脑网络是 Pro 功能。从左侧面板进入，免费用户会看到介绍页。后台学习进度在底部状态栏实时显示。")}</Tip>
-        </>
-      ),
-    },
-    {
-      id: "baby",
-      icon: IconBaby,
-      label: L("Digital Baby", "数字婴儿"),
-      body: (
-        <>
-          <p className="guide-lead">{L("An optional, experimental AGI panel: a “digital baby” with its own growing memory network and live vital signs. It's hidden by default.", "一个可选的实验性 AGI 板块：一个有自己成长记忆网络和实时生命体征的「数字婴儿」，默认隐藏。")}</p>
-          <FeatRow badge={<span className="guide-num">1</span>} title={L("Enable it", "开启")} desc={L("Turn on the Digital Baby / AGI panel in Settings. An entry then appears in the left panel.", "在设置里打开数字婴儿 / AGI 板块，左侧面板就会出现入口。")} />
-          <FeatRow badge={<span className="guide-num">2</span>} title={L("Add & connect", "新增并对接")} desc={L("Click “Add Digital Baby” to connect one. Removing it from the UI never deletes its memory data.", "点「新增数字婴儿」对接一个。从界面移除不会删它的记忆数据。")} />
-          <FeatRow badge={<span className="guide-num">3</span>} title={L("Watch it grow", "看它成长")} desc={L("Its Memory Network and vital-signs cards update as it learns — including new things picked up from chatting and browsing.", "它的记忆网络和生命体征卡片会随学习更新，包括聊天、上网学到的新东西。")} />
-          <Tip>{L("This is a playground for the “grow a mind from a neural network” idea, not a productivity tool — explore it when you're curious.", "这是「从神经网络里养出心智」这个想法的试验场，不是生产力工具，好奇时来玩。")}</Tip>
         </>
       ),
     },
