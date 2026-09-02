@@ -127,19 +127,38 @@ export function HelpManualModal({ lang, onClose }: Props) {
       body: (
         <>
           <p className="guide-lead">{L("The real power is in the right-click menu. Right-click any conversation in the left list to reveal it.", "真正的威力藏在右键菜单里。在左侧列表右键任意一个对话就能打开。")}</p>
-          <Shot caption={L("Right-click a conversation → the full action menu", "右键一个对话 → 完整操作菜单")}>
-            <svg viewBox="0 0 320 190" width="100%" fill="none" stroke="currentColor">
-              <rect x="8" y="10" width="150" height="170" rx="8" strokeWidth="1.5" opacity="0.35" />
-              <rect x="18" y="26" width="110" height="12" rx="3" strokeWidth="1.3" opacity="0.4" />
-              <rect x="18" y="46" width="130" height="12" rx="3" strokeWidth="1.3" fill="currentColor" fillOpacity="0.12" strokeOpacity="0.5" />
-              <g strokeWidth="1.4">
-                <rect x="150" y="44" width="160" height="132" rx="9" fill="currentColor" fillOpacity="0.05" strokeOpacity="0.6" />
-                <path d="M164 60h120M164 76h120M164 92h120M164 116h120M164 132h120" strokeOpacity="0.5" />
-                <path d="M164 104h120" strokeOpacity="0.25" strokeDasharray="3 3" />
-                <circle cx="156" cy="60" r="2" fill="currentColor" /><circle cx="156" cy="76" r="2" fill="currentColor" /><circle cx="156" cy="92" r="2" fill="currentColor" />
-              </g>
-            </svg>
-          </Shot>
+          <figure className="guide-shot">
+            <div className="gm-stage">
+              <div className="gm-menu">
+                <div className="gm-item"><IconHandoff /><span>{L("Summarize and hand off to a new chat", "总结并交接到新对话")}</span></div>
+                <div className="gm-sep" />
+                <div className="gm-item"><IconGoal2 /><span>{L("Set overall goal…", "设置总目标…")}</span></div>
+                <div className="gm-item"><IconHist /><span>{L("View full history…", "查看完整历史…")}</span></div>
+                <div className="gm-sep" />
+                <div className="gm-item gm-done"><IconCheck /><span>{L("Mark done", "标记完成")}</span></div>
+                <div className="gm-item"><IconDiscuss /><span>{L("Mark to discuss", "标记待讨论")}</span></div>
+                <div className="gm-sep" />
+                <div className="gm-head">{L("Move to group", "移动到分组")}</div>
+                <div className="gm-item"><IconPlusSm /><span>{L("New group…", "新建分组…")}</span></div>
+                <div className="gm-sep" />
+                <div className="gm-head">{L("Priority", "优先级")}</div>
+                <div className="gm-chips">
+                  <span className="gm-chip gm-chip--on">{L("None", "无")}</span>
+                  <span className="gm-chip">{L("High", "高")}</span>
+                  <span className="gm-chip">{L("Medium", "中")}</span>
+                  <span className="gm-chip">{L("Low", "低")}</span>
+                </div>
+                <div className="gm-head">{L("Quadrants (importance/urgency)", "四象限（重要/紧急）")}</div>
+                <div className="gm-quad">
+                  <span className="gm-qb">{L("Urgent & important", "紧急重要")}</span>
+                  <span className="gm-qb">{L("Important, not urgent", "不紧急重要")}</span>
+                  <span className="gm-qb">{L("Urgent, not important", "紧急不重要")}</span>
+                  <span className="gm-qb">{L("Neither", "不紧急不重要")}</span>
+                </div>
+              </div>
+            </div>
+            <figcaption>{L("The actual right-click menu, reproduced item by item", "真实的右键菜单，逐项 1:1 还原")}</figcaption>
+          </figure>
           <FeatRow badge={<IconGoal2 />} title={L("Summarize & hand off to a new chat", "总结并交接到新对话")} desc={L("Distills what matters from a long, messy chat and opens a clean new one to continue — beats a polluted context. If the chat has an overall goal, it carries over and auto-resumes.", "把又长又乱的对话里有价值的东西提炼出来，开一个干净的新对话接着做，解决上下文被污染。若原对话设了总目标，会一并带过去并自动续跑。")} />
           <FeatRow badge={<IconGoal2 />} title={L("Set overall goal", "设置总目标")} desc={L("Give the chat one big goal; it self-decomposes and drives step by step until done. Pair with Smart-continue for hands-off progress.", "给对话定一个大目标，它自己拆解、一步步推进，做完为止。配「智能继续」即可放手让它跑。")} />
           <FeatRow badge={<IconHist />} title={L("View full history", "查看完整历史")} desc={L("See the original exchanges from before context compaction — nothing is lost even after long autonomous runs.", "查看上下文压缩之前的原始交流，跑再久也能回看，什么都不丢。")} />
@@ -233,14 +252,35 @@ export function HelpManualModal({ lang, onClose }: Props) {
     {
       id: "settings",
       icon: IconSettings,
-      label: L("Settings & context", "设置与上下文"),
+      label: L("Settings walkthrough", "设置逐栏详解"),
       body: (
         <>
-          <p className="guide-lead">{L("Settings → General covers language, context compaction, history archiving and updates.", "设置 → 通用里有语言、上下文压缩、历史归档、更新。")}</p>
+          <p className="guide-lead">{L("Open Settings from the account menu. The left menu has ten tabs — here's what each one is for.", "从账号菜单打开设置。左侧有十个分栏，这里逐个说清用途。")}</p>
+
+          <h4>{L("General", "通用")}</h4>
           <FeatRow badge={<IconSettings2 />} title={L("Language", "语言")} desc={L("Switch the whole app between English and 中文 anytime.", "随时在英文和中文之间切换整个界面。")} />
-          <FeatRow badge={<IconSettings2 />} title={L("Context compaction", "上下文压缩")} desc={L("When a chat gets long, older messages are summarized to stay within the model's window. Tune how many recent messages to keep, and the token / message thresholds that trigger it.", "对话变长时，较旧的消息会被摘要以保持在模型窗口内。可调保留多少条最近消息，以及触发压缩的 token / 消息条数阈值。")} />
-          <FeatRow badge={<IconSettings2 />} title={L("Full history archive", "完整历史归档")} desc={L("Original pre-compaction exchanges are archived — reachable via right-click → View full history.", "压缩前的原始交流会被归档，可通过右键 → 查看完整历史找回。")} />
-          <FeatRow badge={<IconSettings2 />} title={L("Updates", "更新")} desc={L("New versions download in the background; a soft card appears bottom-left when ready. Click it to upgrade & restart.", "新版本后台下载，就绪时左下角出现一张柔和的卡片，点它升级并重启。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Session grouping", "会话分组")} desc={L("Manual (drag & right-click into groups), by-date, or by-project (AI auto-buckets chats by their content).", "手动（拖拽 / 右键归组）、按日期、或按项目（AI 按对话内容自动归类）。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Context compaction", "上下文压缩")} desc={L("When a chat gets long, older messages are summarized to fit the model's window. Set how many recent messages to keep verbatim, plus the token threshold and message-count threshold that trigger it (either one fires it; blank token = auto 80% of the model's context).", "对话变长时，较旧消息被摘要以塞进模型窗口。可设保留多少条最近原文，外加触发压缩的 Token 阈值和消息条数阈值（任一命中即压；Token 留空=自动取模型上下文 80%）。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Full history archive", "完整历史归档")} desc={L("Pre-compaction originals are archived (right-click a chat → View full history). Set retention days; 0 = keep forever.", "压缩前的原文会归档（右键会话 → 查看完整历史）。可设保留天数；填 0 = 永久保留。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Thinking-depth picker", "思考档位选择器")} desc={L("Toggle the Fast / Balanced / Deep selector under the input bar. Lower a notch if tasks keep timing out mid-run.", "开关输入框下方的「快/平衡/深入」档位选择器。任务老在半路超时就调低一档。")} />
+
+          <h4>{L("Appearance", "外观")}</h4>
+          <FeatRow badge={<IconSettings2 />} title={L("UI theme", "界面主题")} desc={L("Choose Moonlight (light), Ink-black (dark) or warm Gold — the app restyles instantly.", "月白（浅）、玄墨黑（深）或暖金三套主题，即选即变。")} />
+
+          <h4>{L("Model & Platforms", "模型与平台")}</h4>
+          <FeatRow badge={<IconSettings2 />} title={L("Model", "模型")} desc={L("Pick the active provider & model, and enter your own API key / base URL / subscription token and thinking depth if you use your own account.", "选当前用哪个供应商和模型；用自己账号时在这填 API Key / Base URL / 订阅令牌和思考档位。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Platform management", "平台管理")} desc={L("Reorder, edit, delete or hide any provider (the eye icon). Add a custom provider or relay. Hidden ones only disappear from the bottom “switch platform” menu — they stay usable here.", "拖动排序、编辑、删除或隐藏任意供应商（眼睛图标），也能添加自定义供应商/中转站。隐藏只影响底部「切换平台」菜单，此处仍可用。")} />
+
+          <h4>{L("Personalization", "个性化")}</h4>
+          <FeatRow badge={<IconSettings2 />} title={L("System prompt", "系统提示词")} desc={L("A global instruction that shapes how the AI behaves in every chat — its tone, rules, what to always do or avoid.", "一段全局指令，塑造 AI 在每个对话里的风格、规则、该做/该避免什么。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Memory", "记忆")} desc={L("Facts you want it to always know (your stack, names, preferences). Simpler than the Brain Network — it's a plain always-on note you edit by hand.", "你想让它始终记得的事实（技术栈、名字、偏好）。比脑网络简单，就是一段手动编辑、始终生效的备忘。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Brain Network (Pro)", "脑网络（Pro）")} desc={L("The auto-learning long-term memory — graph & pyramid views plus its learning prompt. See the Brain Network section for details.", "自动学习的长期记忆——网络图/金字塔视图 + 学习提示词。详见「脑网络」一节。")} />
+
+          <h4>{L("Power tools", "进阶能力")}</h4>
+          <FeatRow badge={<IconSettings2 />} title={L("MCP", "MCP")} desc={L("Connect MCP servers to extend what the agent can do (files, knowledge-graph memory, and more). Install from the built-in catalog in one click, or add your own.", "接入 MCP 服务器扩展智能体能力（文件、知识图谱记忆等）。可从内置目录一键安装，也能自定义添加。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Tools", "工具")} desc={L("Turn built-in tools on/off (web search, running commands, file edits …) and search the full list.", "开关内置工具（联网搜索、执行命令、改文件…），可搜索整个列表。")} />
+          <FeatRow badge={<IconSettings2 />} title={L("Secrets / Keys", "密钥")} desc={L("A local secret manager. It can detect a new key before you send and, once stored, auto-replaces secrets with placeholders so they never reach the AI in plain text.", "本地密钥管理器。发送前可检测疑似新密钥；入库后会自动用占位符替换敏感信息，绝不明文发给 AI。")} />
+
           <Tip>{L("On a Claude subscription the usable context is capped lower than the API's 1M — so compaction may kick in earlier than the “/1M” display suggests. For the largest context, use an API key.", "用 Claude 订阅时，可用上下文比 API 的 1M 低（有封顶），所以压缩可能比「/1M」显示的更早触发。要最大上下文请用 API Key。")}</Tip>
         </>
       ),
@@ -285,6 +325,9 @@ export function HelpManualModal({ lang, onClose }: Props) {
 
 // —— 内容里复用的小图标（16px 线性）——
 function IconGoal2() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.4" /></svg>; }
+function IconHandoff() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M9 7l-4 4 4 4" /><path d="M5 11h9a5 5 0 0 1 5 5v1" /></svg>; }
+function IconDiscuss() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 15.5a2 2 0 0 1-2 2H8l-4 3.5V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" /></svg>; }
+function IconPlusSm() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>; }
 function IconHist() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H18a2 2 0 0 1 2 2v11.5a1.5 1.5 0 0 1-1.5 1.5H7a3 3 0 0 1-3-3V5.5z" /><path d="M8 8.5h8M8 12h8M8 15.5h5" /></svg>; }
 function IconCheck() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12.5l5 5 11-11" /></svg>; }
 function IconPrio() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4M5 4l11 3-4 4 4 4-11 3" /></svg>; }

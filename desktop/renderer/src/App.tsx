@@ -10909,8 +10909,15 @@ function SettingsModal({
 }) {
   // 界面主题（并入设置页「外观」）
   const [uiTheme, setUiTheme] = useState("light");
+  // 上下文压缩·token/消息条数阈值：本地暂存 + 挂载时从 settings 载入，onChange 走独立 IPC(setCompact)
+  const [compThr, setCompThr] = useState(""); // token 阈值(空=自动，按模型上下文80%)
+  const [compMsgThr, setCompMsgThr] = useState(""); // 消息条数阈值(空/0=关，只按 token)
   useEffect(() => {
-    window.wuwei.getSettings().then((r: any) => setUiTheme(resolveTheme(r?.settings?.theme)));
+    window.wuwei.getSettings().then((r: any) => {
+      setUiTheme(resolveTheme(r?.settings?.theme));
+      const ct = Number(r?.settings?.compactThreshold); if (Number.isFinite(ct) && ct > 0) setCompThr(String(ct));
+      const cm = Number(r?.settings?.compactMsgThreshold); if (Number.isFinite(cm) && cm > 0) setCompMsgThr(String(cm));
+    });
   }, []);
   async function pickTheme(t: string) {
     setUiTheme(t);
@@ -11993,6 +12000,41 @@ function SettingsModal({
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {t("set.g.compactionHint")}
+              </div>
+              {/* 触发压缩的两个阈值：token 阈值(空=自动按模型上下文80%) + 消息条数阈值(0=关)。任一命中即压 */}
+              <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Token threshold" : "Token 阈值"}</div>
+                <span style={{ flex: 1 }} />
+                <input
+                  type="number"
+                  min={0}
+                  placeholder={lang === "en" ? "Auto (80% of context)" : "自动（上下文80%）"}
+                  value={compThr}
+                  onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompThr(v); window.wuwei.setCompact?.({ threshold: Number(v) || 0 }); }}
+                  style={{ width: 168, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
+                />
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "12px" }}>
+                {lang === "en"
+                  ? "Compaction triggers when the previous turn's input tokens exceed this. Leave blank = auto (80% of the current model's context window)."
+                  : "上一轮输入 token 超过此值就触发压缩。留空=自动（按当前模型上下文的 80%）。"}
+              </div>
+              <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Message-count threshold" : "消息条数阈值"}</div>
+                <span style={{ flex: 1 }} />
+                <input
+                  type="number"
+                  min={0}
+                  placeholder={lang === "en" ? "0 (off)" : "0（关）"}
+                  value={compMsgThr}
+                  onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompMsgThr(v); window.wuwei.setCompact?.({ msgThreshold: Number(v) || 0 }); }}
+                  style={{ width: 168, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
+                />
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "16px" }}>
+                {lang === "en"
+                  ? "Also compact when the message count exceeds this (either threshold triggers it). 0 = off, token-only."
+                  : "消息条数超过此值也触发压缩（与 token 阈值任一命中即压）。0=关闭，只按 token 判断。"}
               </div>
               {/* 完整对话历史归档：压缩前原文永不丢，右键会话→查看完整历史。这里设保留天数 */}
               <div className="app-set-group">{lang === "en" ? "Full history archive" : "完整对话历史归档"}</div>
