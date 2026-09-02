@@ -2057,6 +2057,9 @@ if (!gotLock) {
     createTray();
     setupUpdater(); // 自动更新：启动后延迟静默查一次
     startClientTelemetry(); // 客户端埋点：首次安装报 install + 启动即报 heartbeat + 每 6h 补报（后台算 DAU/留存/安装量）
+    // Claude 订阅 token 主动定时续期：每 4 分钟查一次(内部只在 <5min 到期时才真续)，提前续好，
+    // 避免空闲久了 token 过期、下次请求前才现续甚至续不上。有 sidecar(refresh_token) 才会动，静默无副作用。
+    setInterval(() => { void ensureFreshClaudeOAuth().catch(() => {}); }, 4 * 60 * 1000);
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -3416,6 +3419,24 @@ ipcMain.handle("account:claude-oauth-open", () => {
 ipcMain.handle("account:claude-oauth-exchange", async (_e, code: string) => {
   log("claude-login-ipc", "用授权码换 token");
   const r = await claudeOAuthExchange(code);
+  // 授权成功 → 权威保存新 token 并热更**所有** claude-oauth 会话，避免「一个对话框授权了、别的对话框还提示过期、要各自重设」。
+  // 同一 Claude 订阅是全局共享的一把 token，不该按会话各存。claudeOAuthExchange 已写 sidecar(refresh_token) → 之后自动续期。
+  if (r?.token) {
+    try {
+      const s = loadSettings();
+      if (s) {
+        s.oauthToken = r.token;
+        if (!s.creds) s.creds = {};
+        s.creds["claude-oauth"] = { ...(s.creds["claude-oauth"] || {}), oauthToken: r.token };
+        saveSettings(s);
+        applyEnvFromSettings(s);
+        provider = makeProvider(loadConfig());
+        for (const [sid, a] of agents) if (backendBySid.get(sid) === "claude-oauth") a.setProvider(provider);
+        log("claudeOAuth", "重新授权 → 已热更所有 Claude 订阅会话");
+        void emitAccount();
+      }
+    } catch (e) { log("claude-login-ipc", "保存/传播新 token 失败", String(e)); }
+  }
   return r ? r.token : null;
 });
 
