@@ -7,6 +7,7 @@ import { QRCodeSVG } from "qrcode.react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { HelpManualModal } from "./components/HelpManualModal.js";
 import { BabyAvatar, inferBabyState } from "./baby/BabyAvatar.js";
 import { BabyHero } from "./baby/BabyHero.js";
 import { BabyPyramid } from "./baby/BabyPyramid.js";
@@ -2955,6 +2956,7 @@ export function App() {
   const [showLeaveMsg, setShowLeaveMsg] = useState(false); // 留言表单（客服弹窗内点「直接留言」/ 账号菜单「留言反馈」进入）
   const [leaveMsgFromSupport, setLeaveMsgFromSupport] = useState(false); // 区分来源：从客服弹窗进=显返回；从菜单直接进=无返回
   const [showMsgCenter, setShowMsgCenter] = useState(false); // 消息中心弹窗
+  const [showGuide, setShowGuide] = useState(false); // 使用手册弹窗
 
   // —— 产品行为埋点：弹窗展示 / 用户菜单打开（每次弹出/打开记一次，供后台漏斗分析）——
   useEffect(() => { if (coinPackOpen) void window.wuwei.track?.("buy_credits_popup_shown"); }, [coinPackOpen]);
@@ -5397,6 +5399,21 @@ export function App() {
                                   </span>
                                 )}
                               </button>
+                              {/* 使用手册：新用户从0把无为玩透（模式/右键秘技/总目标/脑网络/会员…），中英文 */}
+                              <button
+                                className="acct-it"
+                                onClick={() => {
+                                  void window.wuwei.track?.("menu_item_click", { item: "guide" });
+                                  setShowAcctMenu(false);
+                                  setShowGuide(true);
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 18.5V5.5z" />
+                                  <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5a2.5 2.5 0 0 0 2.5-2.5V5.5z" />
+                                </svg>
+                                {lang === "en" ? "User Guide" : "使用手册"}
+                              </button>
                               <button
                                 className="acct-it"
                                 onClick={() => {
@@ -7527,6 +7544,7 @@ export function App() {
           onRead={(u) => setMsgUnread(u)}
         />
       )}
+      {showGuide && <HelpManualModal lang={lang} onClose={() => setShowGuide(false)} />}
       {/* 未登录发消息先弹的居中登录激励卡；点登录再切到下面的登录框 */}
       {showLoginIntro && (
         <LoginIntroModal

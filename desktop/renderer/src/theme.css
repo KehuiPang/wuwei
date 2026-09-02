@@ -687,6 +687,147 @@ body {
 .update-chip:hover .update-chip__x { opacity: 1; pointer-events: auto; }
 .update-chip__x:hover { background: var(--bg-soft); color: var(--text); }
 
+/* ============ 使用手册 / User Guide 大弹窗 ============ */
+.guide-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 28px;
+  -webkit-app-region: no-drag;
+}
+.guide-modal {
+  display: flex;
+  width: min(1060px, 96vw);
+  height: min(680px, 90vh);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+/* 左导航 */
+.guide-nav {
+  flex: 0 0 236px;
+  display: flex; flex-direction: column;
+  background: var(--bg-soft);
+  border-right: 1px solid var(--border);
+  padding: 18px 12px;
+}
+.guide-nav__brand { padding: 4px 10px 16px; }
+.guide-nav__brandttl { font-size: 16px; font-weight: 700; color: var(--text); }
+.guide-nav__brandsub { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+.guide-nav__list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.guide-nav__it {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: 9px;
+  border: none; background: none; cursor: pointer;
+  color: var(--text-muted); font-size: 13px; text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.guide-nav__it:hover { background: var(--bg-raised); color: var(--text); }
+.guide-nav__it.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.guide-nav__ico { flex: 0 0 auto; display: flex; opacity: 0.9; }
+/* 右内容 */
+.guide-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.guide-body__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 18px 22px; border-bottom: 1px solid var(--border);
+}
+.guide-body__ico { display: flex; color: var(--accent); }
+.guide-body__head h3 { flex: 1; margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+.guide-x {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 8px; border: none;
+  background: none; color: var(--text-muted); cursor: pointer;
+}
+.guide-x:hover { background: var(--bg-raised); color: var(--text); }
+.guide-body__scroll { flex: 1; overflow-y: auto; padding: 22px 26px 30px; }
+.guide-body__scroll h4 { margin: 22px 0 10px; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.guide-body__scroll p { margin: 0 0 12px; font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+.guide-lead { font-size: 13.5px !important; color: var(--text) !important; line-height: 1.7 !important; }
+/* 功能行 */
+.guide-feat { display: flex; gap: 12px; padding: 11px 0; border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent); }
+.guide-feat:last-child { border-bottom: none; }
+.guide-feat__badge {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+  min-width: 30px; height: 30px; padding: 0 7px; margin-top: 1px;
+  border-radius: 9px; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+}
+.guide-feat__title { font-size: 13px; font-weight: 650; color: var(--text); margin-bottom: 2px; }
+.guide-feat__desc { font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+.guide-num { font-size: 13px; font-weight: 700; }
+.guide-chip {
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  padding: 3px 8px; border-radius: 7px;
+  background: var(--bg-raised); color: var(--text-muted);
+}
+.guide-chip--on { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+/* 提示条 */
+.guide-tip {
+  margin: 14px 0 4px; padding: 11px 14px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.6; color: var(--text-muted);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.guide-tip--pro { border-color: color-mix(in srgb, #c99a3a 40%, transparent); background: color-mix(in srgb, #c99a3a 9%, transparent); }
+.guide-kbd {
+  font-size: 11.5px; font-family: inherit; padding: 1px 7px; border-radius: 6px;
+  background: var(--bg-raised); border: 1px solid var(--border); color: var(--text);
+}
+/* 示意/截图框 */
+.guide-shot { margin: 14px 0; }
+.guide-shot__frame {
+  padding: 14px 16px; border-radius: 12px;
+  background: var(--bg-soft); border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.guide-shot figcaption { margin-top: 7px; font-size: 11.5px; color: var(--text-dim); text-align: center; }
+/* 深度刻度 */
+.guide-scale { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.guide-scale span {
+  font-size: 11.5px; padding: 4px 10px; border-radius: 999px;
+  background: var(--bg-raised); color: var(--text-dim);
+}
+.guide-scale__on { background: color-mix(in srgb, var(--accent) 18%, transparent) !important; color: var(--accent) !important; font-weight: 600; }
+/* 流程 */
+.guide-flow { display: flex; align-items: stretch; gap: 8px; margin: 8px 0 14px; flex-wrap: wrap; }
+.guide-flow__step {
+  flex: 1; min-width: 150px; display: flex; align-items: center; gap: 8px;
+  padding: 11px 12px; border-radius: 11px; font-size: 12.5px; color: var(--text);
+  background: var(--bg-soft); border: 1px solid var(--border);
+}
+.guide-flow__step span {
+  flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.guide-flow__arrow { display: flex; align-items: center; color: var(--text-dim); font-size: 16px; }
+/* Pro 徽标 */
+.guide-protag {
+  display: inline-block; margin-bottom: 10px; padding: 3px 11px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  color: #b9832b; background: color-mix(in srgb, #c99a3a 15%, transparent);
+  border: 1px solid color-mix(in srgb, #c99a3a 38%, transparent);
+}
+/* 套餐卡 */
+.guide-plans { display: flex; gap: 8px; margin: 6px 0 4px; flex-wrap: wrap; }
+.guide-plan {
+  flex: 1; min-width: 130px; display: flex; flex-direction: column; gap: 3px;
+  padding: 12px 13px; border-radius: 12px;
+  background: var(--bg-soft); border: 1px solid var(--border);
+}
+.guide-plan b { font-size: 13.5px; color: var(--text); }
+.guide-plan span { font-size: 12px; color: var(--text-muted); }
+.guide-plan em { font-size: 11px; color: var(--text-dim); font-style: normal; }
+.guide-plan--rec { border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
 /* 用量 */
 .usage-btn {
   cursor: pointer;
