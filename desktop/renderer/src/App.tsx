@@ -11961,16 +11961,15 @@ function SettingsModal({
                   {t("set.g.keepRecent")}
                 </div>
                 <input
-                  type="range"
-                  min={4}
-                  max={40}
-                  step={2}
+                  type="number"
+                  min={2}
+                  max={2000}
                   value={keepRecent}
-                  onChange={(e) => onKeepRecent(Number(e.target.value))}
-                  style={{ flex: 1 }}
+                  onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); const n = Math.min(2000, Math.max(2, Number(v) || 2)); onKeepRecent(n); }}
+                  style={{ flex: 1, minWidth: 0 }}
                 />
                 <div className="app-set-hint" style={{ minWidth: 40, textAlign: "right" }}>
-                  {keepRecent} {t("set.g.items")}
+                  {t("set.g.items")}
                 </div>
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
@@ -14162,17 +14161,14 @@ function AppSettingsModal({
             保留最近条数
           </div>
           <input
-            type="range"
-            min={4}
-            max={40}
-            step={2}
+            type="number"
+            min={2}
+            max={2000}
             value={keepRecent}
-            onChange={(e) => onKeepRecent(Number(e.target.value))}
-            style={{ flex: 1 }}
+            onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); const n = Math.min(2000, Math.max(2, Number(v) || 2)); onKeepRecent(n); }}
+            style={{ flex: 1, minWidth: 0 }}
           />
-          <div className="app-set-hint" style={{ minWidth: 40, textAlign: "right" }}>
-            {keepRecent} 条
-          </div>
+          <div className="app-set-hint" style={{ minWidth: 40, textAlign: "right" }}>条</div>
         </div>
         <div className="app-set-hint" style={{ marginBottom: "14px" }}>
           上下文超限时，会把更早的消息总结成要点摘要、保留最近这么多条原文。数字越大越不易“失忆”，但更费上下文。
