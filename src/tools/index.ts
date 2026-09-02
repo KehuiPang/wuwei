@@ -484,6 +484,30 @@ function htmlToText(html: string): string {
     .trim();
 }
 // 解析 DuckDuckGo html 版结果页(无需 key)
+// DuckDuckGo Lite 解析：html.duckduckgo.com 被反爬(202挑战页)后改用 lite.duckduckgo.com/lite/。
+// 结构：<a ...class='result-link' href='...uddg=<编码真URL>'>标题</a> + <td class='result-snippet'>摘要</td>，各按序配对。
+function parseLite(html: string): { title: string; url: string; snippet: string }[] {
+  const items: { title: string; url: string }[] = [];
+  const anchorRe = /<a\b([^>]*class=['"][^'"]*result-link[^'"]*['"][^>]*)>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = anchorRe.exec(html))) {
+    const hrefM = /href=['"]([^'"]+)['"]/.exec(m[1]);
+    if (!hrefM) continue;
+    let url = hrefM[1];
+    const uddg = /[?&]uddg=([^&]+)/.exec(url);
+    if (uddg) url = decodeURIComponent(uddg[1]);
+    else if (url.startsWith("//")) url = "https:" + url;
+    const title = stripTags(m[2]);
+    if (!title || /duckduckgo\.com\/duckduckgo-help-pages/i.test(url)) continue; // 跳过广告的「more info」帮助页链接
+    items.push({ url, title });
+  }
+  const snipRe = /<td\b[^>]*class=['"][^'"]*result-snippet[^'"]*['"][^>]*>([\s\S]*?)<\/td>/gi;
+  const snips: string[] = [];
+  let s: RegExpExecArray | null;
+  while ((s = snipRe.exec(html))) snips.push(stripTags(s[1]));
+  return items.map((it, i) => ({ ...it, snippet: snips[i] || "" }));
+}
+
 function parseDDG(html: string): { title: string; url: string; snippet: string }[] {
   const titleRe = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
   const snipRe = /class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
@@ -516,13 +540,24 @@ const webSearchTool: Tool = {
     try {
       const q = String(input.query || "").trim();
       if (!q) return { content: tt("搜索词为空", "Search query is empty"), isError: true };
-      const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), {
-        // 搜索结果语言跟随界面语言
-        headers: { "User-Agent": UA, "Accept-Language": tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9") },
-        signal: ctx.signal,
-      });
-      const html = await res.text();
-      const results = parseDDG(html).slice(0, 8);
+      const lang = tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9");
+      // 主源：DDG Lite（lite.duckduckgo.com）——html.duckduckgo.com 已被反爬(返回202挑战页)。Lite 挂了再退回旧 html 源。
+      let results: { title: string; url: string; snippet: string }[] = [];
+      try {
+        const rLite = await fetch("https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(q), {
+          headers: { "User-Agent": UA, "Accept-Language": lang }, signal: ctx.signal,
+        });
+        results = parseLite(await rLite.text());
+      } catch { /* 落到兜底 */ }
+      if (!results.length) {
+        try {
+          const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), {
+            headers: { "User-Agent": UA, "Accept-Language": lang }, signal: ctx.signal,
+          });
+          results = parseDDG(await res.text());
+        } catch { /* 两源都挂 */ }
+      }
+      results = results.slice(0, 8);
       if (!results.length)
         return {
           content: tt(
