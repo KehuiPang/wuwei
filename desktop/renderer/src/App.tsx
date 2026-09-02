@@ -1756,7 +1756,7 @@ function TrialPayModal({
             {en ? (
               <div className="trial-paddle">
                 <div className="trial-paddle-price">{price}<small>{cfg.unitEn}</small></div>
-                <button className="trial-pay-btn" onClick={onPaddle}>{`Pay ${price}`}<PayArrow /></button>
+                <button className="trial-pay-btn" onClick={() => { void window.wuwei.track?.("paddle_pay_click", { sku: cfg.sku, price }); onPaddle(); }}>{`Pay ${price}`}<PayArrow /></button>
                 <div className="trial-sub2">Secure checkout via Paddle</div>
               </div>
             ) : phase === "ready" && qr ? (
