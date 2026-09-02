@@ -697,6 +697,15 @@ body {
   -webkit-app-region: no-drag;
 }
 .guide-modal {
+  /* 手册固定白底：局部覆盖调色板，跟 wuwei 浅色界面一致，不随深色主题变黑 */
+  --bg: #ffffff;
+  --bg-soft: #f6f8fa;
+  --bg-raised: #eef1f4;
+  --border: #e4e7eb;
+  --text: #16191e;
+  --text-dim: #5b656d;
+  --text-muted: #6b7278;
+  --accent: #274a63;
   display: flex;
   width: min(1060px, 96vw);
   height: min(680px, 90vh);
@@ -704,7 +713,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
 }
 /* 左导航 */
 .guide-nav {
