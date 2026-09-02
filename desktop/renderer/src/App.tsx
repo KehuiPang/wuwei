@@ -11977,16 +11977,16 @@ function SettingsModal({
                   {t("set.g.keepRecent")}
                 </div>
                 <span style={{ flex: 1 }} />
-                <input
-                  type="number"
-                  min={2}
-                  max={2000}
-                  value={keepRecent}
-                  onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); const n = Math.min(2000, Math.max(2, Number(v) || 2)); onKeepRecent(n); }}
-                  style={{ width: 96, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
-                />
-                <div className="app-set-hint" style={{ minWidth: 40, textAlign: "right" }}>
-                  {t("set.g.items")}
+                <div className="set-field">
+                  <input
+                    type="number"
+                    min={2}
+                    max={2000}
+                    value={keepRecent}
+                    onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); const n = Math.min(2000, Math.max(2, Number(v) || 2)); onKeepRecent(n); }}
+                    className="set-field-input"
+                  />
+                  <span className="set-field-unit">{t("set.g.items")}</span>
                 </div>
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
@@ -11996,14 +11996,17 @@ function SettingsModal({
               <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
                 <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Token threshold" : "Token 阈值"}</div>
                 <span style={{ flex: 1 }} />
-                <input
-                  type="number"
-                  min={0}
-                  placeholder={lang === "en" ? "Auto (80% of context)" : "自动（上下文80%）"}
-                  value={compThr}
-                  onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompThr(v); window.wuwei.setCompact?.({ threshold: Number(v) || 0 }); }}
-                  style={{ width: 168, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
-                />
+                <div className="set-field">
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder={lang === "en" ? "Auto 80%" : "自动 80%"}
+                    value={compThr}
+                    onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompThr(v); window.wuwei.setCompact?.({ threshold: Number(v) || 0 }); }}
+                    className="set-field-input"
+                  />
+                  <span className="set-field-unit">token</span>
+                </div>
               </div>
               <div className="app-set-hint" style={{ marginBottom: "12px" }}>
                 {lang === "en"
@@ -12013,14 +12016,17 @@ function SettingsModal({
               <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
                 <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Message-count threshold" : "消息条数阈值"}</div>
                 <span style={{ flex: 1 }} />
-                <input
-                  type="number"
-                  min={0}
-                  placeholder={lang === "en" ? "0 (off)" : "0（关）"}
-                  value={compMsgThr}
-                  onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompMsgThr(v); window.wuwei.setCompact?.({ msgThreshold: Number(v) || 0 }); }}
-                  style={{ width: 168, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
-                />
+                <div className="set-field">
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder={lang === "en" ? "0 = off" : "0 关"}
+                    value={compMsgThr}
+                    onChange={(e) => { const v = e.target.value.replace(/[^\d]/g, ""); setCompMsgThr(v); window.wuwei.setCompact?.({ msgThreshold: Number(v) || 0 }); }}
+                    className="set-field-input"
+                  />
+                  <span className="set-field-unit">{lang === "en" ? "msgs" : "条"}</span>
+                </div>
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {lang === "en"
@@ -12032,14 +12038,16 @@ function SettingsModal({
               <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
                 <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Keep archived logs for" : "归档日志保留"}</div>
                 <span style={{ flex: 1 }} />
-                <input
-                  type="number"
-                  min={0}
-                  defaultValue={(() => { const v = localStorage.getItem("wuwei-transcript-days"); return v === null ? 30 : Math.max(0, Number(v) || 0); })()}
-                  style={{ width: 72, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
-                  onChange={(e) => localStorage.setItem("wuwei-transcript-days", String(Math.max(0, Math.floor(Number(e.target.value) || 0))))}
-                />
-                <div className="app-set-hint" style={{ minWidth: 48, textAlign: "right" }}>{lang === "en" ? "days" : "天"}</div>
+                <div className="set-field">
+                  <input
+                    type="number"
+                    min={0}
+                    defaultValue={(() => { const v = localStorage.getItem("wuwei-transcript-days"); return v === null ? 30 : Math.max(0, Number(v) || 0); })()}
+                    className="set-field-input"
+                    onChange={(e) => localStorage.setItem("wuwei-transcript-days", String(Math.max(0, Math.floor(Number(e.target.value) || 0))))}
+                  />
+                  <span className="set-field-unit">{lang === "en" ? "days" : "天"}</span>
+                </div>
               </div>
               <div className="app-set-hint" style={{ marginBottom: "16px" }}>
                 {lang === "en"
