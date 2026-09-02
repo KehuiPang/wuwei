@@ -1135,6 +1135,23 @@ async function ensureFreshClaudeOAuth(): Promise<void> {
   return refreshingClaude;
 }
 
+// 按 token 过期时间排「一次性」续期：过期前 3 分钟触发续期，续好后按新到期时间重排。
+// 不轮询、不频繁打续期接口——一个 token 生命周期内只调一次续期。无 sidecar(refresh_token) 则不排期。
+let claudeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleClaudeRefresh(): void {
+  if (claudeRefreshTimer) { clearTimeout(claudeRefreshTimer); claudeRefreshTimer = null; }
+  const st = loadSettings();
+  if (!st || st.kind !== "anthropic-oauth") return;
+  const auth = loadClaudeAuth();
+  if (!auth?.refreshToken || !auth.expiresAt) return; // 老 token 无 refresh/过期信息 → 不排期，靠请求前兜底或手动重登一次
+  const BUFFER = 3 * 60 * 1000; // 提前 3 分钟续
+  const delay = Math.min(Math.max(0, auth.expiresAt - Date.now() - BUFFER), 2_000_000_000); // 夹在 setTimeout 32bit 上限内
+  claudeRefreshTimer = setTimeout(() => {
+    void (async () => { await ensureFreshClaudeOAuth().catch(() => {}); scheduleClaudeRefresh(); })(); // 续好后按新到期时间重排
+  }, delay);
+  log("claudeOAuth", `续期已排期：${Math.round(delay / 1000)}s 后触发（token 约 ${new Date(auth.expiresAt).toISOString()} 过期）`);
+}
+
 // —— 浏览器控制：Electron 内置 Chromium 的 WebContentsView，可嵌入主窗口面板"可视化" AI 操作 ——
 let browserView: WebContentsView | null = null;
 let browserAttached = false;
@@ -2057,9 +2074,7 @@ if (!gotLock) {
     createTray();
     setupUpdater(); // 自动更新：启动后延迟静默查一次
     startClientTelemetry(); // 客户端埋点：首次安装报 install + 启动即报 heartbeat + 每 6h 补报（后台算 DAU/留存/安装量）
-    // Claude 订阅 token 主动定时续期：每 4 分钟查一次(内部只在 <5min 到期时才真续)，提前续好，
-    // 避免空闲久了 token 过期、下次请求前才现续甚至续不上。有 sidecar(refresh_token) 才会动，静默无副作用。
-    setInterval(() => { void ensureFreshClaudeOAuth().catch(() => {}); }, 4 * 60 * 1000);
+    scheduleClaudeRefresh(); // Claude 订阅：按 token 过期时间排一次性续期(过期前3分钟触发)，不轮询、不频繁调续期接口
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -3433,6 +3448,7 @@ ipcMain.handle("account:claude-oauth-exchange", async (_e, code: string) => {
         provider = makeProvider(loadConfig());
         for (const [sid, a] of agents) if (backendBySid.get(sid) === "claude-oauth") a.setProvider(provider);
         log("claudeOAuth", "重新授权 → 已热更所有 Claude 订阅会话");
+        scheduleClaudeRefresh(); // 新 token 有新的过期时间 → 按它重排续期
         void emitAccount();
       }
     } catch (e) { log("claude-login-ipc", "保存/传播新 token 失败", String(e)); }
