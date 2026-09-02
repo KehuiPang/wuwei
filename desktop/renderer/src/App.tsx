@@ -3553,6 +3553,15 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 定时刷新会员/余额(每90s + 窗口聚焦)：只在扣费时推送会导致免费模型使用期「本周额度%」长期显示旧值(不刷新)。
+  useEffect(() => {
+    const refresh = () => { window.wuwei?.wuweiMe?.().then((m) => { if (m) setWuwei(m); }).catch(() => {}); };
+    const iv = setInterval(refresh, 90_000);
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => { clearInterval(iv); window.removeEventListener("focus", onFocus); };
+  }, []);
+
   // 今日已签到判定：拿到账号数据后，若最近签到日=今天(UTC，与后端签到日一致)则按钮直接显「已签到」且禁用，不用点了才知道。
   useEffect(() => {
     const last = wuwei?.coin.lastSignin;
