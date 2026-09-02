@@ -1130,6 +1130,13 @@ async function ensureFreshClaudeOAuth(): Promise<void> {
       // 续期只热更「绑在 Claude 订阅」的会话，用新 token；别的平台会话保持独立、绝不被换成 Claude。
       for (const [sid, a] of agents) if (backendBySid.get(sid) === "claude-oauth") a.setProvider(provider);
       log("claudeOAuth", "✓ 已续期并热更 Claude 订阅会话 provider");
+      // 续期成功 → 刷新左下角账号；当前正看着 Claude 订阅会话则触发连通/账号复检，
+      // 让边缘情况(app 关着跨过期、重开那一下)的黄灯自动转绿，不用等下一条请求。
+      void emitAccount();
+      if (currentId && backendBySid.get(currentId) === "claude-oauth") {
+        send("evt:ready", { backend: backendLabel, model: modelLabel, cwd, sub: subFlag, ctxWindow });
+        void silentRefreshAccount("claude-oauth");
+      }
     } finally {
       refreshingClaude = null;
     }
