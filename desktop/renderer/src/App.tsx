@@ -2047,31 +2047,6 @@ function LoginIntroModal({ lang, t, onClose, onLogin, onKeepFree, reason, onLang
           >
             ×
           </button>
-          {/* 小地球语言切换：右上角(X 左边)，点开选中/英。后台可开关(showLangSwitch)，主要给快速切语言测试用 */}
-          {showLangSwitch && onLang && (
-            <div style={{ position: "absolute", top: 9, right: 40 }}>
-              <button
-                onClick={() => setLangOpen((v) => !v)}
-                title={zh ? "切换语言" : "Language"}
-                style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 0 }}
-              >
-                <GlobeIcon size={15} />
-              </button>
-              {langOpen && (
-                <div style={{ position: "absolute", top: 26, right: 0, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,.18)", overflow: "hidden", zIndex: 5, minWidth: 78 }}>
-                  {([["zh", "中文"], ["en", "English"]] as [Lang, string][]).map(([code, label]) => (
-                    <button
-                      key={code}
-                      onClick={() => { onLang(code); setLangOpen(false); }}
-                      style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 12px", background: lang === code ? "rgba(192,95,60,.10)" : "none", border: "none", color: lang === code ? "#C05F3C" : "var(--text)", fontSize: 12.5, fontWeight: lang === code ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap" }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
           <div
             style={{
               width: 46,
@@ -4203,6 +4178,10 @@ export function App() {
   // —— 智能继续：自动接话 ——
   const runningSetRef = useRef(runningSet); runningSetRef.current = runningSet;
   const lastActivityRef = useRef<Map<string, number>>(new Map()); // 各会话最后一次收到事件的时刻，自主推进看门狗判僵死用
+  // 自主推进看门狗可配参数(秒)：巡检间隔 + 判停阈值(无活动多久判卡住并自动续)。存 localStorage，设置里可改
+  const [wdIntervalSec, setWdIntervalSec] = useState(() => { const v = Number(localStorage.getItem("wuwei-wd-interval")); return v >= 10 ? v : 40; });
+  const [wdIdleSec, setWdIdleSec] = useState(() => { const v = Number(localStorage.getItem("wuwei-wd-idle")); return v >= 20 ? v : 90; });
+  const wdIdleRef = useRef(wdIdleSec); wdIdleRef.current = wdIdleSec;
   const inputRef = useRef(input); inputRef.current = input;
   const suggestionRef = useRef(suggestion); suggestionRef.current = suggestion;
   // 后台会话没有输入框/建议条，直接投递给它自己的 sid，不碰当前屏幕。
@@ -4241,12 +4220,14 @@ export function App() {
     const iv = setInterval(() => {
       const now = Date.now();
       const modes = modeRef.current;
+      const idleMs = Math.max(20, wdIdleRef.current) * 1000; // 判停阈值(可配)
       for (const sid of Object.keys(modes)) {
         if (modes[sid] !== "cont") continue; // 只兜「智能继续」的会话；用户点暂停/完成会切走该模式
         const last = lastActivityRef.current.get(sid) ?? 0;
         if (last === 0) continue; // 从没跑过 → 不动
         const running = runningSetRef.current.has(sid);
-        if (now - last < (running ? 240000 : 90000)) continue; // 还在动(或刚动过) → 不打扰
+        // 仍标 running 的多等一截(判停阈值 + 150s)，避免打断真在跑的长工具；已停则到阈值即救
+        if (now - last < (running ? idleMs + 150000 : idleMs)) continue;
         if (sid === currentIdRef.current && inputRef.current.trim()) continue; // 你正在打字
         if (contMaxRef.current > 0 && (contBySid.current.get(sid) || 0) >= contMaxRef.current) continue; // 到封顶轮数
         // 判僵死 → 直接清可能卡住的运行标(改 ref，否则 autoContinue 的 has(sid) 会挡回)，朝总目标续
@@ -4255,9 +4236,9 @@ export function App() {
         lastActivityRef.current.set(sid, now); // 占位，避免下一巡重复触发
         autoContinue(sid, langRef.current === "en" ? "Keep going toward the overall goal." : "继续朝总目标推进。");
       }
-    }, 40000);
+    }, Math.max(10, wdIntervalSec) * 1000);
     return () => clearInterval(iv);
-  }, []);
+  }, [wdIntervalSec]);
   // ASK 兜底倒计时：每秒减一，减到头仍然把这句发出去(智能继续下不该干等)
   useEffect(() => {
     if (suggestWait <= 0) return;
@@ -7621,6 +7602,12 @@ export function App() {
           onStream={changeStream}
           keepRecent={keepRecent}
           onKeepRecent={changeKeepRecent}
+          watchdogInterval={wdIntervalSec}
+          watchdogIdle={wdIdleSec}
+          onWatchdog={(interval, idle) => {
+            setWdIntervalSec(interval); localStorage.setItem("wuwei-wd-interval", String(interval));
+            setWdIdleSec(idle); localStorage.setItem("wuwei-wd-idle", String(idle));
+          }}
           showEffortPicker={showEffortPicker}
           onShowEffortPicker={changeShowEffortPicker}
           lang={lang}
@@ -11098,6 +11085,9 @@ function SettingsModal({
   onStream,
   keepRecent,
   onKeepRecent,
+  watchdogInterval,
+  watchdogIdle,
+  onWatchdog,
   showEffortPicker,
   onShowEffortPicker,
   lang,
@@ -11119,6 +11109,9 @@ function SettingsModal({
   onStream: (mode: "typewriter" | "stream" | "instant", speed: number) => void;
   keepRecent: number;
   onKeepRecent: (n: number) => void;
+  watchdogInterval: number;
+  watchdogIdle: number;
+  onWatchdog: (interval: number, idle: number) => void;
   showEffortPicker: boolean;
   onShowEffortPicker: (v: boolean) => void;
   lang: Lang;
@@ -12276,6 +12269,44 @@ function SettingsModal({
                 {lang === "en"
                   ? "Every exchange is archived before context compaction, so you can review what happened before it was summarized (right-click a conversation → View full history). 0 = keep forever. Cleanup runs on next launch."
                   : "每次上下文压缩前都会把原始交流归档，之后可回看被摘要前的完整对话（右键会话→查看完整历史）。填 0 = 永久保留。清理在下次启动时执行。"}
+              </div>
+              {/* 自主推进看门狗：开着智能继续的会话卡住时，定时巡检自动朝总目标续。间隔+判停阈值可配 */}
+              <div className="app-set-group">{lang === "en" ? "Autonomous watchdog" : "自主推进 · 看门狗"}</div>
+              <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Stall timeout" : "卡住多久自动继续"}</div>
+                <span style={{ flex: 1 }} />
+                <div className="set-field">
+                  <input
+                    type="number"
+                    min={20}
+                    value={watchdogIdle}
+                    onChange={(e) => { const v = Math.max(20, Number(e.target.value.replace(/[^\d]/g, "")) || 90); onWatchdog(watchdogInterval, v); }}
+                    className="set-field-input"
+                  />
+                  <span className="set-field-unit">{lang === "en" ? "sec" : "秒"}</span>
+                </div>
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "12px" }}>
+                {lang === "en"
+                  ? "For chats with smart-continue on: if there's no activity for this long (stalled / dropped / throttled), it auto-continues toward the overall goal. Chats still marked running wait longer (+150s) to avoid cutting off long tools."
+                  : "开着「智能继续」的会话：若这么久没任何活动（断链/被节流/僵死），就自动朝总目标续上。仍在运行中的会多等一截（+150秒）避免打断长工具。"}
+              </div>
+              <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+                <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Check interval" : "巡检间隔"}</div>
+                <span style={{ flex: 1 }} />
+                <div className="set-field">
+                  <input
+                    type="number"
+                    min={10}
+                    value={watchdogInterval}
+                    onChange={(e) => { const v = Math.max(10, Number(e.target.value.replace(/[^\d]/g, "")) || 40); onWatchdog(v, watchdogIdle); }}
+                    className="set-field-input"
+                  />
+                  <span className="set-field-unit">{lang === "en" ? "sec" : "秒"}</span>
+                </div>
+              </div>
+              <div className="app-set-hint" style={{ marginBottom: "16px" }}>
+                {lang === "en" ? "How often the watchdog checks for stalled chats." : "看门狗每隔多久巡检一次是否有会话卡住。"}
               </div>
               <div className="app-set-group">{t("set.g.effortGroup", "思考档位")}</div>
               <div className="app-set-row" style={{ cursor: "default" }}>
