@@ -4,12 +4,14 @@
 
 **A free, open-source, local-first AI agent client**
 
-Tell an AI what you want in one sentence: read/write files, precise edits, run commands, search the web — every step behind a permission prompt.
+Like Claude Code or Cursor — but free, local, open-source, and works with any model. Tell it what you want in one sentence and it reads/writes files, makes precise edits, runs commands, and searches the web to finish the task — every step behind a permission prompt.
 Switch between Claude / OpenAI / Chinese LLMs in one click, bring your own key or use Wuwei's hosted credits.
 
-[Website](https://wuweiai.io) · [Download](https://wuweiai.io) · [简体中文](./README.zh-CN.md)
+[Website](https://wuweiai.io) · [Download](https://wuweiai.io/api/download?product=wuwei&platform=windows) · [简体中文](./README.zh-CN.md)
 
-![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+[![Stars](https://img.shields.io/github/stars/wuwei-io/wuwei?style=social)](https://github.com/wuwei-io/wuwei/stargazers) ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+
+<sub>⭐ If Wuwei saves you the setup / API-key / VPN pain, a star really helps others find it.</sub>
 
 <br/>
 
@@ -165,6 +167,10 @@ Looking for a free, local, open-source alternative to a specific tool? See how W
 - [vs Cline](https://wuweiai.io/en/vs/cline-alternative)
 - [vs Aider](https://wuweiai.io/en/vs/aider-alternative)
 - [All comparisons →](https://wuweiai.io/en/vs)
+
+## Star & support
+
+Wuwei is built in the open by a tiny team. If it's useful to you, **[starring the repo ⭐](https://github.com/wuwei-io/wuwei)** is the single biggest thing you can do to help it reach more people — it takes one click and genuinely makes a difference. Bug reports and PRs are just as welcome.
 
 ## License
 

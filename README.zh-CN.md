@@ -8,9 +8,11 @@
 一句话让 AI 替你干活：读写文件、精确编辑、跑命令、联网搜索 —— 每一步都带权限确认。
 接 Claude / OpenAI / 国产大模型一键切换，自带你的 key，或用无为托管。国内直连，无需梯子。
 
-[官网 Website](https://wuweiai.io) · [下载 Download](https://wuweiai.io) · [English](./README.md)
+[官网 Website](https://wuweiai.io) · [下载 Download](https://wuweiai.io/api/download?product=wuwei&platform=windows) · [English](./README.md)
 
-![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+[![Stars](https://img.shields.io/github/stars/wuwei-io/wuwei?style=social)](https://github.com/wuwei-io/wuwei/stargazers) ![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+
+<sub>⭐ 如果无为帮你省了配置 / API key / 梯子的麻烦，点个 star 能让更多人发现它。</sub>
 
 <br/>
 
