@@ -3297,6 +3297,9 @@ export function App() {
   // 后台角标中英对照：DB 里混存中文词(限免/快/更强/深度思考/识图)与英文码(new/hot/top)，英文界面统一映射成英文
   const BADGE_EN: Record<string, string> = { "限免": "Free", "免费": "Free", "快": "Fast", "更强": "Stronger", "深度思考": "Reasoning", "识图": "Vision", "new": "New", "hot": "Hot", "top": "Top" };
   const badgeEn = (b: string) => BADGE_EN[b] ?? BADGE_EN[b.toLowerCase()] ?? (/[一-鿿]/.test(b) ? "" : b);
+  // 英文码 → 中文角标：后台 badge 存的是 new/hot/top 这类码，中文下拉直接显原码(如"top")很丑，这里统一映射
+  const BADGE_CN: Record<string, string> = { "new": "最新", "hot": "热门", "top": "顶级", "free": "免费" };
+  const badgeCn = (b: string) => BADGE_CN[b] ?? BADGE_CN[b.toLowerCase()] ?? b;
   const modelLabels = new Map<string, string>(); // 后台配的模型显示名(如 gpt-5.6→"GPT-5.6 Sol")，下拉里优先显示 label
   const modelLabelsEn = new Map<string, string>(); // 后台配的英文显示名(ai_model.label_en)，英文界面优先显示
   const loginReqModelIds = new Set<string>(); // 免费列表里「需登录才可用」的便宜模型 id（匿名灰置引导登录）
@@ -6863,14 +6866,17 @@ export function App() {
                                 verticalAlign: "middle",
                               }}
                             >
-                              {lang === "en" ? "Free" : "免费"}
+                              {/* 免登录模型(anon)标「免登录」，登录版免费模型标「免费」，让用户一眼分清哪个要登录 */}
+                              {loginReqModelIds.has(m)
+                                ? (lang === "en" ? "Free" : "免费")
+                                : (lang === "en" ? "No login" : "免登录")}
                             </span>
                           )}
                           {modelBadges.get(m) && modelBadges.get(m)!.toLowerCase() !== "free" && (
                             <span
                               style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "#e8722c", color: "#fff", verticalAlign: "middle" }}
                             >
-                              {lang === "en" ? badgeEn(modelBadges.get(m)!) : modelBadges.get(m)}
+                              {lang === "en" ? badgeEn(modelBadges.get(m)!) : badgeCn(modelBadges.get(m)!)}
                             </span>
                           )}
                         </span>
