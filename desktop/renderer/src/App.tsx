@@ -2684,6 +2684,11 @@ export function App() {
     const v = localStorage.getItem("wuwei-ask-auto-sec");
     return v === null ? 3 : Number(v) || 0; // 0=永远等你
   });
+  // 红线题的长倒计时：命中红线也不再干等，给个更长的倒计时(默认30s)，到点仍由 AI 按总目标自动选；0=红线永远等你
+  const [redlineAutoSec, setRedlineAutoSec] = useState(() => {
+    const v = localStorage.getItem("wuwei-redline-auto-sec");
+    return v === null ? 30 : Number(v) || 0;
+  });
   const [suggestWait, setSuggestWait] = useState(0); // ASK 兜底倒计时：N 秒后仍自动发这句
   // 会话总目标 + 自定义红线
   const [goal, setGoal] = useState<{ text: string; active: boolean; done?: boolean } | null>(null);
@@ -2715,6 +2720,7 @@ export function App() {
     void window.wuwei.track?.("first_action", { type, ms_since_open: Date.now() - appOpenAtRef.current });
   }
   const askAutoSecRef = useRef(askAutoSec); askAutoSecRef.current = askAutoSec;
+  const redlineAutoSecRef = useRef(redlineAutoSec); redlineAutoSecRef.current = redlineAutoSec;
   const redlineModeRef = useRef(redlineMode); redlineModeRef.current = redlineMode;
   const stopRulesRef = useRef(stopRules); stopRulesRef.current = stopRules;
   const lastSuggestRef = useRef<{ text: string; canContinue: boolean; auto: boolean }>({ text: "", canContinue: false, auto: false });
@@ -3789,12 +3795,15 @@ export function App() {
               window.wuwei.judgeAskRisk?.(payload.questions || [], stopRulesRef.current)
                 .then((v) => {
                   setAskRisk((r) => ({ ...r, [payload.id]: { pending: false, risky: !!v?.risky, reason: v?.reason || "" } }));
-                  if (!isCur0 && !v?.risky) bgAutoAnswer(askAutoSecRef.current); // 后台会话:判完安全再自答
+                  // 后台会话:安全题走普通倒计时;红线题走长倒计时(redlineAutoSec，0=永不自答)。都不干等。
+                  if (!isCur0) bgAutoAnswer(v?.risky ? redlineAutoSecRef.current : askAutoSecRef.current);
                 })
                 .catch(() => setAskRisk((r) => ({ ...r, [payload.id]: { pending: false, risky: false, reason: "" } })));
             } else if (!isCur0) {
-              // 关键词匹配 + 后台会话：不碰红线就到点自答(当前会话由 AskModal 处理)
-              bgAutoAnswer(askAutoSecFor(payload.questions || [], askAutoSecRef.current, stopRulesRef.current));
+              // 关键词匹配 + 后台会话：不碰红线到点自答；碰红线走长倒计时(不干等)
+              const kwSec = askAutoSecFor(payload.questions || [], askAutoSecRef.current, stopRulesRef.current);
+              const isRed = !!riskyHitOf(payload.questions || [], stopRulesRef.current);
+              bgAutoAnswer(isRed ? redlineAutoSecRef.current : kwSec);
             }
           }
           if (askSid !== currentIdRef.current) {
@@ -4271,6 +4280,7 @@ export function App() {
       if (typeof e.detail?.max === "number") setContMax(e.detail.max);
       if (typeof e.detail?.delay === "number") setContDelay(e.detail.delay);
       if (typeof e.detail?.askSec === "number") setAskAutoSec(e.detail.askSec);
+      if (typeof e.detail?.redlineSec === "number") setRedlineAutoSec(e.detail.redlineSec);
     };
     window.addEventListener("wuwei-cont-cfg", onCont);
     return () => window.removeEventListener("wuwei-cont-cfg", onCont);
@@ -8085,11 +8095,12 @@ export function App() {
           if (redlineMode === "smart") {
             const rk = askRisk[a.id];
             if (!rk || rk.pending) judging = true; // 判定中：先不倒计时
-            else if (rk.risky) redlineHit = { word: rk.reason || (lang === "en" ? "a risky action" : "涉及危险动作"), src: "smart" };
+            else if (rk.risky) { redlineHit = { word: rk.reason || (lang === "en" ? "a risky action" : "涉及危险动作"), src: "smart" }; autoSec = redlineAutoSec; } // 红线：走「长倒计时」而非干等
             else autoSec = askAutoSec; // 判定安全：走倒计时(用原始秒数设置，不再做关键词拦截)
           } else {
             autoSec = askAutoSecFor(a.questions || [], askAutoSec, stopRules);
             redlineHit = riskyHitOf(a.questions || [], stopRules);
+            if (redlineHit && autoSec <= 0) autoSec = redlineAutoSec; // 关键词命中红线：也给长倒计时
           }
         }
         return (
@@ -8869,9 +8880,13 @@ function AskModal({
         {autoOn && (
           <div className="ask-auto">
             <span className="ask-auto-txt">
-              {(lang || getLang()) === "en"
-                ? `Smart-continue: auto-picking the best option toward the goal in ${left}s`
-                : `智能继续：${left} 秒后按总目标自动替你选`}
+              {redlineHit
+                ? ((lang || getLang()) === "en"
+                    ? `Redline “${redlineHit.word}”: auto-picking toward the goal in ${left}s (won't wait forever)`
+                    : `命中红线「${redlineHit.word}」：${left} 秒后 AI 按总目标自动选（不再干等）`)
+                : ((lang || getLang()) === "en"
+                    ? `Smart-continue: auto-picking the best option toward the goal in ${left}s`
+                    : `智能继续：${left} 秒后按总目标自动替你选`)}
             </span>
             <button type="button" className="ask-auto-wait" onClick={() => setAutoCancelled(true)}>
               {(lang || getLang()) === "en" ? "let me choose" : "我自己选"}
@@ -9037,11 +9052,16 @@ function ContSettings({ lang }: { lang: Lang }) {
     const v = localStorage.getItem("wuwei-ask-auto-sec");
     return v === null ? 3 : Number(v) || 0;
   });
-  const pushCfg = (m: number, d: number, a: number) => {
+  const [redlineSec, setRedlineSec] = useState(() => {
+    const v = localStorage.getItem("wuwei-redline-auto-sec");
+    return v === null ? 30 : Number(v) || 0;
+  });
+  const pushCfg = (m: number, d: number, a: number, rl: number) => {
     localStorage.setItem("wuwei-cont-max", String(m));
     localStorage.setItem("wuwei-cont-delay", String(d));
     localStorage.setItem("wuwei-ask-auto-sec", String(a));
-    window.dispatchEvent(new CustomEvent("wuwei-cont-cfg", { detail: { max: m, delay: d, askSec: a } }));
+    localStorage.setItem("wuwei-redline-auto-sec", String(rl));
+    window.dispatchEvent(new CustomEvent("wuwei-cont-cfg", { detail: { max: m, delay: d, askSec: a, redlineSec: rl } }));
   };
   return (
     <>
@@ -9053,7 +9073,7 @@ function ContSettings({ lang }: { lang: Lang }) {
           min={0}
           value={max}
           style={{ width: 96, textAlign: "right", padding: "4px 8px", fontFamily: "var(--mono)", background: "var(--bg-input)", color: "var(--text)", border: "1px solid var(--border-strong)", borderRadius: 8, outline: "none" }}
-          onChange={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); setMax(v); pushCfg(v, delay, askSec); }}
+          onChange={(e) => { const v = Math.max(0, Math.floor(Number(e.target.value) || 0)); setMax(v); pushCfg(v, delay, askSec, redlineSec); }}
         />
         <div className="app-set-hint" style={{ minWidth: 56, textAlign: "right" }}>
           {max <= 0 ? (lang === "en" ? "∞" : "不限") : (lang === "en" ? "rounds" : "轮")}
@@ -9064,17 +9084,28 @@ function ContSettings({ lang }: { lang: Lang }) {
       </div>
       <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
         <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Undo window before sending" : "发出前反悔窗口"}</div>
-        <input type="range" min={0} max={10000} step={100} value={delay} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setDelay(v); pushCfg(max, v, askSec); }} />
+        <input type="range" min={0} max={10000} step={100} value={delay} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setDelay(v); pushCfg(max, v, askSec, redlineSec); }} />
         <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
           {delay === 0 ? (lang === "en" ? "instant" : "立即") : (delay / 1000).toFixed(1) + (lang === "en" ? "s" : " 秒")}
         </div>
       </div>
       <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
         <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Auto-answer choices after" : "选择题多久由它自己定"}</div>
-        <input type="range" min={0} max={30} step={1} value={askSec} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setAskSec(v); pushCfg(max, delay, v); }} />
+        <input type="range" min={0} max={30} step={1} value={askSec} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setAskSec(v); pushCfg(max, delay, v, redlineSec); }} />
         <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
           {askSec === 0 ? (lang === "en" ? "always wait" : "一直等我") : askSec + (lang === "en" ? "s" : " 秒")}
         </div>
+      </div>
+      {/* 红线题(命中危险动作)的长倒计时：不再干等，到点仍由 AI 按总目标自己挑。你不在时不浪费时间 */}
+      <div className="app-set-row" style={{ cursor: "default", gap: "10px" }}>
+        <div className="app-set-label" style={{ whiteSpace: "nowrap" }}>{lang === "en" ? "Redline auto-answer after" : "红线题多久由它自己定"}</div>
+        <input type="range" min={0} max={120} step={5} value={redlineSec} style={{ flex: 1 }} onChange={(e) => { const v = Number(e.target.value); setRedlineSec(v); pushCfg(max, delay, askSec, v); }} />
+        <div className="app-set-hint" style={{ minWidth: 44, textAlign: "right" }}>
+          {redlineSec === 0 ? (lang === "en" ? "always wait" : "一直等我") : redlineSec + (lang === "en" ? "s" : " 秒")}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, opacity: .5, margin: "-2px 0 8px" }}>
+        {lang === "en" ? "Even risky/redline choices get a (longer) countdown instead of waiting forever; at 0s it auto-picks toward the goal. Set 0 = always wait for you." : "命中红线的危险选择也给个（更长的）倒计时，不再一直干等；到点由 AI 按总目标自己挑。填 0 = 红线一直等你。"}
       </div>
     </>
   );
