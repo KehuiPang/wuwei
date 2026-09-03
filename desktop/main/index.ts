@@ -2585,10 +2585,17 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
     send("evt:error", { sid: srcId, message: tt("交接文档为空(该会话暂无可提炼的内容)。", "The handoff doc came back empty — nothing to distill from this chat.") });
     return { ok: false };
   }
-  // 新会话：沿用当前全局平台/模型(handoff 后 currentId 切到新会话)，让续跑用同一套模型
+  // 新会话：显式继承源会话的平台+模型并绑定，交接后保持统一(如源=Claude 订阅+Opus 5 → 新会话也是这套)。
+  // 光靠"全局=源"隐式传递不够：新会话没写入自己的 {model, providerId} 绑定，切走再切回来就丢平台、
+  // 甚至 kind 错配报 invalid_token。这里把源会话的绑定复制给新会话，并随 session-loaded 下发给渲染端应用。
+  const srcMeta = listSessions().find((x) => x.id === srcId);
+  const carryProvider = srcMeta?.providerId || backendBySid.get(srcId) || loadSettings()?.providerId || "";
+  const carryModel = srcMeta?.model || loadConfig().model;
   const newId = randomUUID();
   currentId = newId;
   getAgent(newId);
+  try { setSessionModel(newId, carryModel, carryProvider); } catch { /* ignore */ }
+  backendBySid.set(newId, carryProvider);
   // 源会话带总目标 → 带给新会话，交接后接着朝同一目标自主推进(渲染端会据此自动开智能继续)
   const srcGoal = sessionGoals[srcId];
   const goalCarried = !!(srcGoal && String(srcGoal.text || "").trim() && srcGoal.active !== false && !srcGoal.done);
@@ -2596,7 +2603,7 @@ ipcMain.handle("session:handoff", async (_e, sid: string) => {
     sessionGoals[newId] = { text: srcGoal.text, active: true, done: false };
     saveGoals();
   }
-  send("evt:session-loaded", { id: newId, messages: [] });
+  send("evt:session-loaded", { id: newId, messages: [], boundModel: carryModel, boundProviderId: carryProvider });
   sendUsageFor(newId);
   send("evt:handoff", { sid: newId, phase: "done" });
   // 交接开场白会作为新会话的第一条用户消息显示出来，跟随界面语言

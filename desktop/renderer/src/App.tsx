@@ -3254,6 +3254,14 @@ export function App() {
       // 首启兜底：从未选过平台(providerId 为空)时默认落到「免费体验(wuwei-free, anon 免登录)」，
       // 让全新未登录用户下载后第一条消息就能直接聊、不撞登录墙(头号转化真凶)。已登录/已选过平台者 providerId 非空不受影响。
       setCurProviderId(r?.settings?.providerId || "wuwei-free");
+      // 首启兜底不能只改 UI：若从未选过平台(providerId 空)，把 wuwei-free 的完整配置(kind=openai/网关 baseUrl)
+      // 真正落盘。否则界面显示免费、settings.kind 却停在默认(anthropic) → 免费模型被当 anthropic 发、报"无法解析鉴权"。
+      if (!r?.settings?.providerId) {
+        const freeP = PRESETS.find((x) => x.id === "wuwei-free");
+        if (freeP && r?.settings) {
+          window.wuwei.setSettings({ ...r.settings, kind: freeP.kind, providerId: freeP.id, baseUrl: freeP.baseUrl, apiKey: undefined, oauthToken: undefined, model: r.settings.model || freeP.models[0] });
+        }
+      }
       setStations(r?.settings?.customStations || []);
       setProviderOrder(r?.settings?.providerOrder || []);
       setHiddenProviders(r?.settings?.hiddenProviders || []);
@@ -3334,7 +3342,27 @@ export function App() {
     }
     const r = await window.wuwei.getSettings();
     const cur = r?.settings;
-    if (cur) { markFirstAction("switch_model"); void window.wuwei.track?.("model_switch", { model: m }); window.wuwei.setSettings({ ...cur, model: m }); }
+    if (cur) {
+      markFirstAction("switch_model");
+      void window.wuwei.track?.("model_switch", { model: m });
+      // 关键：切模型时一并对齐当前平台的 kind/baseUrl/providerId/creds，避免 model 与 kind 脱钩。
+      // 曾出现 providerId=wuwei-free(免费/openai网关) 但 kind 停在 anthropic → 免费 deepseek 被当 anthropic 发、
+      // 报「Could not resolve authentication method」。这里以当前平台预设为准重新落实一遍配置，杜绝该类错配。
+      if (curPreset) {
+        const slot = ((cur.creds as Record<string, { apiKey?: string; oauthToken?: string; baseUrl?: string }>) || {})[curPreset.id] || {};
+        window.wuwei.setSettings({
+          ...cur,
+          model: m,
+          kind: curPreset.kind,
+          providerId: curPreset.id,
+          apiKey: slot.apiKey,
+          oauthToken: slot.oauthToken,
+          baseUrl: curPreset.fixedBaseUrl ? curPreset.baseUrl : slot.baseUrl || curPreset.baseUrl,
+        });
+      } else {
+        window.wuwei.setSettings({ ...cur, model: m });
+      }
+    }
     setShowModelMenu(false);
   }
 
@@ -9803,9 +9831,9 @@ const PRESETS: Preset[] = [
     keyUrl: "",
     keyHint: "sk-ant-oat…（点上方一键授权自动获取）",
     models: [
+      "claude-fable-5-1",
       "claude-opus-5",
       "claude-sonnet-5",
-      "claude-fable-5-1",
       "claude-fable-5",
       "claude-opus-4-8",
       "claude-opus-4-7",
