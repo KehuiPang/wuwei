@@ -2019,8 +2019,9 @@ const WECHAT_LOGIN_ENABLED = false;
 
 // 登录激励卡（居中弹窗）：未登录发消息时先弹这张（免费顶级模型 + 注册得 100 无为币），
 // 点「登录」再切到真正的登录表单。比一上来就甩登录框更干净、转化更好。
-function LoginIntroModal({ lang, t, onClose, onLogin, onKeepFree }: { lang: Lang; t: T; onClose: () => void; onLogin: () => void; onKeepFree?: () => void }) {
+function LoginIntroModal({ lang, t, onClose, onLogin, onKeepFree, reason, onLang, showLangSwitch }: { lang: Lang; t: T; onClose: () => void; onLogin: () => void; onKeepFree?: () => void; reason?: string | null; onLang?: (l: Lang) => void; showLangSwitch?: boolean }) {
   const zh = lang === "zh";
+  const [langOpen, setLangOpen] = useState(false); // 小地球语言下拉开合
   return (
     <>
       <div className="mq-overlay" onClick={onClose} />
@@ -2046,6 +2047,31 @@ function LoginIntroModal({ lang, t, onClose, onLogin, onKeepFree }: { lang: Lang
           >
             ×
           </button>
+          {/* 小地球语言切换：右上角(X 左边)，点开选中/英。后台可开关(showLangSwitch)，主要给快速切语言测试用 */}
+          {showLangSwitch && onLang && (
+            <div style={{ position: "absolute", top: 9, right: 40 }}>
+              <button
+                onClick={() => setLangOpen((v) => !v)}
+                title={zh ? "切换语言" : "Language"}
+                style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 0 }}
+              >
+                <GlobeIcon size={15} />
+              </button>
+              {langOpen && (
+                <div style={{ position: "absolute", top: 26, right: 0, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,.18)", overflow: "hidden", zIndex: 5, minWidth: 78 }}>
+                  {([["zh", "中文"], ["en", "English"]] as [Lang, string][]).map(([code, label]) => (
+                    <button
+                      key={code}
+                      onClick={() => { onLang(code); setLangOpen(false); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 12px", background: lang === code ? "rgba(192,95,60,.10)" : "none", border: "none", color: lang === code ? "#C05F3C" : "var(--text)", fontSize: 12.5, fontWeight: lang === code ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap" }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <div
             style={{
               width: 46,
@@ -2061,6 +2087,12 @@ function LoginIntroModal({ lang, t, onClose, onLogin, onKeepFree }: { lang: Lang
           >
             <GiftIcon size={22} color="#F4F6F8" />
           </div>
+          {/* 弹卡原因：第一眼告诉用户「为啥要登录」(额度用完/需登录)，别让新用户懵。仅有具体原因时显示 */}
+          {reason && (
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#C05F3C", background: "rgba(192,95,60,.09)", borderRadius: 9, padding: "7px 10px", marginBottom: 12, lineHeight: 1.4, whiteSpace: "nowrap", textAlign: "center" }}>
+              {reason}
+            </div>
+          )}
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 7, lineHeight: 1.3, letterSpacing: 0.2, color: "var(--text)" }}>
             {zh ? (
               <>
@@ -2958,6 +2990,9 @@ export function App() {
   const [payResult, setPayResult] = useState<PayResult | null>(null); // ⑤ 支付结果页
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
   const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
+  const [loginIntroReason, setLoginIntroReason] = useState<string | null>(null); // 弹登录卡的具体原因(额度用完/需登录等)，直接显在卡里，别让新用户懵
+  const [langSwitchOnCard, setLangSwitchOnCard] = useState(true); // 登录卡小地球语言切换是否显示(后台 catalog flag 控制，缺省显示)
+  const [acctLangOpen, setAcctLangOpen] = useState(false); // 账号菜单游客卡上小地球语言下拉的开合
   const [unavailModel, setUnavailModel] = useState<string | null>(null); // 上游暂不可用(upstream_error)的模型 → 错误栏给「一键换可用模型」引导
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
   const [showSupportChat, setShowSupportChat] = useState(false); // 在线客服实时对话窗
@@ -3663,6 +3698,8 @@ export function App() {
       // 否则切换界面语言后，本 handler 里所有 lang===/friendlyError(…,t) 生成的提示与报错仍是挂载时旧语言。
       const lang = langRef.current;
       const t = tRef.current;
+      // 看门狗心跳：任何来自某会话的事件都刷新它的「最后活动时间」，供自主推进兜底判定是否僵死
+      { const asid = payload?.sid; if (asid) lastActivityRef.current.set(asid, Date.now()); }
       // 结构性事件(工具/完成/切换…)前先把累积的流式文本落定，保证顺序不乱
       if (ch !== "evt:assistant-delta" && pendingDeltaRef.current) flushDelta(true); // 段落边界整段吐
       switch (ch) {
@@ -3899,6 +3936,11 @@ export function App() {
           // 免费体验触发上限/配额用尽/被关停/需登录 → 未登录则弹登录引导（"触发最大限制后才引导登录"）
           // anon_login_required 必须在列：游客把需登录模型发出去时，不能只甩灰字，要弹登录卡（审计高危1）
           if (!wuwei && /daily_cap_reached|free_quota_exhausted|free_trial_disabled|anon_login_required/i.test(rawMsg)) {
+            setLoginIntroReason(
+              /anon_login_required/i.test(rawMsg)
+                ? (lang === "en" ? "Sign in to use this model free" : "该模型登录后免费使用")
+                : (lang === "en" ? "Guest free quota used up today" : "今日匿名免费额度已用完，登录可继续使用"),
+            );
             setShowLoginIntro(true);
           }
           // 上游暂不可用(厂商抖动) → 记下当前模型，错误栏给「一键换到可用模型继续」，不让用户对着死路干等
@@ -4160,6 +4202,7 @@ export function App() {
 
   // —— 智能继续：自动接话 ——
   const runningSetRef = useRef(runningSet); runningSetRef.current = runningSet;
+  const lastActivityRef = useRef<Map<string, number>>(new Map()); // 各会话最后一次收到事件的时刻，自主推进看门狗判僵死用
   const inputRef = useRef(input); inputRef.current = input;
   const suggestionRef = useRef(suggestion); suggestionRef.current = suggestion;
   // 后台会话没有输入框/建议条，直接投递给它自己的 sid，不碰当前屏幕。
@@ -4191,6 +4234,30 @@ export function App() {
     }
     window.wuwei.send(sid, go);
   };
+  // 自主推进看门狗：定时兜底「不看就停」。开着智能继续(cont)的会话若长时间无任何流式活动
+  // (单轮报错断链 / 后台 setTimeout 被节流 / 主进程僵死)，就自动朝总目标续上，不靠某一次性调度。
+  // 静默阈值分两档：主进程已停(非 running)90s 即救(链断了，安全)；仍标 running 则等 240s(避免打断真在跑的长工具)。
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const now = Date.now();
+      const modes = modeRef.current;
+      for (const sid of Object.keys(modes)) {
+        if (modes[sid] !== "cont") continue; // 只兜「智能继续」的会话；用户点暂停/完成会切走该模式
+        const last = lastActivityRef.current.get(sid) ?? 0;
+        if (last === 0) continue; // 从没跑过 → 不动
+        const running = runningSetRef.current.has(sid);
+        if (now - last < (running ? 240000 : 90000)) continue; // 还在动(或刚动过) → 不打扰
+        if (sid === currentIdRef.current && inputRef.current.trim()) continue; // 你正在打字
+        if (contMaxRef.current > 0 && (contBySid.current.get(sid) || 0) >= contMaxRef.current) continue; // 到封顶轮数
+        // 判僵死 → 直接清可能卡住的运行标(改 ref，否则 autoContinue 的 has(sid) 会挡回)，朝总目标续
+        runningSetRef.current.delete(sid);
+        setRunningSet((s) => { const n = new Set(s); n.delete(sid); return n; });
+        lastActivityRef.current.set(sid, now); // 占位，避免下一巡重复触发
+        autoContinue(sid, langRef.current === "en" ? "Keep going toward the overall goal." : "继续朝总目标推进。");
+      }
+    }, 40000);
+    return () => clearInterval(iv);
+  }, []);
   // ASK 兜底倒计时：每秒减一，减到头仍然把这句发出去(智能继续下不该干等)
   useEffect(() => {
     if (suggestWait <= 0) return;
@@ -5551,7 +5618,32 @@ export function App() {
                         );
                       })()
                     ) : (
-                      <div style={{ padding: "20px 18px 12px", textAlign: "center" }}>
+                      <div style={{ padding: "20px 18px 12px", textAlign: "center", position: "relative" }}>
+                        {/* 小地球语言切换：右上角，点开选中/英，即时切界面语言(主要给快速测试)。后台可开关 */}
+                        {langSwitchOnCard && (
+                          <div style={{ position: "absolute", top: 8, right: 10, zIndex: 6 }}>
+                            <button
+                              onClick={() => setAcctLangOpen((v) => !v)}
+                              title={lang === "zh" ? "切换语言" : "Language"}
+                              style={{ width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: 0 }}
+                            >
+                              <GlobeIcon size={15} />
+                            </button>
+                            {acctLangOpen && (
+                              <div style={{ position: "absolute", top: 26, right: 0, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 8, boxShadow: "0 6px 20px rgba(0,0,0,.18)", overflow: "hidden", zIndex: 7, minWidth: 78 }}>
+                                {([["zh", "中文"], ["en", "English"]] as [Lang, string][]).map(([code, label]) => (
+                                  <button
+                                    key={code}
+                                    onClick={() => { changeLang(code); setAcctLangOpen(false); }}
+                                    style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 12px", background: lang === code ? "rgba(192,95,60,.10)" : "none", border: "none", color: lang === code ? "#C05F3C" : "var(--text)", fontSize: 12.5, fontWeight: lang === code ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap" }}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <div
                           style={{
                             width: 46,
@@ -7204,7 +7296,7 @@ export function App() {
                     setShowLoginForm(true);
                   }}
                 >
-                  <span>{t("usage.freeTrial", "免费体验中 · 每日有限次数")}</span>
+                  <span>{t("usage.freeTrial", "免费体验中")}</span>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{t("usage.loginUnlock", "登录解锁更多 →")}</span>
                 </div>
               ) : (
@@ -7654,11 +7746,14 @@ export function App() {
         <LoginIntroModal
           lang={lang}
           t={t}
-          onClose={() => setShowLoginIntro(false)}
+          reason={loginIntroReason}
+          onLang={changeLang}
+          showLangSwitch={langSwitchOnCard}
+          onClose={() => { setShowLoginIntro(false); setLoginIntroReason(null); }}
           onKeepFree={async () => {
             // 继续免费体验：显式切到免登录免费模型(wuwei-free + glm-4.7-flash，唯一 anon 免登录)，
             // 保证关卡片后用户落在能直接用的免费模型上，而不是停在刚点的需登录模型上。
-            setShowLoginIntro(false);
+            setShowLoginIntro(false); setLoginIntroReason(null);
             const freeP = PRESETS.find((x) => x.id === "wuwei-free");
             if (freeP) {
               const r = await window.wuwei.getSettings();
@@ -7669,6 +7764,7 @@ export function App() {
           }}
           onLogin={() => {
             setShowLoginIntro(false);
+            setLoginIntroReason(null);
             setLoginResume(true);
             setShowLoginForm(true);
           }}
