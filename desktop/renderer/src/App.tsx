@@ -4315,14 +4315,15 @@ export function App() {
       setShowLoginIntro(true);
       return;
     }
-    // 匿名 + 当前是「需登录」的免费模型(如 deepseek 免费档，anon=false) → 绝不报死墙中断。
-    // 新用户零信任，一发就断=当场劝退。改为：自动切到 glm-4.7-flash(唯一免登录)继续跑，
-    // 并温和提示登录可解锁 DeepSeek(顶级开源·飞快)。_afterAnonSwitch 防重发再次进入成环。
-    if (!wuwei && loginReqModelIds.has(meta.model) && !_afterAnonSwitch) {
+    // 匿名 + 当前不是「已确认免登录」的模型(需登录的 deepseek 免费档，或配置漂移/离线导致状态未知)
+    // → 绝不报死墙中断(新用户零信任，一发就断=当场劝退)。自动切到 glm-4.7-flash(免登录)继续跑，
+    // 温和提示登录可解锁更强模型。判定=「非 glm-4.7 且 不是(免费且非需登录)」，覆盖需登录+未知两态。
+    const anonUsable = freeModelIds.has(meta.model) && !loginReqModelIds.has(meta.model);
+    if (!wuwei && meta.model !== "glm-4.7-flash" && !anonUsable && !_afterAnonSwitch) {
       setInput(text);
       push({ type: "notice", text: lang === "en"
-        ? "DeepSeek V4 Flash needs sign-in. Switched to GLM-4.7-Flash (no login) so you can keep going. Sign in to unlock DeepSeek, a top open-source model that's blazing fast."
-        : "DeepSeek V4 Flash 需登录，已为你切到 GLM-4.7-Flash（免登录）继续。登录即可解锁 DeepSeek：目前顶级的开源模型，速度飞快。" });
+        ? "This model needs sign-in. Switched to GLM-4.7-Flash (no login) so you can keep going. Sign in to unlock DeepSeek V4 Flash, a top open-source model that's blazing fast."
+        : "当前模型需登录，已为你切到 GLM-4.7-Flash（免登录）继续。登录即可解锁 DeepSeek V4 Flash：目前顶级的开源模型，速度飞快。" });
       void (async () => {
         const r = await window.wuwei.getSettings();
         const cur = r?.settings || {};
@@ -10233,7 +10234,15 @@ function mergeCatalogIntoPresets(
   labelEnMap?: Map<string, string>,
   loginReqSet?: Set<string>,
 ): Preset[] {
-  if (!catalog || catalog.length === 0) return base;
+  if (!catalog || catalog.length === 0) {
+    // 离线/老后端/首帧未回来：catalog 拿不到时也要把内置「免费体验(anon)」平台的模型标为免费，
+    // 否则下拉丢「免登录」绿标、发送护栏(freeSet/loginReqSet)拿不到数据 → 游客可能撞死墙。
+    // 这些内置模型本地已知都是免登录(anon)，故只进 freeSet、不进 loginReqSet。
+    for (const p of base) {
+      if (p.anon) for (const m of p.models) freeSet.add(m);
+    }
+    return base;
+  }
   const byId = new Map(base.map((p) => [p.id, p]));
   const out: Preset[] = [];
   const seen = new Set<string>();
