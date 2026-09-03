@@ -4271,6 +4271,10 @@ body {
 .pay-foot { display: flex; justify-content: space-between; padding: 16px 30px 24px; }
 .pay-foot button { border: none; background: transparent; font-size: 12.5px; color: #8a9099; cursor: pointer; }
 .pay-foot button:hover { color: #5a616b; }
+/* 「其他套餐/积分包」提亮为柔和朱色链接：比「暂不需要」更可见(引导二次转化)，
+   但用软朱+小字，不压过中间 ¥29 的主视觉 */
+.pay-foot .pay-foot__more { color: #bd7a5f; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; text-decoration-color: rgba(192,95,60,.35); }
+.pay-foot .pay-foot__more:hover { color: #C05F3C; text-decoration-color: rgba(192,95,60,.7); }
 /* 积分包档位 */
 .pay-rows { padding: 2px 26px 6px; display: flex; flex-direction: column; gap: 12px; }
 .pay-rw {

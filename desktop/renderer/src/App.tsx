@@ -1735,7 +1735,7 @@ function TrialPayModal({
           <h2>{en ? "Out of credits" : "无为币不足"}</h2>
           <p>{en ? cfg.headlineEn : cfg.headline}</p>
         </div>
-        <div className="pay-bal" style={{ marginTop: 2 }}>
+        <div className="pay-bal" style={{ marginTop: 18 }}>
           <div className="pay-bal-l">{en ? "Available balance" : "当前可用余额"}</div>
           <div className="pay-bal-v"><span className="pay-coin" /> {balance}<small>{en ? "credits" : "无为币"}</small></div>
         </div>
@@ -1782,7 +1782,7 @@ function TrialPayModal({
         </div>
 
         <div className="pay-foot trial-foot">
-          <button onClick={onMore}>{en ? "Other plans / packs" : "其他套餐 / 积分包"}</button>
+          <button className="pay-foot__more" onClick={onMore}>{en ? "Other plans / packs" : "其他套餐 / 积分包"}</button>
           <button onClick={onClose}>{en ? "Not now" : "暂不需要"}</button>
         </div>
       </div>
