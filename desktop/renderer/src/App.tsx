@@ -2129,6 +2129,14 @@ function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onCl
           >
             {t("login.signin")}
           </button>
+          {/* 软出口：不逼登录，给一条「继续免费体验」的路 —— 弹出也不流失，激活→留存更顺。
+              点击 = 关卡片、留在免登录免费模型上继续用（转化真凶是"感觉被墙住"，不是没登录）。 */}
+          <button
+            onClick={() => { void window.wuwei.track?.("login_popup_keep_free", {}); onClose(); }}
+            style={{ marginTop: 10, width: "100%", padding: "6px", background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+          >
+            {zh ? "继续免费体验（无需登录）" : "Keep exploring free (no sign-in)"}
+          </button>
         </div>
       </div>
     </>
@@ -5989,6 +5997,16 @@ export function App() {
                     ? "Describe what you need and AI breaks it into tasks, calls AI Agents, runs the steps, and brings back results. Great for coding, editing docs, research, organizing files, and running workflows."
                     : "把需求说清楚，AI 会拆解任务、调用 AI Agent、执行步骤并回收结果。适合写代码、改文档、查资料、整理文件、跑流程。"}
                 </p>
+                {/* 激活→首条消息的临门一脚：明确「免费·无需登录·直接在下方开聊」，降低"要不要注册"的犹豫。
+                    仅未登录时显示（已登录用户不需要这句）。 */}
+                {!wuwei && (
+                  <div className="wc-freehint">
+                    <span className="wc-freehint__dot" />
+                    {lang === "en"
+                      ? "Free to start, no sign-in needed. Just type below and send."
+                      : "免费开始，无需登录，直接在下方输入发送即可。"}
+                  </div>
+                )}
                 <div className="wc-feats">
                   {[
                     { zh: "免费开始", en: "Free to start", path: <><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" /><circle cx="7" cy="7" r="1.3" /></> },
