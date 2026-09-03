@@ -4310,6 +4310,23 @@ export function App() {
       setShowLoginIntro(true);
       return;
     }
+    // 匿名 + 当前是「需登录」的免费模型(如 deepseek 免费档，anon=false) → 绝不报死墙中断。
+    // 新用户零信任，一发就断=当场劝退。改为：自动切到 glm-4.7-flash(唯一免登录)继续跑，
+    // 并温和提示登录可解锁 DeepSeek(顶级开源·飞快)。_afterAnonSwitch 防重发再次进入成环。
+    if (!wuwei && loginReqModelIds.has(meta.model) && !_afterAnonSwitch) {
+      setInput(text);
+      push({ type: "notice", text: lang === "en"
+        ? "DeepSeek V4 Flash needs sign-in. Switched to GLM-4.7-Flash (no login) so you can keep going. Sign in to unlock DeepSeek, a top open-source model that's blazing fast."
+        : "DeepSeek V4 Flash 需登录，已为你切到 GLM-4.7-Flash（免登录）继续。登录即可解锁 DeepSeek：目前顶级的开源模型，速度飞快。" });
+      void (async () => {
+        const r = await window.wuwei.getSettings();
+        const cur = r?.settings || {};
+        window.wuwei.setSettings({ ...cur, kind: "openai", providerId: "wuwei-free", baseUrl: "https://wuweiai.io/api/gateway/v1", apiKey: undefined, oauthToken: undefined, model: "glm-4.7-flash" });
+        setCurProviderId("wuwei-free");
+      })();
+      setTimeout(() => submit(text, true), 140);
+      return;
+    }
     // 前置拦截仅针对「真的没额度可用」：余额≤0 且 会员周额度也没有(非会员/额度用尽)。
     // 会员本周订阅额度还有(remainingPct>0) → 放行，用量走周额度(服务端按额度扣，见网关预检)，
     // 否则付费会员余额为0会被客户端提前误拦、根本发不出请求。
