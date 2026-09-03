@@ -691,32 +691,30 @@ body {
 .update-chip__x:hover { background: var(--bg-soft); color: var(--text); }
 
 /* 设置数值输入：输入框 + 单位捏成一个等宽紧凑组，右对齐，单位紧贴不甩远 */
+/* 数值设置项：单层干净输入框 + 单位在框外。避免"外层容器边框 + 内层 input 边框"的双层框套娃。 */
 .set-field {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 8px; /* 框与右侧单位的距离：贴边但不挤、不太远 */
   flex: 0 0 auto;
-  width: 150px;
-  padding: 0 10px 0 4px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  transition: border-color 0.12s, box-shadow 0.12s;
 }
-.set-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
 .set-field-input {
-  flex: 1;
-  min-width: 0;
+  width: 118px;
   text-align: right;
-  padding: 6px 4px 6px 8px;
+  padding: 7px 11px;
   font-family: var(--mono);
   font-size: 13px;
-  background: transparent;
+  background: var(--bg-input);
   color: var(--text);
-  border: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
   outline: none;
+  box-shadow: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
-.set-field-unit { flex: 0 0 auto; font-size: 12px; color: var(--text-dim); user-select: none; }
+.set-field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.set-field-input::placeholder { color: var(--text-muted); }
+.set-field-unit { flex: 0 0 auto; font-size: 12.5px; color: var(--text-dim); user-select: none; }
 
 /* ============ 使用手册 / User Guide 大弹窗 ============ */
 .guide-overlay {
