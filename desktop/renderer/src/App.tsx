@@ -2019,7 +2019,7 @@ const WECHAT_LOGIN_ENABLED = false;
 
 // 登录激励卡（居中弹窗）：未登录发消息时先弹这张（免费顶级模型 + 注册得 100 无为币），
 // 点「登录」再切到真正的登录表单。比一上来就甩登录框更干净、转化更好。
-function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onClose: () => void; onLogin: () => void }) {
+function LoginIntroModal({ lang, t, onClose, onLogin, onKeepFree }: { lang: Lang; t: T; onClose: () => void; onLogin: () => void; onKeepFree?: () => void }) {
   const zh = lang === "zh";
   return (
     <>
@@ -2132,7 +2132,7 @@ function LoginIntroModal({ lang, t, onClose, onLogin }: { lang: Lang; t: T; onCl
           {/* 软出口：不逼登录，给一条「继续免费体验」的路 —— 弹出也不流失，激活→留存更顺。
               点击 = 关卡片、留在免登录免费模型上继续用（转化真凶是"感觉被墙住"，不是没登录）。 */}
           <button
-            onClick={() => { void window.wuwei.track?.("login_popup_keep_free", {}); onClose(); }}
+            onClick={() => { void window.wuwei.track?.("login_popup_keep_free", {}); if (onKeepFree) onKeepFree(); else onClose(); }}
             style={{ marginTop: 10, width: "100%", padding: "6px", background: "none", border: "none", color: "var(--text-muted)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}
           >
             {zh ? "继续免费体验（无需登录）" : "Keep exploring free (no sign-in)"}
@@ -7604,6 +7604,18 @@ export function App() {
           lang={lang}
           t={t}
           onClose={() => setShowLoginIntro(false)}
+          onKeepFree={async () => {
+            // 继续免费体验：显式切到免登录免费模型(wuwei-free + glm-4.7-flash，唯一 anon 免登录)，
+            // 保证关卡片后用户落在能直接用的免费模型上，而不是停在刚点的需登录模型上。
+            setShowLoginIntro(false);
+            const freeP = PRESETS.find((x) => x.id === "wuwei-free");
+            if (freeP) {
+              const r = await window.wuwei.getSettings();
+              const cur = r?.settings || {};
+              window.wuwei.setSettings({ ...cur, kind: freeP.kind, providerId: freeP.id, baseUrl: freeP.baseUrl, apiKey: undefined, oauthToken: undefined, model: "glm-4.7-flash" });
+              setCurProviderId(freeP.id);
+            }
+          }}
           onLogin={() => {
             setShowLoginIntro(false);
             setLoginResume(true);
