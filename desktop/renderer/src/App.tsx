@@ -2958,6 +2958,7 @@ export function App() {
   const [payResult, setPayResult] = useState<PayResult | null>(null); // ⑤ 支付结果页
   const [showLoginForm, setShowLoginForm] = useState(false); // 应用内登录框
   const [showLoginIntro, setShowLoginIntro] = useState(false); // 未登录发消息先弹的登录激励卡（点登录再切登录框）
+  const [unavailModel, setUnavailModel] = useState<string | null>(null); // 上游暂不可用(upstream_error)的模型 → 错误栏给「一键换可用模型」引导
   const [showSupport, setShowSupport] = useState(false); // 联系客服弹窗（支付遇到问题 / 账号菜单都可开）
   const [showSupportChat, setShowSupportChat] = useState(false); // 在线客服实时对话窗
   const [supportUnread, setSupportUnread] = useState(0); // 客服未读回复数（悬浮球红点）
@@ -3895,10 +3896,13 @@ export function App() {
             setShowAcctMenu(false);
             void refreshWuweiForShortage(friendly);
           }
-          // 免费体验触发上限/配额用尽/被关停 → 未登录则弹登录引导（"触发最大限制后才引导登录"）
-          if (!wuwei && /daily_cap_reached|free_quota_exhausted|free_trial_disabled/i.test(rawMsg)) {
+          // 免费体验触发上限/配额用尽/被关停/需登录 → 未登录则弹登录引导（"触发最大限制后才引导登录"）
+          // anon_login_required 必须在列：游客把需登录模型发出去时，不能只甩灰字，要弹登录卡（审计高危1）
+          if (!wuwei && /daily_cap_reached|free_quota_exhausted|free_trial_disabled|anon_login_required/i.test(rawMsg)) {
             setShowLoginIntro(true);
           }
+          // 上游暂不可用(厂商抖动) → 记下当前模型，错误栏给「一键换到可用模型继续」，不让用户对着死路干等
+          setUnavailModel(/upstream_error/i.test(rawMsg) ? meta.model : null);
           // 去重：与上一条完全相同的出错提示不重复堆叠
           setItems((p) => {
             const last = p[p.length - 1];
@@ -4133,6 +4137,7 @@ export function App() {
 
   // 真正发送一条(立即入队跑)
   function doSend(text: string, imgs: string[]) {
+    setUnavailModel(null); // 新发/重发即清「上游不可用」提示
     markFirstAction("send_input");
     // 每次发消息都埋点(behavior)：字数/是否带图/平台·模型，供分析活跃与使用深度
     void window.wuwei.track?.("send_message", { len: (text || "").length, images: imgs.length, provider: curProviderId, model: meta.model });
@@ -6421,6 +6426,34 @@ export function App() {
               )}
             </div>
           )}
+          {/* 上游厂商暂不可用(upstream_error) → 一键换到可用模型继续(登录→DeepSeek 顶级；游客→另一免登录模型)+自动重发上一句。
+              这类错误文案不以「出错/Error」开头，走不到下面那条栏，故单列。绝不让用户对着「不可用」干等。 */}
+          {!busy && unavailModel && (() => {
+            const prefer = wuwei
+              ? ["deepseek-v4-flash-free", "glm-5.3-flash-free", "glm-4-flash"]
+              : ["glm-4-flash", "glm-z1-flash", "glm-4.7-flash"];
+            const fb = prefer.find((m) => m !== unavailModel && !(!wuwei && loginReqModelIds.has(m)));
+            if (!fb) return null;
+            const fbLabel = MODEL_LABEL_OVERRIDES[fb] || (lang === "en" ? modelLabelsEn.get(fb) : undefined) || modelLabels.get(fb) || fb;
+            return (
+              <div className="err-fix">
+                <span>{lang === "en" ? "This model is temporarily unavailable." : "当前模型暂时不可用。"}</span>
+                <button
+                  className="primary"
+                  onClick={() => {
+                    const lastUser = [...items].reverse().find((it) => it.type === "user") as { text?: string } | undefined;
+                    const text = lastUser?.text || "";
+                    void quickModel(fb);
+                    setUnavailModel(null);
+                    void window.wuwei.undoLast?.();
+                    if (text) setTimeout(() => submit(text), 160);
+                  }}
+                >
+                  {lang === "en" ? `Switch to ${fbLabel} and retry` : `换用 ${fbLabel} 继续`}
+                </button>
+              </div>
+            );
+          })()}
           {/* 非鉴权类错误：中断类主推「继续」（一键从中断处接着做），其它错误仍给「删除这条」。
               注意判断要中英都认——英文界面的报错以 "Error" 开头，旧代码只认「出错」，导致英文下这条提示条从不出现。 */}
           {!busy &&
