@@ -620,6 +620,40 @@ const PRO_FEATS_EN: [string, string][] = [
   ["Brain memory", "Learns and remembers long-term"],
 ];
 
+// 缺币弹窗里的「并排可选套餐」：¥1 体验 + Pro/Plus/Max 月付，统一成一种可选项，选中谁就驱动二维码/Paddle 与右侧详情。
+type PayPlanOpt = {
+  sku: string;
+  kind: "trial" | "plan";
+  name: string; nameEn: string;
+  price: number; priceUsd: number;
+  unit: string; unitEn: string; // "/7天" | "/月"
+  days: number; // 7=体验 / 30=月付，用于成功页到期
+  coins: number; // 赠币/额度（成功页展示）
+  signin: number;
+  badge?: string; badgeEn?: string; badgeType?: "rec" | "val";
+  sub: string; subEn: string; // 一句话卖点
+  saved?: number;
+};
+// trialEligible=从未付费 → 首位放 ¥1 体验（默认选中）；已付费用户不含体验档，默认最受欢迎档。
+function buildPayOpts(trialEligible: boolean): PayPlanOpt[] {
+  const trial: PayPlanOpt = {
+    sku: "plan_trial", kind: "trial", name: "¥1 体验 · 7 天", nameEn: "$1 Trial · 7 days",
+    price: 1, priceUsd: 1, unit: " / 7 天", unitEn: " / 7d", days: 7, coins: 0, signin: 20,
+    badge: "首单专享", badgeEn: "First-time", badgeType: "val",
+    sub: "先花 1 块试 7 天 Pro，够爽再升级", subEn: "Try Pro 7 days for $1 first",
+  };
+  const plans = PRO_PLANS.map<PayPlanOpt>((p) => ({
+    sku: p.sku, kind: "plan", name: p.name, nameEn: p.nameEn,
+    price: p.price, priceUsd: p.priceUsd, unit: p.unit, unitEn: p.unitEn, days: 30,
+    coins: p.coins, signin: p.signin,
+    badge: p.tagType === "rec" ? p.tag : undefined, badgeEn: p.tagType === "rec" ? p.tagEn : undefined,
+    badgeType: p.tagType === "rec" ? "rec" : undefined,
+    sub: p.sub, subEn: p.subEn, saved: p.saved || undefined,
+  }));
+  return trialEligible ? [trial, ...plans] : plans;
+}
+const PAYOPT_DEFAULT_SKU = (trialEligible: boolean) => (trialEligible ? "plan_trial" : "plan_pro_5x");
+
 // ② 购买积分包（朱系）：站内选档；CN 走扫码，EN 走网页 Paddle 结账。
 function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void; onUpgrade: () => void; t: T; lang: Lang }) {
   const en = lang === "en";
@@ -1686,45 +1720,52 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
 }
 
 function TrialPayModal({
-  en, balance, rebind, cfg, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
+  en, balance, rebind, opts, defaultSku, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
 }: {
   en: boolean;
   balance: number;
   rebind?: { providerId: string; model: string; label: string } | null;
-  cfg: PayNowCfg;
+  opts: PayPlanOpt[];
+  defaultSku: string;
   onClose: () => void;
-  onPaid: (balance?: number, orderId?: string) => void;
+  onPaid: (balance: number | undefined, orderId: string | undefined, opt: PayPlanOpt) => void;
   onNeedLogin: () => void;
   onRebind?: () => void;
-  onPaddle: () => void;
+  onPaddle: (opt: PayPlanOpt) => void;
   onMore: () => void;
   onContact: () => void;
 }) {
-  const price = en ? cfg.priceEn : cfg.price;
-  const perks = en ? cfg.perksEn : cfg.perks;
+  const [sel, setSel] = useState(() => { const i = opts.findIndex((o) => o.sku === defaultSku); return i >= 0 ? i : 0; });
+  const cur = opts[sel] ?? opts[0];
+  const price = money(en, cur.price, cur.priceUsd);
+  const unit = en ? cur.unitEn : cur.unit;
+  const perks = en ? PAYNOW_PERKS_EN : PAYNOW_PERKS;
   const [qr, setQr] = useState("");
   const [orderId, setOrderId] = useState("");
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [errMsg, setErrMsg] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
 
-  // 国内：进来即下单出支付宝码；海外不出码(走 Paddle 按钮)。
+  // 国内：进来/切换套餐即下单出支付宝码；海外不出码(走 Paddle 按钮)。
+  // 切换套餐用 400ms 防抖：快速点选只对「最终停留」的档下单，避免每点一下都建一张待支付订单。
   useEffect(() => {
     if (en) return;
     let alive = true;
     setPhase("loading"); setQr(""); setOrderId(""); setErrMsg("");
-    window.wuwei
-      .payCreate(cfg.sku, "alipay")
-      .then((r) => {
-        if (!alive) return;
-        if (r?.error === "not_logged_in") { onNeedLogin(); return; }
-        if (r?.error === "trial_used") { setPhase("error"); setErrMsg("你已用过体验包，换个套餐吧"); return; }
-        if (!r || r.error || !r.qr || !r.orderId) { setPhase("error"); setErrMsg(payErrMsg(r?.error)); return; }
-        setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
-      })
-      .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
-    return () => { alive = false; };
-  }, [en, reloadKey, cfg.sku]);
+    const timer = setTimeout(() => {
+      window.wuwei
+        .payCreate(cur.sku, "alipay")
+        .then((r) => {
+          if (!alive) return;
+          if (r?.error === "not_logged_in") { onNeedLogin(); return; }
+          if (r?.error === "trial_used") { setPhase("error"); setErrMsg("你已用过体验包，换个套餐吧"); return; }
+          if (!r || r.error || !r.qr || !r.orderId) { setPhase("error"); setErrMsg(payErrMsg(r?.error)); return; }
+          setQr(r.qr); setOrderId(r.orderId); setPhase("ready");
+        })
+        .catch(() => { if (alive) { setPhase("error"); setErrMsg("网络异常，请重试"); } });
+    }, 400);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [en, reloadKey, cur.sku]);
 
   // 轮询到账
   useEffect(() => {
@@ -1733,7 +1774,7 @@ function TrialPayModal({
     const t = setInterval(async () => {
       const s = await window.wuwei.payStatus(orderId).catch(() => null);
       if (!alive || !s) return;
-      if (s.status === "paid") { clearInterval(t); onPaid(s.balance, orderId); }
+      if (s.status === "paid") { clearInterval(t); onPaid(s.balance, orderId, cur); }
       else if (s.status === "failed" || s.status === "expired") { clearInterval(t); setPhase("error"); setErrMsg(en ? "Order expired, reopen to retry" : "订单已失效，请重新打开"); }
     }, 2500);
     return () => { alive = false; clearInterval(t); };
@@ -1750,9 +1791,39 @@ function TrialPayModal({
         <div className="pay-top" style={{ paddingBottom: 2 }}>
           <PayEnso size={44} />
           <h2>{en ? "Out of credits" : "无为币不足"}</h2>
-          <p>{en ? cfg.headlineEn : cfg.headline}</p>
+          <p>{en ? "Pick a plan to keep going — unlock every top model below." : "选个套餐继续，下面这些顶级模型全部畅用。"}</p>
         </div>
-        <div className="pay-bal" style={{ marginTop: 18 }}>
+
+        {/* 升级后解锁的顶级模型（官方 logo）——一眼看到值多少 */}
+        <div className="trial-models">
+          <span className="trial-models-t">{en ? "Unlock all top models" : "升级后全部畅用"}</span>
+          <span className="trial-models-row">
+            {PAY_MODEL_MARKS.map((m) => (
+              <span key={m.k} className="trial-model" title={m.n}>
+                <span className="trial-model-badge"><img src={BRAND_LOGOS[m.k]} alt="" width={14} height={14} style={{ display: "block", objectFit: "contain" }} /></span>
+                <span className="trial-model-n">{m.n}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+
+        {/* 并排套餐选择：默认 ¥1 体验，可切换；选中谁就驱动下方二维码/Paddle 与右侧详情 */}
+        <div className="trial-plans">
+          {opts.map((o, i) => (
+            <button
+              key={o.sku}
+              className={"trial-plan-opt" + (i === sel ? " sel" : "")}
+              onClick={() => { setSel(i); void window.wuwei.track?.("credits_shortage_plan_select", { sku: o.sku, kind: o.kind }); }}
+            >
+              {o.badge && <span className={"trial-plan-badge2 " + (o.badgeType || "")}>{en ? o.badgeEn : o.badge}</span>}
+              <span className="tpo-nm">{en ? o.nameEn : o.name}</span>
+              <span className="tpo-price">{money(en, o.price, o.priceUsd)}<small>{en ? o.unitEn : o.unit}</small></span>
+              <span className="tpo-sub">{en ? o.subEn : o.sub}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="pay-bal" style={{ marginTop: 4 }}>
           <div className="pay-bal-l">{en ? "Available balance" : "当前可用余额"}</div>
           <div className="pay-bal-v"><span className="pay-coin" /> {balance}<small>{en ? "credits" : "无为币"}</small></div>
         </div>
@@ -1770,12 +1841,12 @@ function TrialPayModal({
         )}
 
         <div className="trial-grid">
-          {/* 左：国内二维码 / 海外 Paddle 按钮 */}
+          {/* 左：国内二维码 / 海外 Paddle 按钮（跟随选中套餐） */}
           <div className="trial-pay">
             {en ? (
               <div className="trial-paddle">
-                <div className="trial-paddle-price">{price}<small>{cfg.unitEn}</small></div>
-                <button className="trial-pay-btn" onClick={() => { void window.wuwei.track?.("paddle_pay_click", { sku: cfg.sku, price }); onPaddle(); }}>{`Pay ${price}`}<PayArrow /></button>
+                <div className="trial-paddle-price">{price}<small>{unit}</small></div>
+                <button className="trial-pay-btn" onClick={() => { void window.wuwei.track?.("paddle_pay_click", { sku: cur.sku, price }); onPaddle(cur); }}>{`Pay ${price}`}<PayArrow /></button>
                 <div className="trial-sub2">Secure checkout via Paddle</div>
               </div>
             ) : phase === "ready" && qr ? (
@@ -1786,12 +1857,12 @@ function TrialPayModal({
               <div className="trial-msg"><div className="trial-spin" /><span>生成支付二维码…</span></div>
             )}
           </div>
-          {/* 右：套餐详情 + 状态 + 注意 + 联系客服 */}
+          {/* 右：选中套餐详情 + 权益 + 联系客服 */}
           <div className="trial-detail">
-            <div className="trial-plan-nm">{en ? cfg.planNameEn : cfg.planName}</div>
-            <div className="trial-plan-price">{price}<small>{en ? cfg.unitEn : cfg.unit}</small></div>
+            <div className="trial-plan-nm">{en ? cur.nameEn : cur.name}</div>
+            <div className="trial-plan-price">{price}<small>{unit}</small></div>
             <ul className="trial-perks">{perks.map((p, i) => (<li key={i}><Check /> <span>{p}</span></li>))}</ul>
-            <div className="trial-note">{en ? cfg.noteEn : cfg.note}</div>
+            <div className="trial-note">{cur.saved ? (en ? `Save ¥${cur.saved}/mo vs Pro` : `比按 Pro 每月省 ¥${cur.saved}`) : (en ? cur.subEn : cur.sub)}</div>
             <button className="trial-cs" onClick={onContact}>
               {en ? "Payment issue? Contact support" : "支付遇到问题？联系客服"}
             </button>
@@ -1799,13 +1870,21 @@ function TrialPayModal({
         </div>
 
         <div className="pay-foot trial-foot">
-          <button className="pay-foot__more" onClick={onMore}>{en ? "Other plans / packs" : "其他套餐 / 积分包"}</button>
+          <button className="pay-foot__more" onClick={onMore}>{en ? "Buy credit packs instead" : "改用积分包充值"}</button>
           <button onClick={onClose}>{en ? "Not now" : "暂不需要"}</button>
         </div>
       </div>
     </div>
   );
 }
+// 缺币弹窗顶部展示的「升级后可用」顶级模型（官方 logo，取自客户端 BRAND_LOGOS）。
+const PAY_MODEL_MARKS: { k: string; n: string }[] = [
+  { k: "claude", n: "Claude" },
+  { k: "gpt", n: "GPT" },
+  { k: "google", n: "Gemini" },
+  { k: "deepseek", n: "DeepSeek" },
+  { k: "kimi", n: "Kimi" },
+];
 
 type PayResult =
   | { kind: "coin"; added: number; bonus: number; balance: number; order: string }
@@ -3362,7 +3441,9 @@ export function App() {
   const modelLabelsEn = new Map<string, string>(); // 后台配的英文显示名(ai_model.label_en)，英文界面优先显示
   const loginReqModelIds = new Set<string>(); // 免费列表里「需登录才可用」的便宜模型 id（匿名灰置引导登录）
   // 缺币付款两态：从未付费(trialEligible)→¥1 体验；否则→升级正式会员。未登录/老后端缺省按体验。
-  const payCfg = wuwei?.trialEligible === false ? UPGRADE_CFG : TRIAL_CFG;
+  const trialEligible = wuwei?.trialEligible !== false; // 从未付费 → 含 ¥1 体验档
+  const payOpts = buildPayOpts(trialEligible);
+  const payDefaultSku = PAYOPT_DEFAULT_SKU(trialEligible);
   const mergedPresets = mergeCatalogIntoPresets(PRESETS, catalog, freeModelIds, curProviderId, modelBadges, modelLabels, modelLabelsEn, loginReqModelIds);
   const catalogOrder = catalog ? catalog.slice().sort((a, b) => a.sort - b.sort).map((p) => p.id) : undefined;
   const providerListRaw = arrangePresets(
@@ -8063,7 +8144,8 @@ export function App() {
           en={lang === "en"}
           balance={coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
           rebind={coinShortage.rebind}
-          cfg={payCfg}
+          opts={payOpts}
+          defaultSku={payDefaultSku}
           onClose={() => closeShortage("close")}
           onRebind={async () => {
             const rb = coinShortage.rebind!;
@@ -8077,8 +8159,8 @@ export function App() {
                   : `已把当前对话改用${rb.label}（直连、不扣无为币）。重新发送即可继续。`,
             });
           }}
-          onPaddle={() => { closeShortage("pay_paddle"); startEnCheckout(payCfg.sku); }}
-          onMore={() => { closeShortage("more"); setPlanOpen(true); }}
+          onPaddle={(opt) => { closeShortage("pay_paddle"); startEnCheckout(opt.sku); }}
+          onMore={() => { closeShortage("more"); setCoinPackOpen(true); }}
           onContact={() => { closeShortage("contact"); setShowSupportChat(true); }}
           onNeedLogin={() => {
             closeShortage("need_login");
@@ -8086,15 +8168,16 @@ export function App() {
             setLoginResume(false);
             setShowLoginForm(true);
           }}
-          onPaid={(balance, orderId) => {
+          onPaid={(balance, orderId, opt) => {
             closeShortage("pay_paid");
             setPayResult({
               kind: "pro",
-              planName: lang === "en" ? payCfg.planNameEn : payCfg.planName,
-              expire: fmtDate(new Date(Date.now() + payCfg.days * 24 * 3600_000)),
-              giftCoins: 0,
-              signin: 20,
+              planName: lang === "en" ? opt.nameEn : opt.name,
+              expire: fmtDate(opt.kind === "trial" ? new Date(Date.now() + opt.days * 24 * 3600_000) : addMonths(new Date(), 1)),
+              giftCoins: opt.coins,
+              signin: opt.signin,
               perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt),
+              saved: opt.saved,
               order: orderId || "",
             });
             void window.wuwei.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新会员/余额

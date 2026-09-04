@@ -4184,10 +4184,33 @@ body {
 .trial-cs-qr img { width: 118px; height: 118px; object-fit: contain; border-radius: 8px; border: 1px solid rgba(22, 25, 30, 0.08); }
 .trial-cs-qr span { font-size: 11px; color: #8a9099; }
 .trial-foot { display: flex; justify-content: center; gap: 18px; }
+
+/* 升级后可用的顶级模型（官方 logo 一排）——一眼看到值多少 */
+.trial-models { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 30px 4px; padding: 10px 14px; border-radius: 12px; background: #f6f8fa; border: 1px solid rgba(22, 25, 30, 0.06); }
+.trial-models-t { font-size: 11.5px; font-weight: 650; color: #5a616b; flex: 0 0 auto; }
+.trial-models-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.trial-model { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #3a4048; }
+.trial-model-badge { width: 20px; height: 20px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+
+/* 并排套餐选择卡：默认选中 ¥1 体验，可切换 */
+.trial-plans { display: flex; gap: 10px; margin: 10px 30px 14px; align-items: stretch; }
+.trial-plan-opt { position: relative; flex: 1 1 0; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px 12px 11px; border-radius: 13px; background: #fff; border: 1.5px solid rgba(22, 25, 30, 0.1); cursor: pointer; transition: border-color 0.14s, box-shadow 0.14s, transform 0.12s; }
+.trial-plan-opt:hover { border-color: rgba(192, 95, 60, 0.4); transform: translateY(-1px); }
+.trial-plan-opt.sel { border-color: #c05f3c; background: linear-gradient(160deg, #fff, #fdf1ec); box-shadow: 0 6px 16px -8px rgba(192, 95, 60, 0.5); }
+.trial-plan-badge2 { position: absolute; right: 10px; top: -8px; font-size: 9px; font-weight: 700; color: #fff; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.trial-plan-badge2.rec { background: linear-gradient(135deg, #c05f3c, #a34e30); }
+.trial-plan-badge2.val { background: #274a63; }
+.tpo-nm { font-size: 13px; font-weight: 700; color: #16191e; }
+.tpo-price { font-size: 20px; font-weight: 800; color: #c05f3c; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tpo-price small { font-size: 11px; color: #8a9099; font-weight: 600; }
+.tpo-sub { font-size: 10.5px; color: #8a9099; line-height: 1.35; }
+
 @media (max-width: 560px) {
   .pay-card.pay-card-wide { width: 416px; }
   .trial-grid { flex-direction: column; }
   .trial-pay { flex-basis: auto; min-height: 200px; }
+  .trial-plans { flex-wrap: wrap; }
+  .trial-plan-opt { flex-basis: calc(50% - 5px); }
 }
 /* 在线客服实时对话窗 */
 .pay-card.sc-card { width: 440px; height: min(600px, calc(100vh - 56px)); display: flex; flex-direction: column; overflow: hidden; border: none; border-radius: 10px; }
