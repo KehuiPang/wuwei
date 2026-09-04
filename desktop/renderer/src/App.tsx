@@ -2,6 +2,7 @@
 import type { WuweiMe, CatalogProviderDto } from "../../main/wuwei-auth.js";
 import { getLang, setLang as persistLang, makeT, type Lang, type T } from "./i18n.js";
 import { BRAND_LOGOS } from "./brandLogos.js";
+import { BrandLogo } from "./modelLogos.js";
 import { WECHAT_CS_QR } from "./wechatCsQr.js";
 import { QRCodeSVG } from "qrcode.react";
 import Markdown from "react-markdown";
@@ -1595,8 +1596,21 @@ type PayNowCfg = {
   note: string; noteEn: string;
   perks: string[]; perksEn: string[];
 };
-const PAYNOW_PERKS = ["全部托管模型任选（Claude / GPT / Gemini / GLM …）", "永久记忆的脑网络（跨对话记住你的偏好和项目）", "每周托管额度充足，每日签到还有奖励"];
-const PAYNOW_PERKS_EN = ["All hosted models (Claude / GPT / Gemini / GLM …)", "Brain network with permanent memory (remembers you across chats)", "Ample weekly hosted quota, plus daily check-in rewards"];
+// 缺币弹窗右侧「下单理由」：每条 = 加粗钩子 + 具体说明，精准戳付费点（顶级模型 / 更快 / 更多额度 / 记忆 / 省钱）。
+const PAYNOW_PERKS: [string, string][] = [
+  ["一份订阅，顶三份钱", "别再 ChatGPT 20刀、Claude 20刀、Gemini 20刀分开交，无为一份全给你"],
+  ["旗舰全家桶，一键随便切", "Claude Opus 5、GPT-5.6、Gemini 3.7、DeepSeek V4、Grok 4.5 想用哪个用哪个，不绑死任何一家"],
+  ["长任务一口气跑完", "额度更足、无为币更多，几万字的活儿中途不断供"],
+  ["会员走快车道", "专属极速通道，高峰期不用排在免费用户后面干等"],
+  ["它永远记得你", "脑网络永久记忆，跨对话记住你的项目、代码风格和偏好"],
+];
+const PAYNOW_PERKS_EN: [string, string][] = [
+  ["One subscription beats three", "Skip paying $20 for ChatGPT, $20 for Claude, $20 for Gemini. Wuwei runs all of them."],
+  ["All the flagships, one click away", "Claude Opus 5, GPT-5.6, Gemini 3.7, DeepSeek V4, Grok 4.5, switch anytime, locked to no one."],
+  ["Long jobs won't die halfway", "More tokens, more Wuwei coins. Your big task runs to the end without cutting out."],
+  ["Members jump the queue", "Priority lane for faster replies, no waiting behind free users at peak hours."],
+  ["It remembers you, forever", "Brain-network memory keeps your project, code style and habits across every chat."],
+];
 // 新用户没买过 → ¥1 体验 7 天
 const TRIAL_CFG: PayNowCfg = {
   sku: "plan_trial", days: 7, price: "¥1", priceEn: "$1", unit: " / 7 天", unitEn: " / 7 days",
@@ -1790,18 +1804,21 @@ function TrialPayModal({
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 2 }}>
           <PayEnso size={44} />
-          <h2>{en ? "Out of credits" : "无为币不足"}</h2>
-          <p>{en ? "Pick a plan to keep going — unlock every top model below." : "选个套餐继续，下面这些顶级模型全部畅用。"}</p>
+          <h2>{en ? "Don't stop here" : "别卡在这儿"}</h2>
+          <p>{en ? "Your coins ran out. Top up and keep every flagship model at your fingertips." : "无为币用完了，充一点，继续用遍全球最强旗舰模型。"}</p>
         </div>
 
-        {/* 升级后解锁的顶级模型（官方 logo）——一眼看到值多少 */}
+        <div className="trial-bal-mini"><span className="pay-coin" /> {en ? `Balance ${balance} credits — top up to continue` : `当前余额 ${balance} 无为币 · 充值即可继续`}</div>
+
+        {/* 升级后畅用的最强顶级模型（官方 logo）——直观放大购买欲 */}
         <div className="trial-models">
-          <span className="trial-models-t">{en ? "Unlock all top models" : "升级后全部畅用"}</span>
+          <span className="trial-models-t">{en ? "Unlock the strongest flagships" : "升级后畅用最强顶级模型"}</span>
           <span className="trial-models-row">
             {PAY_MODEL_MARKS.map((m) => (
-              <span key={m.k} className="trial-model" title={m.n}>
-                <span className="trial-model-badge"><img src={BRAND_LOGOS[m.k]} alt="" width={14} height={14} style={{ display: "block", objectFit: "contain" }} /></span>
+              <span key={m.n} className="trial-model" title={m.n}>
+                <BrandLogo brand={m.brand} size={19} glyph={13} />
                 <span className="trial-model-n">{m.n}</span>
+                {m.nw && <span className="trial-model-new">NEW</span>}
               </span>
             ))}
           </span>
@@ -1818,14 +1835,10 @@ function TrialPayModal({
               {o.badge && <span className={"trial-plan-badge2 " + (o.badgeType || "")}>{en ? o.badgeEn : o.badge}</span>}
               <span className="tpo-nm">{en ? o.nameEn : o.name}</span>
               <span className="tpo-price">{money(en, o.price, o.priceUsd)}<small>{en ? o.unitEn : o.unit}</small></span>
-              <span className="tpo-sub">{en ? o.subEn : o.sub}</span>
+              <span className="tpo-coins">{o.kind === "trial" ? (en ? "7-day full Pro access" : "7 天 Pro 全功能畅用") : (en ? `${o.coins.toLocaleString()} credits/mo` : `${o.coins.toLocaleString()} 无为币/月`)}</span>
+              <span className="tpo-sub">{o.kind === "trial" ? (en ? o.subEn : o.sub) : (en ? `${o.signin}/day check-in${o.saved ? ` · save ¥${o.saved}` : ""}` : `每日签到 +${o.signin}${o.saved ? ` · 省 ¥${o.saved}` : ""}`)}</span>
             </button>
           ))}
-        </div>
-
-        <div className="pay-bal" style={{ marginTop: 4 }}>
-          <div className="pay-bal-l">{en ? "Available balance" : "当前可用余额"}</div>
-          <div className="pay-bal-v"><span className="pay-coin" /> {balance}<small>{en ? "credits" : "无为币"}</small></div>
         </div>
 
         {rebind && (
@@ -1861,7 +1874,7 @@ function TrialPayModal({
           <div className="trial-detail">
             <div className="trial-plan-nm">{en ? cur.nameEn : cur.name}</div>
             <div className="trial-plan-price">{price}<small>{unit}</small></div>
-            <ul className="trial-perks">{perks.map((p, i) => (<li key={i}><Check /> <span>{p}</span></li>))}</ul>
+            <ul className="trial-perks">{perks.map(([pt, pd], i) => (<li key={i}><Check /> <span><b>{pt}</b><em>{pd}</em></span></li>))}</ul>
             <div className="trial-note">{cur.saved ? (en ? `Save ¥${cur.saved}/mo vs Pro` : `比按 Pro 每月省 ¥${cur.saved}`) : (en ? cur.subEn : cur.sub)}</div>
             <button className="trial-cs" onClick={onContact}>
               {en ? "Payment issue? Contact support" : "支付遇到问题？联系客服"}
@@ -1877,13 +1890,17 @@ function TrialPayModal({
     </div>
   );
 }
-// 缺币弹窗顶部展示的「升级后可用」顶级模型（官方 logo，取自客户端 BRAND_LOGOS）。
-const PAY_MODEL_MARKS: { k: string; n: string }[] = [
-  { k: "claude", n: "Claude" },
-  { k: "gpt", n: "GPT" },
-  { k: "google", n: "Gemini" },
-  { k: "deepseek", n: "DeepSeek" },
-  { k: "kimi", n: "Kimi" },
+// 缺币弹窗顶部展示的「升级后畅用」最强顶级模型（官方 SVG logo，取自共用库 modelLogos）。
+// 名字对齐官网 ModelShowcase 的旗舰清单；换代时随客户端发版更新即可。
+const PAY_MODEL_MARKS: { brand: string; n: string; nw?: boolean }[] = [
+  { brand: "claude", n: "Claude Opus 5", nw: true },
+  { brand: "gpt", n: "GPT-5.6", nw: true },
+  { brand: "gemini", n: "Gemini 3.7", nw: true },
+  { brand: "deepseek", n: "DeepSeek V4" },
+  { brand: "qwen", n: "Qwen 3.8", nw: true },
+  { brand: "grok", n: "Grok 4.5", nw: true },
+  { brand: "kimi", n: "Kimi K3" },
+  { brand: "glm", n: "GLM-5.3" },
 ];
 
 type PayResult =

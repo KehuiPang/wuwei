@@ -4175,9 +4175,15 @@ body {
 .trial-plan-nm { font-size: 15px; font-weight: 750; color: #16191e; }
 .trial-plan-price { font-size: 26px; font-weight: 800; color: #c05f3c; margin: 2px 0 12px; font-variant-numeric: tabular-nums; }
 .trial-plan-price small { font-size: 13px; color: #8a9099; font-weight: 600; }
-.trial-perks { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.trial-perks { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 9px; }
 .trial-perks li { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: #3a4048; line-height: 1.4; }
-.trial-perks li svg { margin-top: 1px; flex: 0 0 auto; }
+.trial-perks li svg { margin-top: 3px; flex: 0 0 auto; }
+.trial-perks li b { display: block; font-weight: 700; color: #16191e; font-size: 12.5px; }
+.trial-perks li em { display: block; font-style: normal; color: #8a9099; font-size: 11px; line-height: 1.45; margin-top: 1px; }
+
+/* 模型行：品牌名 + NEW 角标 */
+.trial-model-n { font-size: 11.5px; font-weight: 600; color: #4a515a; }
+.trial-model-new { font-size: 8px; font-weight: 700; color: #6f9fad; background: rgba(111, 159, 173, 0.14); padding: 1px 4px; border-radius: 4px; letter-spacing: 0.3px; }
 .trial-note { font-size: 11px; color: #8a9099; margin-top: auto; padding-top: 8px; }
 .trial-cs { margin-top: 8px; align-self: flex-start; background: none; border: none; color: #c05f3c; font-size: 12px; cursor: pointer; padding: 2px 0; text-decoration: underline; }
 .trial-cs-qr { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -4185,25 +4191,32 @@ body {
 .trial-cs-qr span { font-size: 11px; color: #8a9099; }
 .trial-foot { display: flex; justify-content: center; gap: 18px; }
 
-/* 升级后可用的顶级模型（官方 logo 一排）——一眼看到值多少 */
-.trial-models { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 30px 4px; padding: 10px 14px; border-radius: 12px; background: #f6f8fa; border: 1px solid rgba(22, 25, 30, 0.06); }
-.trial-models-t { font-size: 11.5px; font-weight: 650; color: #5a616b; flex: 0 0 auto; }
-.trial-models-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.trial-model { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: #3a4048; }
-.trial-model-badge { width: 20px; height: 20px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+/* 三级·淡化：余额只用一行小字提示，不抢戏 */
+.trial-bal-mini { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; font-weight: 600; color: #a2a8b0; letter-spacing: 0.2px; margin: -2px 30px 12px; }
+.trial-bal-mini .pay-coin { width: 12px; height: 12px; vertical-align: 0; }
 
-/* 并排套餐选择卡：默认选中 ¥1 体验，可切换 */
-.trial-plans { display: flex; gap: 10px; margin: 10px 30px 14px; align-items: stretch; }
-.trial-plan-opt { position: relative; flex: 1 1 0; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 12px 12px 11px; border-radius: 13px; background: #fff; border: 1.5px solid rgba(22, 25, 30, 0.1); cursor: pointer; transition: border-color 0.14s, box-shadow 0.14s, transform 0.12s; }
-.trial-plan-opt:hover { border-color: rgba(192, 95, 60, 0.4); transform: translateY(-1px); }
-.trial-plan-opt.sel { border-color: #c05f3c; background: linear-gradient(160deg, #fff, #fdf1ec); box-shadow: 0 6px 16px -8px rgba(192, 95, 60, 0.5); }
-.trial-plan-badge2 { position: absolute; right: 10px; top: -8px; font-size: 9px; font-weight: 700; color: #fff; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+/* 二级·佐证：升级后可用的顶级模型（官方 logo 一排），轻量不抢套餐 */
+.trial-models { display: flex; align-items: center; justify-content: center; gap: 10px 16px; flex-wrap: wrap; margin: 0 30px 14px; padding: 8px 12px; border-radius: 10px; background: #fafbfc; border: 1px solid rgba(22, 25, 30, 0.045); }
+.trial-models-t { font-size: 10.5px; font-weight: 600; color: #a2a8b0; flex: 0 0 auto; letter-spacing: 0.2px; }
+.trial-models-row { display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+.trial-model { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #5a616b; }
+.trial-model-badge { width: 19px; height: 19px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+
+/* 一级·主角：并排套餐选择卡，默认选中 ¥1 体验，选中档明显放大突出 */
+.trial-plans { display: flex; gap: 10px; margin: 0 30px 16px; align-items: stretch; }
+.trial-plan-opt { position: relative; flex: 1 1 0; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 13px 13px; border-radius: 14px; background: #fff; border: 1.5px solid rgba(22, 25, 30, 0.1); cursor: pointer; transition: border-color 0.16s, box-shadow 0.16s, transform 0.14s; }
+.trial-plan-opt:hover { border-color: rgba(192, 95, 60, 0.45); transform: translateY(-2px); box-shadow: 0 8px 18px -12px rgba(22, 25, 30, 0.4); }
+.trial-plan-opt.sel { border-color: #c05f3c; border-width: 2px; background: linear-gradient(160deg, #fff, #fdf0ea); box-shadow: 0 12px 26px -12px rgba(192, 95, 60, 0.65); transform: translateY(-3px); }
+.trial-plan-badge2 { position: absolute; right: 10px; top: -9px; font-size: 9px; font-weight: 700; color: #fff; padding: 2.5px 9px; border-radius: 999px; white-space: nowrap; letter-spacing: 0.2px; }
 .trial-plan-badge2.rec { background: linear-gradient(135deg, #c05f3c, #a34e30); }
-.trial-plan-badge2.val { background: #274a63; }
+.trial-plan-badge2.val { background: linear-gradient(135deg, #d9714a, #c05f3c); box-shadow: 0 4px 10px -4px rgba(192, 95, 60, 0.6); }
 .tpo-nm { font-size: 13px; font-weight: 700; color: #16191e; }
-.tpo-price { font-size: 20px; font-weight: 800; color: #c05f3c; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tpo-price { font-size: 21px; font-weight: 800; color: #16191e; font-variant-numeric: tabular-nums; line-height: 1.05; margin-top: 1px; }
 .tpo-price small { font-size: 11px; color: #8a9099; font-weight: 600; }
-.tpo-sub { font-size: 10.5px; color: #8a9099; line-height: 1.35; }
+.trial-plan-opt.sel .tpo-price { color: #c05f3c; }
+.tpo-coins { font-size: 12px; font-weight: 700; color: #b0703f; letter-spacing: 0.1px; margin-top: 2px; }
+.trial-plan-opt.sel .tpo-coins { color: #c05f3c; }
+.tpo-sub { font-size: 10.5px; color: #8a9099; line-height: 1.35; margin-top: 1px; }
 
 @media (max-width: 560px) {
   .pay-card.pay-card-wide { width: 416px; }
