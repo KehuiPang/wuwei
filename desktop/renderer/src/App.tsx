@@ -2691,8 +2691,17 @@ export function App() {
   });
   const [suggestWait, setSuggestWait] = useState(0); // ASK 兜底倒计时：N 秒后仍自动发这句
   // 会话总目标 + 自定义红线
-  const [goal, setGoal] = useState<{ text: string; active: boolean; done?: boolean } | null>(null);
-  const [goalEdit, setGoalEdit] = useState<null | { sid: string; text: string }>(null);
+  const [goal, setGoal] = useState<import("./env").Charter | null>(null);
+  // 目标弹窗：把契约拆成可编辑字段(总目标/调研/规则要做·不做/分步计划+验收)
+  const [goalEdit, setGoalEdit] = useState<null | {
+    sid: string;
+    text: string;
+    research: string;
+    ruleDo: string;
+    ruleDont: string;
+    plan: import("./env").PlanStep[];
+    researching?: boolean;
+  }>(null);
   const [stopRules, setStopRules] = useState("");
   // 红线识别方式:keyword=关键词匹配(快,选项提到词就拦) / smart=智能识别(LLM判是否真触发危险动作,少误伤)
   const [redlineMode, setRedlineMode] = useState<"keyword" | "smart">(() =>
@@ -3838,6 +3847,27 @@ export function App() {
         case "evt:ratelimits":
           setRate(payload);
           break;
+        case "evt:charter-draft": {
+          // 「调研并拟计划」跑完：把 AI 拟的调研/规则/计划回填到当前弹窗(仅当弹窗还开着且是同一会话)
+          const sid = payload.sid;
+          const draft = payload.draft as import("./env").CharterDraft;
+          setGoalEdit((prev) => {
+            if (!prev || prev.sid !== sid) return prev; // 弹窗已关或切了会话→忽略
+            if (!draft) return { ...prev, researching: false }; // 没抽到 JSON→仅结束 loading
+            return {
+              ...prev,
+              researching: false,
+              research: draft.research || prev.research,
+              ruleDo: draft.rules?.do || prev.ruleDo,
+              ruleDont: draft.rules?.dont || prev.ruleDont,
+              plan:
+                Array.isArray(draft.plan) && draft.plan.length
+                  ? draft.plan.map((s, i) => ({ id: `s${i + 1}`, title: s.title || "", acceptance: s.acceptance || "", status: "todo" as const }))
+                  : prev.plan,
+            };
+          });
+          break;
+        }
         case "evt:suggest": {
           const sid = payload.sid;
           const cur = sid === currentIdRef.current;
@@ -4285,17 +4315,90 @@ export function App() {
     window.addEventListener("wuwei-cont-cfg", onCont);
     return () => window.removeEventListener("wuwei-cont-cfg", onCont);
   }, []);
-  // 定好目标就交给它自己跑：这段话是给 AI 的工作方式约定
-  function startGoal(text: string) {
-    const tx = text.trim();
+  // 打开目标弹窗：把已存契约拆进可编辑字段（新建则给空）
+  function openGoalEdit(sid: string, g: import("./env").Charter | null) {
+    setGoalEdit({
+      sid,
+      text: g?.text || "",
+      research: g?.research || "",
+      ruleDo: g?.rules?.do || "",
+      ruleDont: g?.rules?.dont || "",
+      plan: (g?.plan || []).map((s) => ({ ...s })),
+    });
+  }
+
+  // 「调研并拟计划」：发一条纯调研任务给真 Agent（有 web_search/web_fetch），
+  // 让它联网看最新论文/新闻，末尾用 ```json 输出契约草稿；跑完主进程解析→evt:charter-draft 回填弹窗。
+  function startResearch() {
+    if (!goalEdit) return;
+    const tx = goalEdit.text.trim();
     if (!tx) return;
-    const sid = currentId;
-    window.wuwei.goalSet?.(sid, { text: tx, active: true });
-    setGoal({ text: tx, active: true });
-    setMode(sid, "cont"); // 自动开智能继续
+    const sid = goalEdit.sid;
+    if (sid !== currentId) return; // 调研走 doSend(=当前会话)，只对当前会话有效，避免误发到别的对话
+    window.wuwei.charterDraftArm(sid);
+    setGoalEdit({ ...goalEdit, researching: true });
+    const prompt = lang === "en"
+      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse web_search / web_fetch to survey the LATEST frontier papers, industry news and authoritative sources, so you truly understand the current state, viable paths, common pitfalls and best practices for this goal.\nOnce you've researched enough, output a "charter draft" and put it at the END of your reply as a single \`\`\`json code block, exactly this shape (output only this one json block, all fields filled):\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path, a few paragraphs",\n  "rules": { "do": "What to do (one per line)", "dont": "What NOT to do / how this goal most easily drifts off course (one per line)" },\n  "plan": [ { "title": "What step 1 does", "acceptance": "Acceptance criteria: how we know this step is done/passing" } ]\n}\n\`\`\`\nMake the plan concrete, ordered and executable, every step with a clear acceptance criterion. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
+      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search / web_fetch 联网调研：查最新的前沿论文、行业新闻、权威资料，充分弄清这个目标当前的现状、可行路径、常见坑与最佳实践。\n调研充分后，产出一份「任务契约草稿」，并放在回复的最后、用一个 \`\`\`json 代码块输出，结构严格如下（只输出这一个 json 块，字段齐全）：\n\`\`\`json\n{\n  "research": "调研结论：现状 / 关键发现 / 推荐路径，几段话说清",\n  "rules": { "do": "要做哪些（逐条，一行一条）", "dont": "绝不做哪些 / 这个目标最容易跑偏成什么样（逐条，一行一条）" },\n  "plan": [ { "title": "第一步做什么", "acceptance": "这步的验收标准：怎样算完成 / 达标" } ]\n}\n\`\`\`\n计划要具体、可执行、有先后逻辑，每步都有明确验收标准。dont 里要写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
+    doSend(prompt, []);
+  }
+
+  // 把弹窗字段拼成契约对象
+  function buildCharter(e: NonNullable<typeof goalEdit>, active: boolean): import("./env").Charter {
+    const plan = e.plan
+      .filter((s) => s.title.trim())
+      .map((s, i) => ({ id: s.id || `s${i + 1}`, title: s.title.trim(), acceptance: s.acceptance.trim(), status: s.status || "todo" }));
+    const rd = e.ruleDo.trim();
+    const rdo = e.ruleDont.trim();
+    return {
+      text: e.text.trim(),
+      active,
+      done: false,
+      research: e.research.trim() || undefined,
+      rules: rd || rdo ? { do: rd, dont: rdo } : undefined,
+      plan: plan.length ? plan : undefined,
+    };
+  }
+
+  // 执行时发给 Agent 的完整工作约定：目标+调研+计划(带验收)+规则+每步自检+里程碑写知识宫殿
+  function charterExecPrompt(c: import("./env").Charter): string {
+    const en = lang === "en";
+    const parts: string[] = [];
+    parts.push(en ? `[Overall goal for this conversation] ${c.text}` : `【这个对话的总目标】${c.text}`);
+    if (c.research?.trim()) parts.push((en ? "[Research findings]\n" : "【调研结论】\n") + c.research.trim());
+    if (c.plan?.length) {
+      const planTxt = c.plan
+        .map((s, i) => `${i + 1}. ${s.title}${s.acceptance ? (en ? ` — acceptance: ${s.acceptance}` : ` —— 验收：${s.acceptance}`) : ""}`)
+        .join("\n");
+      parts.push((en ? "[Execution plan] advance node by node; finish & self-check acceptance before moving on:\n" : "【执行计划】按节点逐步推进，每步做完先自测达到验收标准再进入下一步：\n") + planTxt);
+    }
+    if (c.rules?.do?.trim()) parts.push((en ? "[Must do]\n" : "【必须做】\n") + c.rules.do.trim());
+    if (c.rules?.dont?.trim()) parts.push((en ? "[Never do] (touching these means drifting off the goal)\n" : "【绝不做】（碰到就是跑偏、背离初衷）\n") + c.rules.dont.trim());
+    const method = en
+      ? `\nHow to work:\n1. From now on, drive toward the goal autonomously along the plan above — start step 1, no need to ask whether to break it down;\n2. After each step: first self-check it against that step's acceptance criteria; only count it done (and move on) once it passes; report progress briefly;\n3. Before EACH step, re-read the goal + plan + rules: know which step you're on, whether you've drifted, whether you're within the rules — the moment you notice drift (doing something off-plan and pointless for the goal), correct course back to the goal immediately;\n4. Do your own research / verification / decisions; decide trivial choices yourself;\n5. Stop and ask me only for: things only I can give (server/account/key/payment/offline info); irreversible or others-affecting actions (delete, deploy, write prod, spend money, send externally); or a genuine fork in direction that needs my call;\n6. Whenever you complete a plan node, write its progress & conclusions into the knowledge base (use write_file to append a markdown note into the docs/knowledge-palace directory) for a long-term record;\n7. End each turn with one line stating the next step.\nStart now — go straight into step 1.`
+      : `\n工作方式：\n1. 从现在起按上面的计划自主推进，直接做第 1 步，不用问我要不要拆；\n2. 每做完一步：先对照该步的验收标准自测是否达标，达标才算完成、才进入下一步；简短报告进展；\n3. 每一步开始前，回看一遍总目标 + 计划 + 规则，明确现在在第几步、有没有跑偏、符不符合规则；一旦发现偏离初衷（在做计划外、对总目标没意义的事），立刻纠正、拉回目标；\n4. 能自己查资料、验证、决策的一律自己来，无关紧要的选择自己定；\n5. 只有这几种情况停下来问我：需要我提供你拿不到的东西（服务器/账号/密钥/付费/线下信息）；删除、上线、写生产、花钱、对外发送这类不可逆或影响他人的动作；目标方向出现分歧要我拍板；\n6. 每完成一个计划节点，把该节点的进展与结论整理成 markdown、用 write_file 写入知识宫殿文档库沉淀下来；\n7. 每轮结尾用一句话说清「下一步做什么」，方便自动接力。\n现在开始，直接做第 1 步。`;
+    return parts.join("\n\n") + method;
+  }
+
+  // 定好目标就交给它自己跑。有计划/规则/调研就走完整契约提示，纯目标沿用可自定义的老模板（向后兼容）。
+  function startGoal(e: NonNullable<typeof goalEdit>) {
+    const tx = e.text.trim();
+    if (!tx) return;
+    const sid = e.sid;
+    const c = buildCharter(e, true);
+    window.wuwei.goalSet?.(sid, c);
     setGoalEdit(null);
-    const tpl = goalPromptOf();
-    doSend(tpl.includes("{目标}") ? tpl.replaceAll("{目标}", tx) : `【总目标】${tx}\n\n${tpl}`, []);
+    // doSend 只发往当前会话；给别的会话设的目标只持久化+置为推进中，切过去点「继续」即可开跑
+    if (sid !== currentId) return;
+    setGoal(c);
+    setMode(sid, "cont");
+    const rich = !!(c.research || c.rules || (c.plan && c.plan.length));
+    if (rich) {
+      doSend(charterExecPrompt(c), []);
+    } else {
+      const tpl = goalPromptOf();
+      doSend(tpl.includes("{目标}") ? tpl.replaceAll("{目标}", tx) : `【总目标】${tx}\n\n${tpl}`, []);
+    }
   }
 
   // 打开某会话的完整历史(压缩前原文 + 当前)，用聊天布局渲染
@@ -5092,8 +5195,8 @@ export function App() {
                       const sid = ctxMenu.sid;
                       close();
                       window.wuwei.goalGet?.(sid)
-                        .then((g) => setGoalEdit({ sid, text: g?.text || "" }))
-                        .catch(() => setGoalEdit({ sid, text: "" }));
+                        .then((g) => openGoalEdit(sid, g))
+                        .catch(() => openGoalEdit(sid, null));
                     }}
                   >
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -6587,7 +6690,7 @@ export function App() {
                   <span className="goal-state">{lang === "en" ? "advancing" : "自主推进中"}{modeOf(currentId) === "cont" && contN > 0 ? (lang === "en" ? ` · step ${contN}` : ` · 第 ${contN} 步`) : ""}</span>
                   <button
                     onClick={() => {
-                      const g = { text: goal.text, active: false, done: goal.done };
+                      const g = { ...goal, active: false, done: goal.done };
                       window.wuwei.goalSet?.(currentId, g);
                       setGoal(g);
                       setMode(currentId, "auto"); // 暂停 = 回到自动，不再替你接话
@@ -6602,7 +6705,7 @@ export function App() {
                   <button
                     className="on"
                     onClick={() => {
-                      const g = { text: goal.text, active: true, done: false };
+                      const g = { ...goal, active: true, done: false };
                       window.wuwei.goalSet?.(currentId, g);
                       setGoal(g);
                       setMode(currentId, "cont");
@@ -6613,12 +6716,12 @@ export function App() {
                   </button>
                 </>
               )}
-              <button onClick={() => setGoalEdit({ sid: currentId, text: goal.text })}>{lang === "en" ? "Edit" : "改"}</button>
+              <button onClick={() => openGoalEdit(currentId, goal)}>{lang === "en" ? "Edit" : "改"}</button>
               {!goal.done && (
                 <button
                   title={lang === "en" ? "Mark this goal as achieved" : "标记这个目标已达成（目标本身会一直留着，要清掉请到「改」里删除）"}
                   onClick={() => {
-                    const g = { text: goal.text, active: false, done: true };
+                    const g = { ...goal, active: false, done: true };
                     window.wuwei.goalSet?.(currentId, g);
                     setGoal(g);
                     setMode(currentId, "auto");
@@ -7492,57 +7595,122 @@ export function App() {
           </div>
         </>
       )}
-      {goalEdit && (
+      {goalEdit && (() => {
+        const en = lang === "en";
+        const ge = goalEdit;
+        const setGE = (patch: Partial<NonNullable<typeof goalEdit>>) => setGoalEdit({ ...ge, ...patch });
+        const setStep = (i: number, patch: Partial<import("./env").PlanStep>) =>
+          setGE({ plan: ge.plan.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+        const addStep = () => setGE({ plan: [...ge.plan, { id: `s${ge.plan.length + 1}`, title: "", acceptance: "", status: "todo" }] });
+        const delStep = (i: number) => setGE({ plan: ge.plan.filter((_, j) => j !== i) });
+        const closeEdit = () => { window.wuwei.charterDraftDisarm?.(ge.sid); setGoalEdit(null); };
+        return (
         <>
-          <div className="mq-overlay" onClick={() => setGoalEdit(null)} />
-          <div className="goal-modal">
-            <div className="goal-modal-h">◎ {lang === "en" ? "Overall goal for this conversation" : "这个对话的总目标"}</div>
-            <div className="goal-modal-sub">
-              {lang === "en"
-                ? "Describe what you want to achieve. After you click Start, it switches to smart-continue, breaks the task down and drives it step by step — only stopping to ask when something truly needs you (servers, accounts, spending, going live)."
-                : "写清楚你要达成什么。点「开始执行」后它会自动切到智能继续，自己拆解任务、一步步做下去，只有真正需要你出面的（服务器、账号、花钱、上线这类）才会停下来问你。"}
+          <div className="mq-overlay" onClick={closeEdit} />
+          <div className="goal-modal goal-modal-lg">
+            <div className="goal-modal-h">◎ {en ? "Overall goal for this conversation" : "这个对话的总目标"}</div>
+            <div className="goal-modal-scroll">
+              <div className="goal-modal-sub">
+                {en
+                  ? "Describe what you want to achieve, then let AI research it and draft a plan with acceptance criteria and drift-guard rules. After you click Start, it drives step by step — re-reading the goal, plan and rules each step so it never loses the thread — only stopping to ask when something truly needs you."
+                  : "写清楚你要达成什么，再让 AI 联网调研、拟出带验收标准的计划和防跑偏规则。点「开始执行」后它一步步做，每步都回看目标+计划+规则、绝不丢初衷，只有真正需要你出面的（服务器、账号、花钱、上线）才停下来问你。"}
+              </div>
+              {/* 总目标 */}
+              <div className="goal-field-label">{en ? "Overall goal" : "总目标"}</div>
+              <textarea
+                autoFocus
+                rows={3}
+                value={ge.text}
+                placeholder={en ? "e.g. Research the latest literature, converge on the most valuable direction, then implement/test/iterate until a verifiable result." : "例：把最前沿的相关文献调研一遍，收敛出最有价值的一条方向，然后一步步实践、测试、迭代，直到跑出可验证的结果。"}
+                onChange={(e) => setGE({ text: e.target.value })}
+              />
+              {/* 调研并拟计划 */}
+              <div className="goal-sec-row">
+                <button className="goal-research-btn" disabled={!ge.text.trim() || ge.researching} onClick={startResearch}>
+                  {ge.researching ? (en ? "Researching…" : "调研中…") : (en ? "🔍 Research & draft plan" : "🔍 调研并拟计划")}
+                </button>
+                <span className="goal-sec-hint">
+                  {en ? "Let AI search the latest papers & news online, then auto-fill the findings, plan and rules below for you to review and edit." : "让 AI 联网查最新论文/新闻，自动填好下面的调研结论、计划与规则——你再逐项审阅修改。"}
+                </span>
+              </div>
+              {ge.researching && (
+                <div className="goal-researching">
+                  {en ? "AI is researching online — findings, plan and rules below will fill in automatically when it finishes (about 30s–2min). Keep this open; closing it cancels the auto-fill." : "AI 正在联网调研，完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。请保持窗口打开；关掉会取消自动回填。"}
+                </div>
+              )}
+              {/* 调研结论 */}
+              <div className="goal-field-label">{en ? "Research findings" : "调研结论"}<span className="goal-field-opt">{en ? "optional" : "选填"}</span></div>
+              <textarea
+                rows={4}
+                value={ge.research}
+                placeholder={en ? "Findings from the research above — or write your own." : "上面调研得到的现状/发现/推荐路径——也可以自己写。"}
+                onChange={(e) => setGE({ research: e.target.value })}
+              />
+              {/* 计划 + 验收 */}
+              <div className="goal-field-label">{en ? "Execution plan — each step has an acceptance criterion" : "执行计划 —— 每步一个验收标准"}</div>
+              <div className="goal-plan">
+                {ge.plan.length === 0 && (
+                  <div className="goal-plan-empty">{en ? "No steps yet — click Research above to have AI draft them, or add manually." : "还没有步骤——点上面「调研」让 AI 拟，或手动添加。"}</div>
+                )}
+                {ge.plan.map((s, i) => (
+                  <div className="goal-plan-step" key={i}>
+                    <span className="goal-plan-no">{i + 1}</span>
+                    <div className="goal-plan-body">
+                      <input className="goal-plan-title" value={s.title} placeholder={en ? "What this step does" : "这一步做什么"} onChange={(e) => setStep(i, { title: e.target.value })} />
+                      <input className="goal-plan-acc" value={s.acceptance} placeholder={en ? "Acceptance: how we know this step is done / passing" : "验收标准：怎样算这步完成 / 达标"} onChange={(e) => setStep(i, { acceptance: e.target.value })} />
+                    </div>
+                    <button className="goal-plan-del" title={en ? "Remove step" : "删除这步"} onClick={() => delStep(i)}>×</button>
+                  </div>
+                ))}
+                <button className="goal-plan-add" onClick={addStep}>{en ? "+ Add step" : "+ 添加一步"}</button>
+              </div>
+              {/* 规则：要做 / 绝不做 */}
+              <div className="goal-rules">
+                <div className="goal-rules-col">
+                  <div className="goal-field-label">{en ? "Must do" : "要做哪些"}</div>
+                  <textarea rows={3} value={ge.ruleDo} placeholder={en ? "e.g. verify each step with real data; keep it minimal…" : "例：每步用真实数据验证；保持最小实现…"} onChange={(e) => setGE({ ruleDo: e.target.value })} />
+                </div>
+                <div className="goal-rules-col">
+                  <div className="goal-field-label goal-field-dont">{en ? "Never do (drift guard)" : "绝不做（防跑偏）"}</div>
+                  <textarea rows={3} value={ge.ruleDont} placeholder={en ? "e.g. don't turn this into an unrelated side-project; don't over-engineer; don't lose the original intent…" : "例：别做成一个跟初衷无关的小项目；别过度设计；别丢了做这事的初衷…"} onChange={(e) => setGE({ ruleDont: e.target.value })} />
+                </div>
+              </div>
             </div>
-            <textarea
-              autoFocus
-              rows={6}
-              value={goalEdit.text}
-              placeholder={lang === "en" ? "e.g. Research all the latest relevant literature, map out the directions, converge on the most valuable one, then implement/test/iterate until a verifiable result." : "例：把最前沿的相关文献全部调研一遍，梳理出有哪些研究方向，收敛出最有价值的一条，然后一步步实践、测试、迭代，直到跑出可验证的结果。"}
-              onChange={(e) => setGoalEdit({ ...goalEdit, text: e.target.value })}
-            />
             <div className="goal-modal-b">
               {goal && (
                 <button
                   className="ghost"
                   onClick={() => {
-                    window.wuwei.goalSet?.(goalEdit.sid, null);
-                    if (goalEdit.sid === currentId) setGoal(null);
-                    setGoalEdit(null);
+                    window.wuwei.goalSet?.(ge.sid, null);
+                    if (ge.sid === currentId) setGoal(null);
+                    closeEdit();
                   }}
                 >
-                  {lang === "en" ? "Delete goal" : "删除目标"}
+                  {en ? "Delete goal" : "删除目标"}
                 </button>
               )}
               <span style={{ flex: 1 }} />
-              <button className="ghost" onClick={() => setGoalEdit(null)}>{lang === "en" ? "Cancel" : "取消"}</button>
+              <button className="ghost" onClick={closeEdit}>{en ? "Cancel" : "取消"}</button>
               <button
                 className="ghost"
                 onClick={() => {
-                  const tx = goalEdit.text.trim();
-                  const g = tx ? { text: tx, active: false, done: false } : null;
-                  window.wuwei.goalSet?.(goalEdit.sid, g);
-                  if (goalEdit.sid === currentId) setGoal(g);
-                  setGoalEdit(null);
+                  const c = buildCharter(ge, false);
+                  const g = c.text.trim() ? c : null;
+                  window.wuwei.goalSet?.(ge.sid, g);
+                  if (ge.sid === currentId) setGoal(g);
+                  closeEdit();
                 }}
               >
-                {lang === "en" ? "Save only" : "只保存"}
+                {en ? "Save only" : "只保存"}
               </button>
-              <button className="primary" disabled={!goalEdit.text.trim()} onClick={() => startGoal(goalEdit.text)}>
-                {lang === "en" ? "Start" : "开始执行"}
+              <button className="primary" disabled={!ge.text.trim()} onClick={() => startGoal(ge)}>
+                {en ? "Start" : "开始执行"}
               </button>
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
       {showTrash && (
         <>
           <div className="mq-overlay" onClick={() => setShowTrash(false)} />

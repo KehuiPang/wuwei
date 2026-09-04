@@ -1661,7 +1661,23 @@ async function suggestNextAction(id: string) {
     .join("\n");
   const lastReplyTail = msgTextTail(last, 600); // 助手最后回复的结尾——预测下一步只认它
   const g = sessionGoals[id];
-  const goalBlock = g && g.active ? g.text.slice(0, 600) : ""; // 智能继续：会话总目标
+  const goalActive = !!(g && g.active);
+  const goalBlock = goalActive ? g!.text.slice(0, 600) : ""; // 智能继续：会话总目标
+  // 完整契约(计划节点+验收+规则)：每步回看它，防止跑着跑着丢初衷
+  let charterExtra = "";
+  if (goalActive) {
+    const plan = g!.plan || [];
+    if (plan.length) {
+      const planTxt = plan
+        .map((s, i) => `${i + 1}. [${s.status === "done" ? tt("✓已完成", "✓done") : s.status === "doing" ? tt("▶进行中", "▶doing") : tt("待办", "todo")}] ${s.title}${s.acceptance ? tt(`（验收:${s.acceptance}）`, ` (acceptance: ${s.acceptance})`) : ""}`)
+        .join("\n");
+      charterExtra += tt("\n【执行计划】按节点逐步推进：\n", "\n[Plan] advance node by node:\n") + planTxt;
+    }
+    const doTxt = g!.rules?.do?.trim();
+    const dontTxt = g!.rules?.dont?.trim();
+    if (doTxt) charterExtra += tt("\n【必须做】", "\n[Must do] ") + doTxt.slice(0, 600);
+    if (dontTxt) charterExtra += tt("\n【绝不做】(碰到就是跑偏)：", "\n[Never do] (touching these means drifting): ") + dontTxt.slice(0, 600);
+  }
   const sr = (isUneditedStopRules(stopRules) ? defaultStopRules() : stopRules).trim(); // 智能继续：红线(未改过按当前语言取默认)
   try {
     const res = await provider.complete(
@@ -1678,8 +1694,10 @@ async function suggestNextAction(id: string) {
           "ASK = 只有这些才停下来问人：删除/清空/覆盖数据、部署或上线到生产正式环境、发布对外内容、改线上配置或写生产数据库、花钱付款、替用户发邮件或消息、改权限与安全设置、任何不可逆或会影响他人的动作；或者要用户提供只有他才有的东西(账号、密钥、服务器、线下信息)、上一步出错需要用户定夺、几个方案的差别纯粹取决于用户偏好而无从推断。\n" +
           "『要我继续吗』『下一步做 X 好吗』『可以选 A 或 B』这类一律 AUTO，别当成需要用户拿主意。" +
           (goalBlock
-            ? "\n用户给这个对话定了总目标：" + goalBlock +
-              "\n他已经授权你朝这个目标自主推进，所以【朝目标推进的常规步骤一律写 AUTO】，第1行就写出推进下一步该说的话(别问要不要，直接说做什么)。只有下面 ASK 的红线才停。"
+            ? "\n用户给这个对话定了总目标：" + goalBlock + charterExtra +
+              "\n他已经授权你朝这个目标自主推进，所以【朝目标推进的常规步骤一律写 AUTO】，第1行就写出推进下一步该说的话(别问要不要，直接说做什么)。" +
+              "\n定第1行前先对照上面的计划与规则自检：现在该落在哪个计划节点？上一步的产出达到那个节点的验收标准了吗(没达到就先补到达标，别急着往下跳)？有没有偏离总目标、或快要碰到「绝不做」？" +
+              "——第1行必须是【最贴合当前计划节点、朝总目标推进且不跑偏】的下一步；一旦发现已经跑偏(在做计划外的、对总目标没意义的事)，第1行就直接写把方向拉回目标的纠正动作。只有下面 ASK 的红线才停。"
             : "") +
           (sr ? "\n用户自己定的红线(命中就必须写 ASK，优先级最高)：\n" + sr : ""),
         "You suggest what the user will type next. In the conversation below, the END of the assistant's LAST reply usually asks a question " +
@@ -1694,8 +1712,10 @@ async function suggestNextAction(id: string) {
           "ASK = stop and ask only for: deleting/clearing/overwriting data, deploying/releasing to production, publishing external content, changing live config or writing to a production DB, spending money, sending mail/messages on the user's behalf, changing permissions/security, anything irreversible or affecting others; or needing something only the user has (account, key, server, offline info), a prior step errored and needs the user to decide, or options differ purely by user preference and can't be inferred.\n" +
           "'Want me to continue', 'shall I do X next', 'pick A or B' are all AUTO, not user-decision." +
           (goalBlock
-            ? "\nThe user set an overall goal for this conversation: " + goalBlock +
-              "\nThey authorized you to drive toward it autonomously, so [ordinary steps advancing the goal are always AUTO]; line 1 states the next step to take (don't ask whether — say what to do). Only the ASK redlines below stop you."
+            ? "\nThe user set an overall goal for this conversation: " + goalBlock + charterExtra +
+              "\nThey authorized you to drive toward it autonomously, so [ordinary steps advancing the goal are always AUTO]; line 1 states the next step to take (don't ask whether — say what to do)." +
+              "\nBefore writing line 1, self-check against the plan and rules above: which plan node should we be on now? Did the last step meet that node's acceptance criteria (if not, finish reaching it before jumping ahead)? Are we drifting from the goal or about to touch a [Never do]?" +
+              "—— line 1 MUST be the next step that best fits the current plan node, advances the goal, and does not drift; the moment you notice drift (doing something off-plan and pointless for the goal), line 1 states the corrective action that steers back to the goal. Only the ASK redlines below stop you."
             : "") +
           (sr ? "\nThe user's own redlines (hitting any one MUST be ASK, highest priority):\n" + sr : ""),
       ),
@@ -2377,8 +2397,14 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     persist(useId); // 该会话跑完落盘
     if (!runs.has(useId)) setSessionRunning(useId, false); // 无残留活跃轮→清运行标记(须在 persist 后,它会保留旧标记)
     void emitAccount(); // 刷新余额/本会话已消耗(DeepSeek 等)
-    // 当前会话，或开着智能继续的后台会话，跑完都算下一步建议(后台会话切走也能自己接着推进)
-    if ((useId === currentId || contSessions.has(useId)) && !ac.signal.aborted) void suggestNextAction(useId);
+    // 调研轮：解析契约草稿回填弹窗，不触发智能继续接话(等用户在弹窗里审阅确认)
+    if (!ac.signal.aborted && charterDraftPending.has(useId)) {
+      charterDraftPending.delete(useId);
+      if (!tryExtractCharterDraft(useId)) send("evt:charter-draft", { sid: useId, draft: null }); // 没抽到 JSON→让弹窗提示重试
+    } else if ((useId === currentId || contSessions.has(useId)) && !ac.signal.aborted) {
+      // 当前会话，或开着智能继续的后台会话，跑完都算下一步建议(后台会话切走也能自己接着推进)
+      void suggestNextAction(useId);
+    }
   }
 }
 
@@ -4109,7 +4135,16 @@ function pruneTranscripts(days: number) {
 
 // ==================== 智能继续：会话总目标 + 自定义红线 + 后台推进集合 ====================
 // —— 会话总目标：给这个对话定一个大目标，它自己拆解、自己一步步推进 ——
-type SessionGoal = { text: string; active: boolean; done?: boolean };
+// 计划节点：一步 + 验收标准 + 状态。防跑偏的骨架——每步都回看"现在在哪个节点、达没达验收"
+type PlanStep = { id: string; title: string; acceptance: string; status: "todo" | "doing" | "done" };
+type SessionGoal = {
+  text: string;
+  active: boolean;
+  done?: boolean;
+  research?: string;                      // 调研结论(联网调研后回填，可编辑)
+  rules?: { do: string; dont: string };   // 要做哪些 / 绝不做哪些(告诉 AI 边界，防跑偏)
+  plan?: PlanStep[];                       // 分步计划，每步带验收标准
+};
 let sessionGoals: Record<string, SessionGoal> = {};
 const goalsFile = () => join(app.getPath("userData"), "session-goals.json");
 function loadGoals() {
@@ -4172,9 +4207,65 @@ ipcMain.handle("chat:goalSet", (_e, sid: string, goal: SessionGoal | null) => {
   if (!k) return;
   // 只有显式传 null 才删；「完成」只是把 active 关掉、done 打上，目标本身一直留着
   if (!goal || !String(goal.text || "").trim()) delete sessionGoals[k];
-  else sessionGoals[k] = { text: String(goal.text).slice(0, 2000), active: !!goal.active, done: !!goal.done };
+  else sessionGoals[k] = {
+    text: String(goal.text).slice(0, 2000),
+    active: !!goal.active,
+    done: !!goal.done,
+    research: goal.research ? String(goal.research).slice(0, 6000) : undefined,
+    rules: goal.rules
+      ? { do: String(goal.rules.do || "").slice(0, 2000), dont: String(goal.rules.dont || "").slice(0, 2000) }
+      : undefined,
+    plan: Array.isArray(goal.plan)
+      ? goal.plan.slice(0, 40).map((s: any, i: number) => ({
+          id: String(s?.id || `s${i + 1}`).slice(0, 40),
+          title: String(s?.title || "").slice(0, 300),
+          acceptance: String(s?.acceptance || "").slice(0, 600),
+          status: s?.status === "doing" || s?.status === "done" ? s.status : "todo",
+        }))
+      : undefined,
+  };
   saveGoals();
 });
+// 「调研并拟计划」：给某会话下一轮 Agent 回复"武装"成契约草稿——跑完解析末尾 JSON，回填弹窗
+const charterDraftPending = new Set<string>();
+ipcMain.on("chat:charter-draft-arm", (_e, sid: string) => { if (sid) charterDraftPending.add(String(sid)); });
+ipcMain.on("chat:charter-draft-disarm", (_e, sid: string) => { charterDraftPending.delete(String(sid || "")); });
+// 从这轮助手最后回复里抽出 ```json 契约块 → 事件回填弹窗。抽到并解析成功返回 true。
+function tryExtractCharterDraft(id: string): boolean {
+  const a0 = agents.get(id);
+  const msgs = a0?.getMessages() || [];
+  const last = [...msgs].reverse().find((m: any) => m.role === "assistant");
+  if (!last) return false;
+  const full = msgText(last);
+  let jsonStr = "";
+  const fences = [...full.matchAll(/```json\s*([\s\S]*?)```/gi)];
+  if (fences.length) jsonStr = fences[fences.length - 1][1];
+  else {
+    const m = full.match(/\{[\s\S]*\}/); // 兜底：抓最外层裸对象
+    if (m) jsonStr = m[0];
+  }
+  if (!jsonStr.trim()) return false;
+  try {
+    const d = JSON.parse(jsonStr);
+    send("evt:charter-draft", {
+      sid: id,
+      draft: {
+        research: String(d.research || d.调研 || ""),
+        rules: {
+          do: String(d.rules?.do || d.do || d.要做 || ""),
+          dont: String(d.rules?.dont || d.dont || d.不做 || d.绝不做 || ""),
+        },
+        plan: Array.isArray(d.plan || d.计划)
+          ? (d.plan || d.计划).map((s: any) => ({
+              title: String(s?.title || s?.step || s?.步骤 || s?.标题 || ""),
+              acceptance: String(s?.acceptance || s?.criteria || s?.验收 || s?.验收标准 || ""),
+            }))
+          : [],
+      },
+    });
+    return true;
+  } catch { return false; }
+}
 // 开着「智能继续/自主推进」的会话集合(渲染端在模式变化时同步过来)。
 // 这些会话即使不在屏幕上，跑完一轮也要照样算下一步建议——否则切走就断在那儿。
 const contSessions = new Set<string>();

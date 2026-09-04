@@ -1,6 +1,23 @@
 // 渲染进程可见的 window.wuwei 类型（来自 preload）
 import type { WuweiMe, CatalogProviderDto, ModelPricingData } from "../../main/wuwei-auth.js";
 
+// 会话总目标"任务契约"：目标 + 调研 + 规则(要做/不做) + 分步计划(每步带验收标准)
+export interface PlanStep { id: string; title: string; acceptance: string; status: "todo" | "doing" | "done" }
+export interface Charter {
+  text: string;
+  active: boolean;
+  done?: boolean;
+  research?: string;
+  rules?: { do: string; dont: string };
+  plan?: PlanStep[];
+}
+// 「调研并拟计划」跑完，主进程解析回填弹窗用的草稿
+export type CharterDraft = {
+  research: string;
+  rules: { do: string; dont: string };
+  plan: { title: string; acceptance: string }[];
+} | null;
+
 export interface BrainNodeLite {
   id: string;
   name: string;
@@ -83,8 +100,10 @@ export interface WuweiApi {
   getTranscript(sid: string): Promise<{ archived: any[]; live: any[]; full: any[]; compacted: boolean }>; // 完整对话历史(含压缩前原文)
   pruneTranscripts(days: number): Promise<void>; // 按保留天数清理归档
   // 智能继续:会话总目标 / 自定义红线 / 后台推进集合
-  goalGet(sid: string): Promise<{ text: string; active: boolean; done?: boolean } | null>;
-  goalSet(sid: string, goal: { text: string; active: boolean; done?: boolean } | null): Promise<void>;
+  goalGet(sid: string): Promise<Charter | null>;
+  goalSet(sid: string, goal: Charter | null): Promise<void>;
+  charterDraftArm(sid: string): void;
+  charterDraftDisarm(sid: string): void;
   stopRulesGet(): Promise<string>;
   stopRulesSet(t: string): Promise<void>;
   setContSessions(ids: string[]): void;
