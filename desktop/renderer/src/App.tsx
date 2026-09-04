@@ -271,6 +271,19 @@ const DEFAULT_GOAL_PROMPT = `【这个对话的总目标】{目标}
 现在开始，先给拆解方案，然后直接动手做第一步。`;
 const goalPromptOf = () => localStorage.getItem("wuwei-goal-prompt") || DEFAULT_GOAL_PROMPT;
 
+// 按会话持久化「调研状态」(是否在调研 + 最新进度)，独立于弹窗开关：
+// 这样点了"只保存"/收起/关掉弹窗、甚至刷新，重新打开还能恢复"调研中 + 进度"，不会一片空白。
+type ResearchState = { researching: boolean; live: { label: string; steps: number } | null };
+function saveResearchState(sid: string, st: ResearchState | null) {
+  try {
+    if (st) localStorage.setItem("wuwei-research:" + sid, JSON.stringify(st));
+    else localStorage.removeItem("wuwei-research:" + sid);
+  } catch { /* 忽略 */ }
+}
+function loadResearchState(sid: string): ResearchState | null {
+  try { const s = localStorage.getItem("wuwei-research:" + sid); if (s) return JSON.parse(s) as ResearchState; } catch { /* 忽略 */ }
+  return null;
+}
 // 调研实时进度：把一次工具调用翻成人话("正在搜索：xxx"/"正在读网页：xxx")，喂进弹窗提示框
 function researchToolLabel(name: string, input: any, en: boolean): string {
   const raw = input?.query ?? input?.q ?? input?.url ?? input?.file_path ?? input?.path ?? input?.pattern ?? "";
@@ -1599,14 +1612,14 @@ type PayNowCfg = {
 // 缺币弹窗右侧「下单理由」：每条 = 加粗钩子 + 具体说明，精准戳付费点（顶级模型 / 更快 / 更多额度 / 记忆 / 省钱）。
 const PAYNOW_PERKS: [string, string][] = [
   ["一份订阅，顶三份钱", "别再 ChatGPT 20刀、Claude 20刀、Gemini 20刀分开交，无为一份全给你"],
-  ["旗舰全家桶，一键随便切", "Claude Opus 5、GPT-5.6、Gemini 3.7、DeepSeek V4、Grok 4.5 想用哪个用哪个，不绑死任何一家"],
+  ["旗舰全家桶，一键随便切", "Claude Fable 5.1、GPT-5.6、Gemini 3.7、DeepSeek V4、Grok 4.6 想用哪个用哪个，不绑死任何一家"],
   ["长任务一口气跑完", "额度更足、无为币更多，几万字的活儿中途不断供"],
   ["会员走快车道", "专属极速通道，高峰期不用排在免费用户后面干等"],
   ["它永远记得你", "脑网络永久记忆，跨对话记住你的项目、代码风格和偏好"],
 ];
 const PAYNOW_PERKS_EN: [string, string][] = [
   ["One subscription beats three", "Skip paying $20 for ChatGPT, $20 for Claude, $20 for Gemini. Wuwei runs all of them."],
-  ["All the flagships, one click away", "Claude Opus 5, GPT-5.6, Gemini 3.7, DeepSeek V4, Grok 4.5, switch anytime, locked to no one."],
+  ["All the flagships, one click away", "Claude Fable 5.1, GPT-5.6, Gemini 3.7, DeepSeek V4, Grok 4.6, switch anytime, locked to no one."],
   ["Long jobs won't die halfway", "More tokens, more Wuwei coins. Your big task runs to the end without cutting out."],
   ["Members jump the queue", "Priority lane for faster replies, no waiting behind free users at peak hours."],
   ["It remembers you, forever", "Brain-network memory keeps your project, code style and habits across every chat."],
@@ -1802,8 +1815,7 @@ function TrialPayModal({
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className="pay-card pay-card-wide" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
-        <div className="pay-top" style={{ paddingBottom: 2 }}>
-          <PayEnso size={44} />
+        <div className="pay-top" style={{ paddingBottom: 2, paddingTop: 22 }}>
           <h2>{en ? "Don't stop here" : "别卡在这儿"}</h2>
           <p>{en ? "Your coins ran out. Top up and keep every flagship model at your fingertips." : "无为币用完了，充一点，继续用遍全球最强旗舰模型。"}</p>
         </div>
@@ -1893,12 +1905,12 @@ function TrialPayModal({
 // 缺币弹窗顶部展示的「升级后畅用」最强顶级模型（官方 SVG logo，取自共用库 modelLogos）。
 // 名字对齐官网 ModelShowcase 的旗舰清单；换代时随客户端发版更新即可。
 const PAY_MODEL_MARKS: { brand: string; n: string; nw?: boolean }[] = [
-  { brand: "claude", n: "Claude Opus 5", nw: true },
+  { brand: "claude", n: "Claude Fable 5.1", nw: true },
   { brand: "gpt", n: "GPT-5.6", nw: true },
   { brand: "gemini", n: "Gemini 3.7", nw: true },
   { brand: "deepseek", n: "DeepSeek V4" },
-  { brand: "qwen", n: "Qwen 3.8", nw: true },
-  { brand: "grok", n: "Grok 4.5", nw: true },
+  { brand: "qwen", n: "Qwen3.8 Max", nw: true },
+  { brand: "grok", n: "Grok 4.6", nw: true },
   { brand: "kimi", n: "Kimi K3" },
   { brand: "glm", n: "GLM-5.3" },
 ];
@@ -2814,6 +2826,7 @@ export function App() {
     ruleDont: string;
     plan: import("./env").PlanStep[];
     researching?: boolean;
+    minimized?: boolean; // 收起成小药丸(不销毁状态/不中断调研)，点开还在
   };
   // 从 localStorage 恢复：刷新/热重载后弹窗内容和调研进度不丢（dev 刷新只重载渲染层，主进程调研还在跑）
   const [goalEdit, setGoalEdit] = useState<null | GoalEditState>(() => {
@@ -3188,6 +3201,19 @@ export function App() {
     void window.wuwei.track?.("credits_shortage_action", { action, dwell_ms: dwellMs });
     setCoinShortage(null);
   }
+  // 【仅开发预览】Ctrl+Shift+9 直接弹出缺币弹窗看效果；import.meta.env.DEV 门控，生产构建自动剥离。
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "9" || e.code === "Digit9")) {
+        e.preventDefault();
+        setCoinShortage({ message: "预览", balance: 0 });
+        shortageShownAt.current = Date.now();
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   // 客户端公告：启动拉取，未读过该版本(version)且 active 才弹；读过存本地，同版本不再弹，后台更新(version 变)则再弹。
   const [announce, setAnnounce] = useState<{ version: string; title: string; body: string } | null>(null);
   // 自动更新：版本号 + 检查态 + 新版就绪(已下载好，点即装)
@@ -3274,6 +3300,7 @@ export function App() {
   function onWuweiLoggedIn(me: WuweiMe, action?: "login" | "register" | "reset") {
     setWuwei(me);
     setShowLoginForm(false);
+    void runConnCheck(); // 登录后立刻重测连通灯，避免登录前的黄灯一直挂着（凭证已变、必须重探）
     const en = getLang() === "en";
     const who = me.user.name || me.user.email || (en ? "user" : "用户");
     const msg =
@@ -3881,9 +3908,13 @@ export function App() {
           scheduleFlush();
           break;
         case "evt:tool-start":
-          // 调研进行中：把 AI 正在做的动作(搜什么/读哪页/写文件)喂进弹窗提示框
+          // 调研进行中：把 AI 正在做的动作(搜什么/读哪页/写文件)喂进弹窗提示框，并持久化(收起/只保存/刷新后可恢复)
           if (researchSidRef.current === payload.sid) {
-            setResearchLive((prev) => ({ label: researchToolLabel(payload.name, payload.input, langRef.current === "en"), steps: (prev?.steps || 0) + 1 }));
+            setResearchLive((prev) => {
+              const live = { label: researchToolLabel(payload.name, payload.input, langRef.current === "en"), steps: (prev?.steps || 0) + 1 };
+              saveResearchState(payload.sid, { researching: true, live });
+              return live;
+            });
           }
           if (payload.sid !== currentIdRef.current) break;
           push({ type: "tool", id: payload.id, name: payload.name, input: payload.input, status: "running" });
@@ -4433,8 +4464,9 @@ export function App() {
     window.addEventListener("wuwei-cont-cfg", onCont);
     return () => window.removeEventListener("wuwei-cont-cfg", onCont);
   }, []);
-  // 打开目标弹窗：把已存契约拆进可编辑字段（新建则给空）
+  // 打开目标弹窗：把已存契约拆进可编辑字段（新建则给空）；并恢复该会话的"调研中+进度"状态
   function openGoalEdit(sid: string, g: import("./env").Charter | null) {
+    const rs = loadResearchState(sid); // 上次没做完的调研状态(独立于弹窗持久化)
     setGoalEdit({
       sid,
       text: g?.text || "",
@@ -4442,7 +4474,18 @@ export function App() {
       ruleDo: g?.rules?.do || "",
       ruleDont: g?.rules?.dont || "",
       plan: (g?.plan || []).map((s) => ({ ...s })),
+      researching: rs?.researching || undefined,
+      minimized: false,
     });
+    if (rs?.researching) {
+      researchSidRef.current = sid;
+      setResearchLive(rs.live || { label: lang === "en" ? "Reconnecting to research…" : "重连调研中…", steps: 0 });
+      // 补拉重载/关窗间隙可能已完成的草稿（拿到就回填并清掉"调研中"）
+      window.wuwei.charterDraftGet?.(sid).then((d) => { if (d) applyCharterDraft(sid, d); }).catch(() => {});
+    } else {
+      researchSidRef.current = null;
+      setResearchLive(null);
+    }
   }
 
   // 「调研并拟计划」：发一条纯调研任务给真 Agent（有 web_search/web_fetch），
@@ -4455,8 +4498,10 @@ export function App() {
     if (sid !== currentId) return; // 调研走 doSend(=当前会话)，只对当前会话有效，避免误发到别的对话
     window.wuwei.charterDraftArm(sid);
     researchSidRef.current = sid;
-    setResearchLive({ label: lang === "en" ? "Sent — waiting for AI to go online…" : "已发起，等待 AI 联网…", steps: 0 });
-    setGoalEdit({ ...goalEdit, researching: true });
+    const live0 = { label: lang === "en" ? "Sent — waiting for AI to go online…" : "已发起，等待 AI 联网…", steps: 0 };
+    setResearchLive(live0);
+    saveResearchState(sid, { researching: true, live: live0 }); // 按会话持久化，"只保存"/收起/刷新后重开还能恢复
+    setGoalEdit({ ...goalEdit, researching: true, minimized: false });
     const prompt = lang === "en"
       ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse web_search / web_fetch to survey the LATEST frontier papers, industry news and authoritative sources, so you truly understand the current state, viable paths, common pitfalls and best practices for this goal.\nOnce you've researched enough, output a "charter draft" and put it at the END of your reply as a single \`\`\`json code block, exactly this shape (output only this one json block, all fields filled):\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path, a few paragraphs",\n  "rules": { "do": "What to do (one per line)", "dont": "What NOT to do / how this goal most easily drifts off course (one per line)" },\n  "plan": [ { "title": "What step 1 does", "acceptance": "Acceptance criteria: how we know this step is done/passing" } ]\n}\n\`\`\`\nMake the plan concrete, ordered and executable, every step with a clear acceptance criterion. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
       : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search / web_fetch 联网调研：查最新的前沿论文、行业新闻、权威资料，充分弄清这个目标当前的现状、可行路径、常见坑与最佳实践。\n调研充分后，产出一份「任务契约草稿」，并放在回复的最后、用一个 \`\`\`json 代码块输出，结构严格如下（只输出这一个 json 块，字段齐全）：\n\`\`\`json\n{\n  "research": "调研结论：现状 / 关键发现 / 推荐路径，几段话说清",\n  "rules": { "do": "要做哪些（逐条，一行一条）", "dont": "绝不做哪些 / 这个目标最容易跑偏成什么样（逐条，一行一条）" },\n  "plan": [ { "title": "第一步做什么", "acceptance": "这步的验收标准：怎样算完成 / 达标" } ]\n}\n\`\`\`\n计划要具体、可执行、有先后逻辑，每步都有明确验收标准。dont 里要写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
@@ -4465,6 +4510,7 @@ export function App() {
 
   // 调研草稿回填弹窗（事件到达 or 刷新后补拉，都走这里）
   function applyCharterDraft(sid: string, draft: import("./env").CharterDraft) {
+    saveResearchState(sid, null); // 调研收尾(成功或失败)：清掉持久化的"调研中"，避免下次重开卡在转圈
     if (researchSidRef.current === sid) { researchSidRef.current = null; setResearchLive(null); }
     setGoalEdit((prev) => {
       if (!prev || prev.sid !== sid) return prev; // 弹窗已关或切了会话→忽略(草稿已缓存/持久化)
@@ -4537,6 +4583,11 @@ export function App() {
     const sid = e.sid;
     const c = buildCharter(e, true);
     window.wuwei.goalSet?.(sid, c);
+    // 开始执行=不再收草稿：解除调研武装+清进度，否则这轮执行输出会被误当调研 JSON 解析
+    window.wuwei.charterDraftDisarm?.(sid);
+    saveResearchState(sid, null);
+    researchSidRef.current = null;
+    setResearchLive(null);
     setGoalEdit(null);
     // doSend 只发往当前会话；给别的会话设的目标只持久化+置为推进中，切过去点「继续」即可开跑
     if (sid !== currentId) return;
@@ -7753,12 +7804,46 @@ export function App() {
           setGE({ plan: ge.plan.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
         const addStep = () => setGE({ plan: [...ge.plan, { id: `s${ge.plan.length + 1}`, title: "", acceptance: "", status: "todo" }] });
         const delStep = (i: number) => setGE({ plan: ge.plan.filter((_, j) => j !== i) });
-        const closeEdit = () => { window.wuwei.charterDraftDisarm?.(ge.sid); researchSidRef.current = null; setResearchLive(null); setGoalEdit(null); };
+        // 彻底关闭放弃：解除调研武装 + 清掉持久化的调研状态。用于 ×/取消/删除目标。
+        const discard = () => { window.wuwei.charterDraftDisarm?.(ge.sid); saveResearchState(ge.sid, null); researchSidRef.current = null; setResearchLive(null); setGoalEdit(null); };
+        // 缩小：收起成小药丸，不动任何状态——调研继续在后台跑、进度继续记，点开还在。
+        const minimize = () => setGoalEdit({ ...ge, minimized: true });
+        // 只保存：存下当前字段，但不解除调研、不清进度——关掉后调研照跑，重开自动恢复+补回草稿。
+        const saveOnly = () => {
+          const c = buildCharter(ge, false);
+          const g = c.text.trim() ? c : null;
+          window.wuwei.goalSet?.(ge.sid, g);
+          if (ge.sid === currentId) setGoal(g);
+          setGoalEdit(null);
+        };
+        // 收起态：只画一个悬浮小药丸(带调研进度)，点它展开
+        if (ge.minimized) {
+          return (
+            <button
+              className={"goal-mini" + (ge.researching ? " researching" : "")}
+              title={en ? "Open goal setup" : "展开目标设置"}
+              onClick={() => setGoalEdit({ ...ge, minimized: false })}
+            >
+              {ge.researching ? <span className="goal-research-spin" /> : <span className="goal-mini-ico">◎</span>}
+              <span className="goal-mini-text">{ge.researching && researchLive ? researchLive.label : ge.text || (en ? "Goal setup" : "目标设置")}</span>
+              {ge.researching && researchLive && researchLive.steps > 0 && <span className="goal-mini-step">#{researchLive.steps}</span>}
+            </button>
+          );
+        }
         return (
         <>
-          <div className="mq-overlay" onClick={closeEdit} />
+          <div className="mq-overlay" onClick={minimize} />
           <div className="goal-modal goal-modal-lg">
-            <div className="goal-modal-h">◎ {en ? "Overall goal for this conversation" : "这个对话的总目标"}</div>
+            <div className="goal-modal-h">
+              <span className="goal-modal-h-t">◎ {en ? "Overall goal for this conversation" : "这个对话的总目标"}</span>
+              <span style={{ flex: 1 }} />
+              <button className="goal-modal-icon" title={en ? "Minimize (keeps researching in background)" : "缩小（调研继续在后台跑）"} onClick={minimize} aria-label="minimize">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><line x1="3.5" y1="8" x2="12.5" y2="8" /></svg>
+              </button>
+              <button className="goal-modal-icon" title={en ? "Close (discards this research)" : "关闭（放弃这次调研）"} onClick={discard} aria-label="close">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><line x1="4" y1="4" x2="12" y2="12" /><line x1="12" y1="4" x2="4" y2="12" /></svg>
+              </button>
+            </div>
             <div className="goal-modal-scroll">
               <div className="goal-modal-sub">
                 {en
@@ -7785,7 +7870,7 @@ export function App() {
               </div>
               {ge.researching && (
                 <div className="goal-researching">
-                  <div>{en ? "AI is researching online — findings, plan and rules below will fill in automatically when it finishes (about 30s–2min). Keep this open; closing it cancels the auto-fill." : "AI 正在联网调研，完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。请保持窗口打开；关掉会取消自动回填。"}</div>
+                  <div>{en ? "AI is researching online — findings, plan and rules below fill in automatically when it finishes (about 30s–2min). Feel free to minimize (–) or Save only; research keeps running in the background and restores when you reopen. Only Close (×) cancels it." : "AI 正在联网调研，完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。可随时点右上角「缩小(–)」或「只保存」——调研会在后台继续跑，重新打开自动恢复；只有「关闭(×)」才会放弃这次调研。"}</div>
                   {researchLive && (
                     <div className="goal-research-live">
                       <span className="goal-research-spin" />
@@ -7840,26 +7925,15 @@ export function App() {
                   onClick={() => {
                     window.wuwei.goalSet?.(ge.sid, null);
                     if (ge.sid === currentId) setGoal(null);
-                    closeEdit();
+                    discard();
                   }}
                 >
                   {en ? "Delete goal" : "删除目标"}
                 </button>
               )}
               <span style={{ flex: 1 }} />
-              <button className="ghost" onClick={closeEdit}>{en ? "Cancel" : "取消"}</button>
-              <button
-                className="ghost"
-                onClick={() => {
-                  const c = buildCharter(ge, false);
-                  const g = c.text.trim() ? c : null;
-                  window.wuwei.goalSet?.(ge.sid, g);
-                  if (ge.sid === currentId) setGoal(g);
-                  closeEdit();
-                }}
-              >
-                {en ? "Save only" : "只保存"}
-              </button>
+              <button className="ghost" onClick={discard}>{en ? "Cancel" : "取消"}</button>
+              <button className="ghost" onClick={saveOnly}>{en ? "Save only" : "只保存"}</button>
               <button className="primary" disabled={!ge.text.trim()} onClick={() => startGoal(ge)}>
                 {en ? "Start" : "开始执行"}
               </button>

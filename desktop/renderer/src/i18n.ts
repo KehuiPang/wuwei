@@ -35,7 +35,7 @@ const DICT: Record<string, { zh: string; en: string }> = {
   "splash.aria": { zh: "无为 · 启动中", en: "Wuwei · loading" },
   "login.title": { zh: "登录 / 注册无为账号", en: "Sign in to Wuwei" },
   "login.incentive": { zh: "注册即得 100 无为币 · 每日签到再领 10", en: "Get 100 credits on sign-up · +10 daily check-in" },
-  "login.freeModels": { zh: "免费使用最新顶级模型", en: "Use the latest top-tier models for free" },
+  "login.freeModels": { zh: "登录可免费使用最新顶级模型", en: "Sign in to use the latest top-tier models for free" },
   "login.tab.email": { zh: "邮箱", en: "Email" },
   "login.tab.phone": { zh: "手机号", en: "Phone" },
   "login.email": { zh: "邮箱", en: "Email" },

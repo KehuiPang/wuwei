@@ -5312,7 +5312,25 @@ body {
   width: min(760px, 92vw); max-height: 88vh; padding: 0;
   display: flex; flex-direction: column;
 }
-.goal-modal-lg .goal-modal-h { padding: 18px 22px 10px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.goal-modal-lg .goal-modal-h { display: flex; align-items: center; gap: 6px; padding: 14px 14px 10px 22px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
+.goal-modal-h-t { font-size: 15px; font-weight: 700; color: var(--text); }
+.goal-modal-icon {
+  flex-shrink: 0; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; border: none; background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.goal-modal-icon:hover { background: var(--bg-input); color: var(--text); }
+/* 收起态：右下悬浮小药丸，点开还原(调研继续在后台跑) */
+.goal-mini {
+  position: fixed; z-index: 50; right: 20px; bottom: 84px; max-width: min(360px, 70vw);
+  display: flex; align-items: center; gap: 8px; padding: 9px 14px; cursor: pointer;
+  background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .22); color: var(--text); font-size: 13px; font-family: var(--sans);
+}
+.goal-mini:hover { border-color: var(--accent); }
+.goal-mini.researching { border-color: color-mix(in srgb, var(--spark) 45%, var(--border-strong)); }
+.goal-mini-ico { color: var(--spark); font-size: 14px; }
+.goal-mini-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal-mini-step { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--spark); font-variant-numeric: tabular-nums; }
 .goal-modal-scroll { padding: 14px 22px 6px; overflow-y: auto; flex: 1; }
 .goal-modal-lg .goal-modal-b { padding: 12px 22px 16px; margin-top: 0; border-top: 1px solid var(--border); }
 .goal-field-label {
