@@ -3092,7 +3092,7 @@ export function App() {
     setCoinShortage({ message, rebind });
     // 关键漏斗节点：余额不足弹窗展示（用户无为币耗尽被拦下的这一刻）。此前只记了 error_shown，
     // 没记「被提示充值/升级」这个转化节点，导致后台看不到「撞墙→是否点充值」的漏斗。
-    void window.wuwei.track?.("credits_shortage_shown", { canRebind: !!rebind });
+    void window.wuwei.track?.("credits_shortage_shown", { canRebind: !!rebind, payPage: lang === "en" ? "paddle" : "alipay" });
     shortageShownAt.current = Date.now();
     try {
       const me = await window.wuwei.wuweiMe();
