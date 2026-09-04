@@ -125,9 +125,10 @@ const api = {
   goalGet: (sid: string) => ipcRenderer.invoke("chat:goalGet", sid) as Promise<Charter | null>,
   goalSet: (sid: string, goal: Charter | null) =>
     ipcRenderer.invoke("chat:goalSet", sid, goal) as Promise<void>,
-  // 「调研并拟计划」：武装/解除某会话的"下一轮回复=契约草稿"标记
+  // 「调研并拟计划」：武装/解除某会话的"下一轮回复=契约草稿"标记；重连时补拉已备好的草稿
   charterDraftArm: (sid: string) => ipcRenderer.send("chat:charter-draft-arm", sid),
   charterDraftDisarm: (sid: string) => ipcRenderer.send("chat:charter-draft-disarm", sid),
+  charterDraftGet: (sid: string) => ipcRenderer.invoke("chat:charter-draft-get", sid) as Promise<CharterDraft>,
   stopRulesGet: () => ipcRenderer.invoke("chat:stopRulesGet") as Promise<string>,
   stopRulesSet: (t: string) => ipcRenderer.invoke("chat:stopRulesSet", t) as Promise<void>,
   setContSessions: (ids: string[]) => ipcRenderer.send("chat:cont-sessions", ids),

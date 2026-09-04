@@ -270,6 +270,23 @@ const DEFAULT_GOAL_PROMPT = `【这个对话的总目标】{目标}
 现在开始，先给拆解方案，然后直接动手做第一步。`;
 const goalPromptOf = () => localStorage.getItem("wuwei-goal-prompt") || DEFAULT_GOAL_PROMPT;
 
+// 调研实时进度：把一次工具调用翻成人话("正在搜索：xxx"/"正在读网页：xxx")，喂进弹窗提示框
+function researchToolLabel(name: string, input: any, en: boolean): string {
+  const raw = input?.query ?? input?.q ?? input?.url ?? input?.file_path ?? input?.path ?? input?.pattern ?? "";
+  const s = String(raw).replace(/\s+/g, " ").trim().slice(0, 64);
+  const tail = s ? "：" + s : "";
+  const tailEn = s ? ": " + s : "";
+  switch (name) {
+    case "web_search": return en ? `Searching${tailEn}` : `正在搜索${tail}`;
+    case "web_fetch": return en ? `Reading page${tailEn}` : `正在读网页${tail}`;
+    case "write_file": case "edit_file": return en ? `Writing${tailEn}` : `正在写入${tail}`;
+    case "read_file": return en ? `Reading${tailEn}` : `正在读取${tail}`;
+    case "bash": case "powershell": return en ? `Running command${tailEn}` : `执行命令${tail}`;
+    case "grep": case "glob": return en ? `Searching files${tailEn}` : `检索文件${tail}`;
+    default: return en ? `${name}${tailEn}` : `${name}${tail}`;
+  }
+}
+
 // 一沾这些就别替用户拿主意——宁可停下来等人，也不能自动替他决定
 const RISKY_ASK = /删除|清空|覆盖|抹掉|销毁|上线|发布|部署|生产|正式环境|prod\b|线上|付款|支付|下单|花钱|转账|发邮件|发消息|通知(客户|用户|大家)|授权|权限|密钥|token|密码|回滚|重置|drop\s+table|truncate|rm\s+-rf|强制推送|force\s*push/i;
 // 自定义红线拆成"一行一条"。**只按换行拆**，绝不再按顿号拆——
@@ -2693,7 +2710,7 @@ export function App() {
   // 会话总目标 + 自定义红线
   const [goal, setGoal] = useState<import("./env").Charter | null>(null);
   // 目标弹窗：把契约拆成可编辑字段(总目标/调研/规则要做·不做/分步计划+验收)
-  const [goalEdit, setGoalEdit] = useState<null | {
+  type GoalEditState = {
     sid: string;
     text: string;
     research: string;
@@ -2701,7 +2718,22 @@ export function App() {
     ruleDont: string;
     plan: import("./env").PlanStep[];
     researching?: boolean;
-  }>(null);
+  };
+  // 从 localStorage 恢复：刷新/热重载后弹窗内容和调研进度不丢（dev 刷新只重载渲染层，主进程调研还在跑）
+  const [goalEdit, setGoalEdit] = useState<null | GoalEditState>(() => {
+    try { const s = localStorage.getItem("wuwei-goal-modal"); if (s) return JSON.parse(s) as GoalEditState; } catch { /* 坏数据忽略 */ }
+    return null;
+  });
+  // 弹窗内容实时存本地：每次改动都落盘，关闭(null)则清掉。这样刷新回来还在，取消/保存后不残留。
+  useEffect(() => {
+    try {
+      if (goalEdit) localStorage.setItem("wuwei-goal-modal", JSON.stringify(goalEdit));
+      else localStorage.removeItem("wuwei-goal-modal");
+    } catch { /* 配额满等忽略 */ }
+  }, [goalEdit]);
+  // 调研实时进度：AI 联网时正在搜什么/读哪页/写多少字，喂进弹窗提示框（几十秒~两分钟别让用户干等）
+  const [researchLive, setResearchLive] = useState<{ label: string; steps: number } | null>(null);
+  const researchSidRef = useRef<string | null>(null); // 空依赖事件闭包里判"这条活动属不属于正在调研的会话"
   const [stopRules, setStopRules] = useState("");
   // 红线识别方式:keyword=关键词匹配(快,选项提到词就拦) / smart=智能识别(LLM判是否真触发危险动作,少误伤)
   const [redlineMode, setRedlineMode] = useState<"keyword" | "smart">(() =>
@@ -3751,6 +3783,10 @@ export function App() {
           scheduleFlush();
           break;
         case "evt:tool-start":
+          // 调研进行中：把 AI 正在做的动作(搜什么/读哪页/写文件)喂进弹窗提示框
+          if (researchSidRef.current === payload.sid) {
+            setResearchLive((prev) => ({ label: researchToolLabel(payload.name, payload.input, langRef.current === "en"), steps: (prev?.steps || 0) + 1 }));
+          }
           if (payload.sid !== currentIdRef.current) break;
           push({ type: "tool", id: payload.id, name: payload.name, input: payload.input, status: "running" });
           break;
@@ -3849,23 +3885,7 @@ export function App() {
           break;
         case "evt:charter-draft": {
           // 「调研并拟计划」跑完：把 AI 拟的调研/规则/计划回填到当前弹窗(仅当弹窗还开着且是同一会话)
-          const sid = payload.sid;
-          const draft = payload.draft as import("./env").CharterDraft;
-          setGoalEdit((prev) => {
-            if (!prev || prev.sid !== sid) return prev; // 弹窗已关或切了会话→忽略
-            if (!draft) return { ...prev, researching: false }; // 没抽到 JSON→仅结束 loading
-            return {
-              ...prev,
-              researching: false,
-              research: draft.research || prev.research,
-              ruleDo: draft.rules?.do || prev.ruleDo,
-              ruleDont: draft.rules?.dont || prev.ruleDont,
-              plan:
-                Array.isArray(draft.plan) && draft.plan.length
-                  ? draft.plan.map((s, i) => ({ id: `s${i + 1}`, title: s.title || "", acceptance: s.acceptance || "", status: "todo" as const }))
-                  : prev.plan,
-            };
-          });
+          applyCharterDraft(payload.sid, payload.draft as import("./env").CharterDraft);
           break;
         }
         case "evt:suggest": {
@@ -4336,12 +4356,44 @@ export function App() {
     const sid = goalEdit.sid;
     if (sid !== currentId) return; // 调研走 doSend(=当前会话)，只对当前会话有效，避免误发到别的对话
     window.wuwei.charterDraftArm(sid);
+    researchSidRef.current = sid;
+    setResearchLive({ label: lang === "en" ? "Sent — waiting for AI to go online…" : "已发起，等待 AI 联网…", steps: 0 });
     setGoalEdit({ ...goalEdit, researching: true });
     const prompt = lang === "en"
       ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse web_search / web_fetch to survey the LATEST frontier papers, industry news and authoritative sources, so you truly understand the current state, viable paths, common pitfalls and best practices for this goal.\nOnce you've researched enough, output a "charter draft" and put it at the END of your reply as a single \`\`\`json code block, exactly this shape (output only this one json block, all fields filled):\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path, a few paragraphs",\n  "rules": { "do": "What to do (one per line)", "dont": "What NOT to do / how this goal most easily drifts off course (one per line)" },\n  "plan": [ { "title": "What step 1 does", "acceptance": "Acceptance criteria: how we know this step is done/passing" } ]\n}\n\`\`\`\nMake the plan concrete, ordered and executable, every step with a clear acceptance criterion. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
       : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search / web_fetch 联网调研：查最新的前沿论文、行业新闻、权威资料，充分弄清这个目标当前的现状、可行路径、常见坑与最佳实践。\n调研充分后，产出一份「任务契约草稿」，并放在回复的最后、用一个 \`\`\`json 代码块输出，结构严格如下（只输出这一个 json 块，字段齐全）：\n\`\`\`json\n{\n  "research": "调研结论：现状 / 关键发现 / 推荐路径，几段话说清",\n  "rules": { "do": "要做哪些（逐条，一行一条）", "dont": "绝不做哪些 / 这个目标最容易跑偏成什么样（逐条，一行一条）" },\n  "plan": [ { "title": "第一步做什么", "acceptance": "这步的验收标准：怎样算完成 / 达标" } ]\n}\n\`\`\`\n计划要具体、可执行、有先后逻辑，每步都有明确验收标准。dont 里要写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
     doSend(prompt, []);
   }
+
+  // 调研草稿回填弹窗（事件到达 or 刷新后补拉，都走这里）
+  function applyCharterDraft(sid: string, draft: import("./env").CharterDraft) {
+    if (researchSidRef.current === sid) { researchSidRef.current = null; setResearchLive(null); }
+    setGoalEdit((prev) => {
+      if (!prev || prev.sid !== sid) return prev; // 弹窗已关或切了会话→忽略(草稿已缓存/持久化)
+      if (!draft) return { ...prev, researching: false }; // 没抽到 JSON→仅结束 loading
+      return {
+        ...prev,
+        researching: false,
+        research: draft.research || prev.research,
+        ruleDo: draft.rules?.do || prev.ruleDo,
+        ruleDont: draft.rules?.dont || prev.ruleDont,
+        plan:
+          Array.isArray(draft.plan) && draft.plan.length
+            ? draft.plan.map((s, i) => ({ id: `s${i + 1}`, title: s.title || "", acceptance: s.acceptance || "", status: "todo" as const }))
+            : prev.plan,
+      };
+    });
+  }
+  // 刷新/重载后若弹窗恢复出"调研中"状态：重连进度，并补拉重载间隙可能错过的已完成草稿(不重跑调研)
+  useEffect(() => {
+    if (goalEdit?.researching && goalEdit.sid) {
+      researchSidRef.current = goalEdit.sid;
+      setResearchLive((prev) => prev || { label: lang === "en" ? "Reconnecting to research…" : "重连调研中…", steps: 0 });
+      window.wuwei.charterDraftGet?.(goalEdit.sid).then((d) => { if (d) applyCharterDraft(goalEdit.sid, d); }).catch(() => {});
+    }
+    // 仅挂载时跑一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 把弹窗字段拼成契约对象
   function buildCharter(e: NonNullable<typeof goalEdit>, active: boolean): import("./env").Charter {
@@ -7603,7 +7655,7 @@ export function App() {
           setGE({ plan: ge.plan.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
         const addStep = () => setGE({ plan: [...ge.plan, { id: `s${ge.plan.length + 1}`, title: "", acceptance: "", status: "todo" }] });
         const delStep = (i: number) => setGE({ plan: ge.plan.filter((_, j) => j !== i) });
-        const closeEdit = () => { window.wuwei.charterDraftDisarm?.(ge.sid); setGoalEdit(null); };
+        const closeEdit = () => { window.wuwei.charterDraftDisarm?.(ge.sid); researchSidRef.current = null; setResearchLive(null); setGoalEdit(null); };
         return (
         <>
           <div className="mq-overlay" onClick={closeEdit} />
@@ -7635,7 +7687,14 @@ export function App() {
               </div>
               {ge.researching && (
                 <div className="goal-researching">
-                  {en ? "AI is researching online — findings, plan and rules below will fill in automatically when it finishes (about 30s–2min). Keep this open; closing it cancels the auto-fill." : "AI 正在联网调研，完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。请保持窗口打开；关掉会取消自动回填。"}
+                  <div>{en ? "AI is researching online — findings, plan and rules below will fill in automatically when it finishes (about 30s–2min). Keep this open; closing it cancels the auto-fill." : "AI 正在联网调研，完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。请保持窗口打开；关掉会取消自动回填。"}</div>
+                  {researchLive && (
+                    <div className="goal-research-live">
+                      <span className="goal-research-spin" />
+                      <span className="goal-research-step">{researchLive.steps > 0 ? `#${researchLive.steps}` : ""}</span>
+                      <span className="goal-research-label" title={researchLive.label}>{researchLive.label}</span>
+                    </div>
+                  )}
                 </div>
               )}
               {/* 调研结论 */}

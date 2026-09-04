@@ -526,6 +526,50 @@ function parseDDG(html: string): { title: string; url: string; snippet: string }
   return items.map((it, i) => ({ ...it, snippet: snips[i] || "" }));
 }
 
+// 解析 Bing 结果页(无需 key)：每个 <li class="b_algo"> 一条，取 <h2><a href> 标题/URL + 首个 <p> 摘要
+function parseBing(html: string): { title: string; url: string; snippet: string }[] {
+  const out: { title: string; url: string; snippet: string }[] = [];
+  const blockRe = /<li class="b_algo"[\s\S]*?(?=<li class="b_algo"|<\/ol>|$)/gi;
+  let b: RegExpExecArray | null;
+  while ((b = blockRe.exec(html))) {
+    const block = b[0];
+    const a = /<h2>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
+    if (!a) continue;
+    const url = a[1];
+    if (!/^https?:\/\//i.test(url)) continue;
+    const title = stripTags(a[2]);
+    const p = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(block);
+    if (title) out.push({ url, title, snippet: p ? stripTags(p[1]) : "" });
+  }
+  return out;
+}
+// 退避 sleep：可被 ctx.signal 中断，避免用户点停后还在死等
+function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error("aborted"));
+    const t = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(t); reject(new Error("aborted")); }, { once: true });
+  });
+}
+// 带指数退避的抓取：202挑战页/429限流/5xx 都当作可重试；默认 3 次(间隔 500ms→1000ms)
+async function fetchTextRetry(url: string, ctx: any, tries = 3): Promise<string> {
+  const headers = { "User-Agent": UA, "Accept-Language": tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9") };
+  let lastErr: any;
+  for (let i = 0; i < tries; i++) {
+    if (ctx?.signal?.aborted) throw new Error("aborted");
+    try {
+      const r = await fetch(url, { headers, signal: ctx?.signal });
+      if (r.status === 202 || r.status === 429 || r.status >= 500) lastErr = new Error("HTTP " + r.status);
+      else return await r.text();
+    } catch (e: any) {
+      lastErr = e;
+      if (ctx?.signal?.aborted) throw e;
+    }
+    if (i < tries - 1) await sleepAbortable(500 * Math.pow(2, i), ctx?.signal);
+  }
+  throw lastErr || new Error("fetch failed");
+}
+
 const webSearchTool: Tool = {
   name: "web_search",
   description:
@@ -540,29 +584,33 @@ const webSearchTool: Tool = {
     try {
       const q = String(input.query || "").trim();
       if (!q) return { content: tt("搜索词为空", "Search query is empty"), isError: true };
-      const lang = tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9");
-      // 主源：DDG Lite（lite.duckduckgo.com）——html.duckduckgo.com 已被反爬(返回202挑战页)。Lite 挂了再退回旧 html 源。
+      const eq = encodeURIComponent(q);
+      // 多个独立搜索源，逐个尝试(每个都带指数退避重试)，第一个拿到结果的胜出。
+      // DDG Lite 最快最稳；Bing 是独立引擎兜底；DDG html 老源垫底。都挂了才报不可用。
+      const sources: { name: string; url: string; parse: (h: string) => { title: string; url: string; snippet: string }[] }[] = [
+        { name: "DuckDuckGo", url: "https://lite.duckduckgo.com/lite/?q=" + eq, parse: parseLite },
+        { name: "Bing", url: "https://www.bing.com/search?q=" + eq + "&setlang=" + tt("zh-CN", "en-US"), parse: parseBing },
+        { name: "DuckDuckGo-html", url: "https://html.duckduckgo.com/html/?q=" + eq, parse: parseDDG },
+      ];
       let results: { title: string; url: string; snippet: string }[] = [];
-      try {
-        const rLite = await fetch("https://lite.duckduckgo.com/lite/?q=" + encodeURIComponent(q), {
-          headers: { "User-Agent": UA, "Accept-Language": lang }, signal: ctx.signal,
-        });
-        results = parseLite(await rLite.text());
-      } catch { /* 落到兜底 */ }
-      if (!results.length) {
+      const tried: string[] = [];
+      for (const s of sources) {
+        if (ctx.signal?.aborted) break;
         try {
-          const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q), {
-            headers: { "User-Agent": UA, "Accept-Language": lang }, signal: ctx.signal,
-          });
-          results = parseDDG(await res.text());
-        } catch { /* 两源都挂 */ }
+          const r = s.parse(await fetchTextRetry(s.url, ctx, 3));
+          if (r.length) { results = r; break; }
+          tried.push(tt(`${s.name}(空)`, `${s.name}(empty)`));
+        } catch (e: any) {
+          if (ctx.signal?.aborted) break;
+          tried.push(`${s.name}(${e?.message || tt("失败", "failed")})`);
+        }
       }
       results = results.slice(0, 8);
       if (!results.length)
         return {
           content: tt(
-            "(无结果，或搜索源暂时不可用，可改用 web_fetch 直接抓已知 URL)",
-            "(No results, or the search source is temporarily unavailable; try web_fetch on a known URL)",
+            `(搜索源暂时都不可用：${tried.join("、") || "无"}。已自动重试退避仍失败，可改用 web_fetch 直接抓已知 URL)`,
+            `(All search sources unavailable: ${tried.join(", ") || "none"}. Already retried with backoff; try web_fetch on a known URL instead)`,
           ),
         };
       return {

@@ -104,6 +104,7 @@ export interface WuweiApi {
   goalSet(sid: string, goal: Charter | null): Promise<void>;
   charterDraftArm(sid: string): void;
   charterDraftDisarm(sid: string): void;
+  charterDraftGet(sid: string): Promise<CharterDraft>;
   stopRulesGet(): Promise<string>;
   stopRulesSet(t: string): Promise<void>;
   setContSessions(ids: string[]): void;

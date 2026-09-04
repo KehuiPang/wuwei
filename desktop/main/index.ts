@@ -4228,9 +4228,18 @@ ipcMain.handle("chat:goalSet", (_e, sid: string, goal: SessionGoal | null) => {
 });
 // 「调研并拟计划」：给某会话下一轮 Agent 回复"武装"成契约草稿——跑完解析末尾 JSON，回填弹窗
 const charterDraftPending = new Set<string>();
-ipcMain.on("chat:charter-draft-arm", (_e, sid: string) => { if (sid) charterDraftPending.add(String(sid)); });
+// 已解析好的草稿缓存：渲染层刷新/重载可能错过 evt:charter-draft，留着让它 charterDraftGet 补拉，避免重跑调研
+const lastCharterDrafts = new Map<string, any>();
+ipcMain.on("chat:charter-draft-arm", (_e, sid: string) => { if (sid) { charterDraftPending.add(String(sid)); lastCharterDrafts.delete(String(sid)); } });
 ipcMain.on("chat:charter-draft-disarm", (_e, sid: string) => { charterDraftPending.delete(String(sid || "")); });
-// 从这轮助手最后回复里抽出 ```json 契约块 → 事件回填弹窗。抽到并解析成功返回 true。
+// 渲染层重连：拉取（并清掉）这个会话已备好的调研草稿；没有则返回 null
+ipcMain.handle("chat:charter-draft-get", (_e, sid: string) => {
+  const k = String(sid || "");
+  const d = lastCharterDrafts.get(k) || null;
+  if (d) lastCharterDrafts.delete(k);
+  return d;
+});
+// 从这轮助手最后回复里抽出 ```json 契约块 → 缓存 + 事件回填弹窗。抽到并解析成功返回 true。
 function tryExtractCharterDraft(id: string): boolean {
   const a0 = agents.get(id);
   const msgs = a0?.getMessages() || [];
@@ -4247,22 +4256,21 @@ function tryExtractCharterDraft(id: string): boolean {
   if (!jsonStr.trim()) return false;
   try {
     const d = JSON.parse(jsonStr);
-    send("evt:charter-draft", {
-      sid: id,
-      draft: {
-        research: String(d.research || d.调研 || ""),
-        rules: {
-          do: String(d.rules?.do || d.do || d.要做 || ""),
-          dont: String(d.rules?.dont || d.dont || d.不做 || d.绝不做 || ""),
-        },
-        plan: Array.isArray(d.plan || d.计划)
-          ? (d.plan || d.计划).map((s: any) => ({
-              title: String(s?.title || s?.step || s?.步骤 || s?.标题 || ""),
-              acceptance: String(s?.acceptance || s?.criteria || s?.验收 || s?.验收标准 || ""),
-            }))
-          : [],
+    const draft = {
+      research: String(d.research || d.调研 || ""),
+      rules: {
+        do: String(d.rules?.do || d.do || d.要做 || ""),
+        dont: String(d.rules?.dont || d.dont || d.不做 || d.绝不做 || ""),
       },
-    });
+      plan: Array.isArray(d.plan || d.计划)
+        ? (d.plan || d.计划).map((s: any) => ({
+            title: String(s?.title || s?.step || s?.步骤 || s?.标题 || ""),
+            acceptance: String(s?.acceptance || s?.criteria || s?.验收 || s?.验收标准 || ""),
+          }))
+        : [],
+    };
+    lastCharterDrafts.set(id, draft); // 缓存，供刷新后补拉
+    send("evt:charter-draft", { sid: id, draft });
     return true;
   } catch { return false; }
 }
