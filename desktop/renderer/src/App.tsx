@@ -637,7 +637,7 @@ const PRO_FEATS_EN: [string, string][] = [
 // 缺币弹窗里的「并排可选套餐」：¥1 体验 + Pro/Plus/Max 月付，统一成一种可选项，选中谁就驱动二维码/Paddle 与右侧详情。
 type PayPlanOpt = {
   sku: string;
-  kind: "trial" | "plan";
+  kind: "trial" | "plan" | "pack";
   name: string; nameEn: string;
   price: number; priceUsd: number;
   unit: string; unitEn: string; // "/7天" | "/月"
@@ -667,6 +667,26 @@ function buildPayOpts(trialEligible: boolean): PayPlanOpt[] {
   return trialEligible ? [trial, ...plans] : plans;
 }
 const PAYOPT_DEFAULT_SKU = (trialEligible: boolean) => (trialEligible ? "plan_trial" : "plan_pro_5x");
+// 积分包档（按需充值、永久有效）转成统一可选项，供缺币弹窗「积分包」tab 并排展示。
+function buildPackOpts(): PayPlanOpt[] {
+  return COIN_PACKS.map((p) => ({
+    sku: p.sku, kind: "pack" as const, name: `${p.coins.toLocaleString()} 无为币`, nameEn: `${p.coins.toLocaleString()} credits`,
+    price: p.price, priceUsd: p.priceUsd, unit: "", unitEn: "", days: 0,
+    coins: p.coins, signin: 0,
+    badge: p.badge, badgeEn: p.badgeEn, badgeType: p.badgeType,
+    sub: p.desc, subEn: p.descEn,
+  }));
+}
+const PACK_PERKS: [string, string][] = [
+  ["永久有效，绝不清零", "买了就是你的，不像订阅按月过期作废"],
+  ["顶级模型照样扣", "Claude、GPT、Gemini 等付费旗舰都能用这个币"],
+  ["随用随充，多少都行", "按需购买，用多少充多少，不用被套餐绑住"],
+];
+const PACK_PERKS_EN: [string, string][] = [
+  ["Never expires", "Once bought it's yours — not reset monthly like a subscription."],
+  ["Works on top models", "Spend it on Claude, GPT, Gemini and other paid flagships."],
+  ["Top up any amount", "Pay as you go, buy exactly what you need, no plan lock-in."],
+];
 
 // ② 购买积分包（朱系）：站内选档；CN 走扫码，EN 走网页 Paddle 结账。
 function CoinPackModal({ packs, onClose, onCheckout, onUpgrade, t, lang }: { packs: CoinPack[]; onClose: () => void; onCheckout: (pack: CoinPack) => void; onUpgrade: () => void; t: T; lang: Lang }) {
@@ -1595,20 +1615,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
   );
 }
 
-// ¥1/$1 体验弹窗：缺币时默认弹这个——环节最少、默认「7天 Pro 体验」。国内当场出支付宝码(左)+详情(右)，
-// 海外一键 $1 走 Paddle。用户看到「1块钱7天会员」直接扫码/点付；试爽了再引导升更高档。
-// 缺币付款弹窗（两态）：新用户没买过→「¥1 体验7天」；用过了/已付费→「升级正式会员」。
-// 都走同一套：默认选中一个套餐、国内当场出支付宝码(左)+详情(右)、海外一键 Paddle。环节最少。
-type PayNowCfg = {
-  sku: string; // plan_trial | plan_pro
-  days: number; // 会员时长(用于成功页到期计算)
-  price: string; priceEn: string; // ¥1 / ¥29 ; $1 / $6.99
-  unit: string; unitEn: string; // / 7天 ; / 月
-  planName: string; planNameEn: string;
-  headline: string; headlineEn: string;
-  note: string; noteEn: string;
-  perks: string[]; perksEn: string[];
-};
+// 缺币付款弹窗：并排套餐(¥1体验/Pro/Plus/Max) + 积分包 tab，选中即出支付宝码(国内)/Paddle(海外)。
 // 缺币弹窗右侧「下单理由」：每条 = 加粗钩子 + 具体说明，精准戳付费点（顶级模型 / 更快 / 更多额度 / 记忆 / 省钱）。
 const PAYNOW_PERKS: [string, string][] = [
   ["一份订阅，顶三份钱", "别再 ChatGPT 20刀、Claude 20刀、Gemini 20刀分开交，无为一份全给你"],
@@ -1624,22 +1631,6 @@ const PAYNOW_PERKS_EN: [string, string][] = [
   ["Members jump the queue", "Priority lane for faster replies, no waiting behind free users at peak hours."],
   ["It remembers you, forever", "Brain-network memory keeps your project, code style and habits across every chat."],
 ];
-// 新用户没买过 → ¥1 体验 7 天
-const TRIAL_CFG: PayNowCfg = {
-  sku: "plan_trial", days: 7, price: "¥1", priceEn: "$1", unit: " / 7 天", unitEn: " / 7 days",
-  planName: "无为 Pro 体验 · 7 天", planNameEn: "Wuwei Pro · 7-day trial",
-  headline: "升级会员继续体验，仅 ¥1 畅享 7 天 Pro。", headlineEn: "Try Pro for just $1 / 7 days, keep going right away.",
-  note: "首购限一次 · 一次性付款 · 不自动续费", noteEn: "One-time · first purchase only · no auto-renew",
-  perks: PAYNOW_PERKS, perksEn: PAYNOW_PERKS_EN,
-};
-// 已用过体验/已付费 → 升级正式会员
-const UPGRADE_CFG: PayNowCfg = {
-  sku: "plan_pro", days: 30, price: "¥29", priceEn: "$6.99", unit: " / 月", unitEn: " / mo",
-  planName: "无为 Pro · 月付", planNameEn: "Wuwei Pro · Monthly",
-  headline: "升级正式会员，继续畅用无为托管模型。", headlineEn: "Upgrade to Pro to keep using Wuwei hosted models.",
-  note: "开通 30 天 Pro 会员 · 到期可再续", noteEn: "30 days of Pro membership · renew anytime",
-  perks: PAYNOW_PERKS, perksEn: PAYNOW_PERKS_EN,
-};
 // 模型费用说明弹窗：免费/付费模型按平台分组，输入/输出/缓存命中价，可切无为币/人民币/美元。
 type PricingUnit = "coin" | "cny" | "usd";
 type PricingModel = { id: string; label: string; labelEn: string | null; free: boolean; inCoins: number | null; outCoins: number | null; hitCoins: number | null };
@@ -1747,7 +1738,7 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
 }
 
 function TrialPayModal({
-  en, balance, rebind, opts, defaultSku, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onMore, onContact,
+  en, balance, rebind, opts, defaultSku, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onContact, onFaq,
 }: {
   en: boolean;
   balance: number;
@@ -1759,14 +1750,34 @@ function TrialPayModal({
   onNeedLogin: () => void;
   onRebind?: () => void;
   onPaddle: (opt: PayPlanOpt) => void;
-  onMore: () => void;
   onContact: () => void;
+  onFaq: () => void;
 }) {
-  const [sel, setSel] = useState(() => { const i = opts.findIndex((o) => o.sku === defaultSku); return i >= 0 ? i : 0; });
-  const cur = opts[sel] ?? opts[0];
+  const packOpts = buildPackOpts();
+  const [tab, setTab] = useState<"plan" | "pack">("plan"); // 顶部 tab：会员套餐 / 积分包
+  const curOpts = tab === "plan" ? opts : packOpts;
+  const [selSku, setSelSku] = useState(defaultSku);
+  const cur = curOpts.find((o) => o.sku === selSku) ?? curOpts[0];
+  const isPack = cur.kind === "pack";
+  function switchTab(t: "plan" | "pack") {
+    if (t === tab) return;
+    setTab(t);
+    setSelSku(t === "plan" ? defaultSku : (packOpts.find((o) => o.badgeType === "rec")?.sku ?? packOpts[0].sku));
+    void window.wuwei.track?.("credits_shortage_tab", { tab: t });
+  }
   const price = money(en, cur.price, cur.priceUsd);
   const unit = en ? cur.unitEn : cur.unit;
-  const perks = en ? PAYNOW_PERKS_EN : PAYNOW_PERKS;
+  // 积分包 tab 用积分包专属权益；会员 tab 用订阅权益。
+  const perks = isPack ? (en ? PACK_PERKS_EN : PACK_PERKS) : (en ? PAYNOW_PERKS_EN : PAYNOW_PERKS);
+  // 第一条「省钱锚定」按选中档动态：普通档对标各家 $20 订阅，顶级 Max 档对标 Claude Max / ChatGPT Pro 的 $200。
+  const isMaxTier = cur.sku === "plan_pro_50x";
+  const anchorDesc = en
+    ? isMaxTier
+      ? "Skip $200/mo for ChatGPT Pro, $200 for Claude Max, plus top-tier Gemini. Wuwei runs all of them."
+      : "Skip paying $20 for ChatGPT, $20 for Claude, $20 for Gemini. Wuwei runs all of them."
+    : isMaxTier
+      ? "别再 ChatGPT Pro 200刀、Claude Max 200刀、Gemini 顶配分开交，无为一份全给你"
+      : "别再 ChatGPT 20刀、Claude 20刀、Gemini 20刀分开交，无为一份全给你";
   const [qr, setQr] = useState("");
   const [orderId, setOrderId] = useState("");
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
@@ -1816,11 +1827,11 @@ function TrialPayModal({
       <div className="pay-card pay-card-wide" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 2, paddingTop: 22 }}>
-          <h2>{en ? "Don't stop here" : "别卡在这儿"}</h2>
-          <p>{en ? "Your coins ran out. Top up and keep every flagship model at your fingertips." : "无为币用完了，充一点，继续用遍全球最强旗舰模型。"}</p>
+          <h2>{en ? "You're out of credits" : "无为币用完啦"}</h2>
+          <p>{en ? "Pick a plan to keep going — every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。"}</p>
         </div>
 
-        <div className="trial-bal-mini"><span className="pay-coin" /> {en ? `Balance ${balance} credits — top up to continue` : `当前余额 ${balance} 无为币 · 充值即可继续`}</div>
+        <div className="trial-bal-mini"><span className="pay-coin" /> {en ? `Balance ${balance} credits — upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`}</div>
 
         {/* 升级后畅用的最强顶级模型（官方 logo）——直观放大购买欲 */}
         <div className="trial-models">
@@ -1836,21 +1847,36 @@ function TrialPayModal({
           </span>
         </div>
 
-        {/* 并排套餐选择：默认 ¥1 体验，可切换；选中谁就驱动下方二维码/Paddle 与右侧详情 */}
+        {/* 顶部 tab：会员套餐 / 积分包，直接切换并排选项（替代原「改用积分包」跳窗） */}
+        <div className="trial-tabs">
+          <button className={"trial-tab" + (tab === "plan" ? " on" : "")} onClick={() => switchTab("plan")}>{en ? "Membership" : "会员套餐"}</button>
+          <button className={"trial-tab" + (tab === "pack" ? " on" : "")} onClick={() => switchTab("pack")}>{en ? "Credit packs" : "积分包"}</button>
+        </div>
+
+        {/* 并排选项：默认选中，可切换；选中谁就驱动下方二维码/Paddle 与右侧详情 */}
         <div className="trial-plans">
-          {opts.map((o, i) => (
-            <button
-              key={o.sku}
-              className={"trial-plan-opt" + (i === sel ? " sel" : "")}
-              onClick={() => { setSel(i); void window.wuwei.track?.("credits_shortage_plan_select", { sku: o.sku, kind: o.kind }); }}
-            >
-              {o.badge && <span className={"trial-plan-badge2 " + (o.badgeType || "")}>{en ? o.badgeEn : o.badge}</span>}
-              <span className="tpo-nm">{en ? o.nameEn : o.name}</span>
-              <span className="tpo-price">{money(en, o.price, o.priceUsd)}<small>{en ? o.unitEn : o.unit}</small></span>
-              <span className="tpo-coins">{o.kind === "trial" ? (en ? "7-day full Pro access" : "7 天 Pro 全功能畅用") : (en ? `${o.coins.toLocaleString()} credits/mo` : `${o.coins.toLocaleString()} 无为币/月`)}</span>
-              <span className="tpo-sub">{o.kind === "trial" ? (en ? o.subEn : o.sub) : (en ? `${o.signin}/day check-in${o.saved ? ` · save ¥${o.saved}` : ""}` : `每日签到 +${o.signin}${o.saved ? ` · 省 ¥${o.saved}` : ""}`)}</span>
-            </button>
-          ))}
+          {curOpts.map((o) => {
+            // 优惠划线：原价 = 同等币量按最低档(Pro)单价要花多少（= 现价 + 已省，与定价文档「省¥/省%」一致，非虚标）。
+            // 只对 Plus/Max（saved>0）展示，制造「越高档越省」，推高客单。
+            const savedCn = o.kind === "plan" ? (o.saved || 0) : 0;
+            const listCn = savedCn ? o.price + savedCn : 0;
+            const pct = listCn ? Math.round((savedCn / listCn) * 100) : 0;
+            const listUsd = pct ? Math.round((o.priceUsd / (1 - pct / 100)) * 100) / 100 : 0;
+            return (
+              <button
+                key={o.sku}
+                className={"trial-plan-opt" + (o.sku === cur.sku ? " sel" : "")}
+                onClick={() => { setSelSku(o.sku); void window.wuwei.track?.("credits_shortage_plan_select", { sku: o.sku, kind: o.kind }); }}
+              >
+                {o.badge && <span className={"trial-plan-badge2 " + (o.badgeType || "")}>{en ? o.badgeEn : o.badge}</span>}
+                <span className="tpo-nm">{en ? o.nameEn : o.name}</span>
+                <span className="tpo-price">{money(en, o.price, o.priceUsd)}{(en ? o.unitEn : o.unit) ? <small>{en ? o.unitEn : o.unit}</small> : null}</span>
+                {listCn ? (<span className="tpo-save"><s>{en ? `$${listUsd}` : `¥${listCn}`}</s><em>{en ? `-${pct}%` : `省${pct}%`}</em></span>) : null}
+                <span className="tpo-coins">{o.kind === "trial" ? (en ? "7-day full Pro access" : "7 天 Pro 全功能畅用") : o.kind === "pack" ? (en ? "never expires" : "永久有效不清零") : (en ? `${o.coins.toLocaleString()} credits/mo` : `${o.coins.toLocaleString()} 无为币/月`)}</span>
+                <span className="tpo-sub">{o.kind === "plan" ? (en ? `${o.signin}/day check-in` : `每日签到 +${o.signin}`) : (en ? o.subEn : o.sub)}</span>
+              </button>
+            );
+          })}
         </div>
 
         {rebind && (
@@ -1875,7 +1901,7 @@ function TrialPayModal({
                 <div className="trial-sub2">Secure checkout via Paddle</div>
               </div>
             ) : phase === "ready" && qr ? (
-              <><QRCodeSVG value={qr} size={182} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码支付 <b>{price}</b> · 到账自动开通</div></>
+              <><QRCodeSVG value={qr} size={168} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码支付 <b>{price}</b> · 到账自动开通</div></>
             ) : phase === "error" ? (
               <div className="trial-msg err"><span>{errMsg}</span><button onClick={() => setReloadKey((k) => k + 1)}>重试</button></div>
             ) : (
@@ -1886,7 +1912,7 @@ function TrialPayModal({
           <div className="trial-detail">
             <div className="trial-plan-nm">{en ? cur.nameEn : cur.name}</div>
             <div className="trial-plan-price">{price}<small>{unit}</small></div>
-            <ul className="trial-perks">{perks.map(([pt, pd], i) => (<li key={i}><Check /> <span><b>{pt}</b><em>{pd}</em></span></li>))}</ul>
+            <ul className="trial-perks">{perks.map(([pt, pd], i) => (<li key={i}><Check /> <span><b>{pt}</b><em>{i === 0 && !isPack ? anchorDesc : pd}</em></span></li>))}</ul>
             <div className="trial-note">{cur.saved ? (en ? `Save ¥${cur.saved}/mo vs Pro` : `比按 Pro 每月省 ¥${cur.saved}`) : (en ? cur.subEn : cur.sub)}</div>
             <button className="trial-cs" onClick={onContact}>
               {en ? "Payment issue? Contact support" : "支付遇到问题？联系客服"}
@@ -1895,13 +1921,81 @@ function TrialPayModal({
         </div>
 
         <div className="pay-foot trial-foot">
-          <button className="pay-foot__more" onClick={onMore}>{en ? "Buy credit packs instead" : "改用积分包充值"}</button>
+          <button className="pay-foot__faq" onClick={onFaq}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M9.4 9a2.6 2.6 0 0 1 5 1c0 1.7-2.4 2-2.4 3.5" /><path d="M12 17.2h.01" /></svg>
+            {en ? "FAQ" : "常见问题"}
+          </button>
           <button onClick={onClose}>{en ? "Not now" : "暂不需要"}</button>
         </div>
       </div>
     </div>
   );
 }
+// 缺币弹窗「常见问题」：高频疑问，降低下单顾虑。问题结构参考同行(Raphael)但按无为实际改写。
+const PAY_FAQ: { q: string; qEn: string; a: string; aEn: string }[] = [
+  {
+    q: "为什么要订阅无为会员？",
+    qEn: "Why subscribe to Wuwei?",
+    a: "一份订阅就能用遍全球最强旗舰（Claude、GPT、Gemini、DeepSeek…），不用再分别开各家会员。会员走极速通道、响应更快，每月额度更足，还有跨对话永久记住你项目的脑网络记忆。",
+    aEn: "One subscription gives you every top flagship (Claude, GPT, Gemini, DeepSeek…) instead of paying each vendor separately. Members get a priority speed lane, a bigger monthly quota, and brain-network memory that remembers your projects across chats.",
+  },
+  {
+    q: "可以随时更换套餐或取消吗？",
+    qEn: "Can I change or cancel anytime?",
+    a: "可以。国内按月单次开通、不会自动扣费，不想续下个月不买即可；海外 Paddle 订阅可随时在管理页取消，当期权益保留到到期。想升更高档随时生效。",
+    aEn: "Yes. In China plans are one-time monthly purchases with no auto-charge — just don't renew. Overseas Paddle subscriptions can be cancelled anytime in the portal; your benefits stay active until the period ends. Upgrades take effect right away.",
+  },
+  {
+    q: "无为币是什么？会过期吗？",
+    qEn: "What are Wuwei coins? Do they expire?",
+    a: "无为币是用量单位（100 币 = ¥1）。订阅每月发放固定额度、每天签到还能再领；订阅额度按周期刷新，单独购买的积分包永久有效。",
+    aEn: "Wuwei coins are the usage unit (100 coins = ¥1). Subscriptions grant a monthly quota plus daily check-in rewards; subscription quota refreshes each cycle, while separately bought credit packs never expire.",
+  },
+  {
+    q: "¥1 体验和正式会员有什么区别？",
+    qEn: "How is the ¥1 trial different from membership?",
+    a: "¥1 体验是 7 天 Pro 全功能试用，每个账号首次可享，用来先试爽；正式会员是按月持续的额度 + 更快响应 + 更多权益。",
+    aEn: "The ¥1 trial is a one-time 7-day full Pro experience per account, to try things out first. Membership is the ongoing monthly quota with faster responses and more perks.",
+  },
+  {
+    q: "支付安全吗？支持哪些方式？",
+    qEn: "Is payment secure? What methods?",
+    a: "国内走支付宝官方通道，海外走 Paddle，全程不保存你的银行卡信息，到账后自动开通。",
+    aEn: "Payments go through Alipay (China) or Paddle (overseas). We never store your card details, and access is activated automatically once paid.",
+  },
+  {
+    q: "能退款吗？遇到问题怎么办？",
+    qEn: "Refunds? What if something goes wrong?",
+    a: "数字商品原则上不支持退款；支付或使用遇到任何问题，点弹窗里的「联系客服」或发邮件给我们，会尽快处理。",
+    aEn: "As a digital product, purchases are generally non-refundable. If anything goes wrong with payment or usage, tap “Contact support” in the popup or email us and we'll help fast.",
+  },
+];
+
+function PayFaqModal({ en, onClose }: { en: boolean; onClose: () => void }) {
+  return (
+    <div className="perm-overlay pay-overlay" style={{ zIndex: 62 }} onClick={onClose}>
+      <div className="pay-card pay-faq-card" onClick={(e) => e.stopPropagation()}>
+        <PayCloseX onClick={onClose} />
+        <div className="pay-top" style={{ paddingBottom: 8, paddingTop: 24 }}>
+          <h2>{en ? "Common questions" : "常见问题"}</h2>
+          <p>{en ? "Quick answers before you subscribe" : "订阅前，先看看这几个"}</p>
+        </div>
+        <div className="pay-faq-list">
+          {PAY_FAQ.map((f, i) => (
+            <div className="pay-faq-item" key={i}>
+              <div className="pay-faq-q">{en ? f.qEn : f.q}</div>
+              <div className="pay-faq-a">{en ? f.aEn : f.a}</div>
+            </div>
+          ))}
+        </div>
+        <div className="pay-faq-foot">
+          <button onClick={onClose}>{en ? "← Back to plans" : "← 返回支付"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 缺币弹窗顶部展示的「升级后畅用」最强顶级模型（官方 SVG logo，取自共用库 modelLogos）。
 // 名字对齐官网 ModelShowcase 的旗舰清单；换代时随客户端发版更新即可。
 const PAY_MODEL_MARKS: { brand: string; n: string; nw?: boolean }[] = [
@@ -3194,6 +3288,7 @@ export function App() {
   const [wuweiBusy, setWuweiBusy] = useState(false);
   // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string } } | null>(null);
+  const [payFaqOpen, setPayFaqOpen] = useState(false); // 缺币弹窗「常见问题」答疑弹窗（叠在支付弹窗之上，关闭即返回）
   const shortageShownAt = useRef(0); // 余额不足弹窗展示时刻，用于算用户看了多久
   // 关闭余额不足弹窗并记录用户动作 + 停留时长。action: close(叉/暂不) | upgrade(升级会员) | buy_pack(买积分包) | rebind(改用订阅)
   function closeShortage(action: string) {
@@ -3203,7 +3298,7 @@ export function App() {
   }
   // 【仅开发预览】Ctrl+Shift+9 直接弹出缺币弹窗看效果；import.meta.env.DEV 门控，生产构建自动剥离。
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!(import.meta as { env?: { DEV?: boolean } }).env?.DEV) return;
     const h = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && (e.key === "9" || e.code === "Digit9")) {
         e.preventDefault();
@@ -8251,8 +8346,8 @@ export function App() {
             });
           }}
           onPaddle={(opt) => { closeShortage("pay_paddle"); startEnCheckout(opt.sku); }}
-          onMore={() => { closeShortage("more"); setCoinPackOpen(true); }}
           onContact={() => { closeShortage("contact"); setShowSupportChat(true); }}
+          onFaq={() => { void window.wuwei.track?.("credits_shortage_action", { action: "faq" }); setPayFaqOpen(true); }}
           onNeedLogin={() => {
             closeShortage("need_login");
             setWuwei(null);
@@ -8261,20 +8356,26 @@ export function App() {
           }}
           onPaid={(balance, orderId, opt) => {
             closeShortage("pay_paid");
-            setPayResult({
-              kind: "pro",
-              planName: lang === "en" ? opt.nameEn : opt.name,
-              expire: fmtDate(opt.kind === "trial" ? new Date(Date.now() + opt.days * 24 * 3600_000) : addMonths(new Date(), 1)),
-              giftCoins: opt.coins,
-              signin: opt.signin,
-              perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt),
-              saved: opt.saved,
-              order: orderId || "",
-            });
+            if (opt.kind === "pack") {
+              // 积分包：到账即加无为币，走「积分到账」结果页
+              setPayResult({ kind: "coin", added: opt.coins, bonus: 0, balance: balance ?? (wuwei?.coin.balance ?? 0) + opt.coins, order: orderId || "" });
+            } else {
+              setPayResult({
+                kind: "pro",
+                planName: lang === "en" ? opt.nameEn : opt.name,
+                expire: fmtDate(opt.kind === "trial" ? new Date(Date.now() + opt.days * 24 * 3600_000) : addMonths(new Date(), 1)),
+                giftCoins: opt.coins,
+                signin: opt.signin,
+                perks: (lang === "en" ? PRO_FEATS_EN : PRO_FEATS).map(([tt]) => tt),
+                saved: opt.saved,
+                order: orderId || "",
+              });
+            }
             void window.wuwei.wuweiMe().then((me) => { if (me) setWuwei(me); }).catch(() => {}); // 拉最新会员/余额
           }}
         />
       )}
+      {payFaqOpen && <PayFaqModal en={lang === "en"} onClose={() => setPayFaqOpen(false)} />}
       {coinPackOpen && (
         <CoinPackModal
           t={t}

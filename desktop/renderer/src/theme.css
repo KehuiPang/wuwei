@@ -4104,6 +4104,11 @@ body {
   position: relative;
   width: 416px;
   max-width: 94vw;
+  /* 字体柔和：抗锯齿平滑 + 更圆润的字体栈（Mac 走 PingFang，Win 走 YaHei UI/Segoe），观感更舒服不生硬 */
+  font-family: -apple-system, "SF Pro Text", "PingFang SC", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   background: #fff;
   border: 1px solid rgba(22, 25, 30, 0.08);
   border-radius: 22px;
@@ -4155,8 +4160,8 @@ body {
 /* ¥1/$1 体验弹窗：宽版两栏（左二维码/付款 · 右套餐详情） */
 .pay-card.pay-card-wide { width: 640px; }
 .pay-opt.trial-rebind { box-sizing: border-box; width: calc(100% - 60px); margin: 0 30px 14px; }
-.trial-grid { display: flex; gap: 18px; margin: 4px 30px 18px; align-items: stretch; }
-.trial-pay { flex: 0 0 236px; min-height: 236px; box-sizing: border-box; border-radius: 16px; background: #f4f6f8; border: 1px solid rgba(22, 25, 30, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
+.trial-grid { display: flex; gap: 18px; margin: 4px 30px 10px; align-items: stretch; }
+.trial-pay { flex: 0 0 220px; min-height: 0; box-sizing: border-box; border-radius: 16px; background: #f4f6f8; border: 1px solid rgba(22, 25, 30, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
 .trial-scan { font-size: 12px; color: #5a616b; text-align: center; line-height: 1.5; }
 .trial-scan b { color: #c05f3c; }
 .trial-msg { display: flex; flex-direction: column; align-items: center; gap: 10px; color: #8a9099; font-size: 12.5px; text-align: center; }
@@ -4173,9 +4178,9 @@ body {
 .trial-sub2 { font-size: 11.5px; color: #8a9099; }
 .trial-detail { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; padding: 4px 2px; }
 .trial-plan-nm { font-size: 15px; font-weight: 750; color: #16191e; }
-.trial-plan-price { font-size: 26px; font-weight: 800; color: #c05f3c; margin: 2px 0 12px; font-variant-numeric: tabular-nums; }
+.trial-plan-price { font-size: 26px; font-weight: 800; color: #c05f3c; margin: 2px 0 8px; font-variant-numeric: tabular-nums; }
 .trial-plan-price small { font-size: 13px; color: #8a9099; font-weight: 600; }
-.trial-perks { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.trial-perks { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .trial-perks li { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: #3a4048; line-height: 1.4; }
 .trial-perks li svg { margin-top: 3px; flex: 0 0 auto; }
 .trial-perks li b { display: block; font-weight: 700; color: #16191e; font-size: 12.5px; }
@@ -4189,7 +4194,21 @@ body {
 .trial-cs-qr { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .trial-cs-qr img { width: 118px; height: 118px; object-fit: contain; border-radius: 8px; border: 1px solid rgba(22, 25, 30, 0.08); }
 .trial-cs-qr span { font-size: 11px; color: #8a9099; }
-.trial-foot { display: flex; justify-content: center; gap: 18px; }
+.trial-foot { display: flex; justify-content: center; gap: 16px; padding: 8px 30px 16px; align-items: center; }
+.pay-foot__faq { display: inline-flex; align-items: center; gap: 4px; color: #8a9099 !important; }
+.pay-foot__faq svg { opacity: 0.8; }
+.pay-foot__faq:hover { color: #5a616b !important; }
+
+/* 常见问题（FAQ）弹窗：叠在支付弹窗之上，关闭即返回 */
+.pay-card.pay-faq-card { width: 480px; display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
+.pay-faq-list { overflow-y: auto; padding: 4px 30px 8px; display: flex; flex-direction: column; }
+.pay-faq-item { padding: 14px 0; border-bottom: 1px solid rgba(22, 25, 30, 0.07); }
+.pay-faq-item:last-child { border-bottom: none; }
+.pay-faq-q { font-size: 13.5px; font-weight: 700; color: #16191e; margin-bottom: 6px; }
+.pay-faq-a { font-size: 12.5px; color: #6a7078; line-height: 1.7; }
+.pay-faq-foot { padding: 12px 30px 22px; text-align: center; }
+.pay-faq-foot button { border: none; background: transparent; font-size: 13px; color: #c05f3c; font-weight: 600; cursor: pointer; padding: 6px 14px; border-radius: 8px; }
+.pay-faq-foot button:hover { background: #fdf1ec; }
 
 /* 三级·淡化：余额只用一行小字提示，不抢戏 */
 .trial-bal-mini { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; font-weight: 600; color: #a2a8b0; letter-spacing: 0.2px; margin: -2px 30px 12px; }
@@ -4217,6 +4236,15 @@ body {
 .tpo-coins { font-size: 12px; font-weight: 700; color: #b0703f; letter-spacing: 0.1px; margin-top: 2px; }
 .trial-plan-opt.sel .tpo-coins { color: #c05f3c; }
 .tpo-sub { font-size: 10.5px; color: #8a9099; line-height: 1.35; margin-top: 1px; }
+/* 优惠划线：原价划掉 + 省X%，制造「越高档越省」 */
+.tpo-save { display: inline-flex; align-items: center; gap: 6px; margin-top: 1px; }
+.tpo-save s { font-size: 11px; color: #b0b5bc; text-decoration: line-through; }
+.tpo-save em { font-style: normal; font-size: 10.5px; font-weight: 700; color: #d14343; background: rgba(209, 67, 67, 0.1); padding: 1px 5px; border-radius: 5px; }
+
+/* 顶部 tab：会员套餐 / 积分包（分段药丸，水平居中） */
+.trial-tabs { display: flex; width: fit-content; margin: 2px auto 12px; background: #f0f2f5; border-radius: 999px; padding: 3px; gap: 2px; }
+.trial-tab { border: none; background: transparent; font-size: 12.5px; font-weight: 650; color: #8a9099; padding: 6px 20px; border-radius: 999px; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.trial-tab.on { background: #fff; color: #16191e; box-shadow: 0 1px 3px rgba(22, 25, 30, 0.12); }
 
 @media (max-width: 560px) {
   .pay-card.pay-card-wide { width: 416px; }
