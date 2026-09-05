@@ -4239,40 +4239,69 @@ ipcMain.handle("chat:charter-draft-get", (_e, sid: string) => {
   if (d) lastCharterDrafts.delete(k);
   return d;
 });
-// 从这轮助手最后回复里抽出 ```json 契约块 → 缓存 + 事件回填弹窗。抽到并解析成功返回 true。
+// 从一段文本里稳健地抽出契约 JSON 对象：容忍 ```json/```围栏、行内注释、尾逗号；
+// 找不到围栏就扫描所有平衡的 {...}，从后往前挑第一个能解析且含 research/plan/rules 的。
+function extractCharterJson(full: string): any | null {
+  const tryParse = (s: string): any | null => {
+    if (!s || !s.trim()) return null;
+    const cleaned = s
+      .replace(/\/\/[^\n\r]*/g, "")       // 行注释
+      .replace(/\/\*[\s\S]*?\*\//g, "")    // 块注释
+      .replace(/,(\s*[}\]])/g, "$1");      // 尾逗号
+    for (const cand of [s, cleaned]) {
+      try { const o = JSON.parse(cand); if (o && typeof o === "object") return o; } catch { /* 下一个候选 */ }
+    }
+    return null;
+  };
+  const looksCharter = (o: any) => o && (o.research !== undefined || o.plan !== undefined || o.rules !== undefined || o.计划 !== undefined || o.调研 !== undefined);
+  // 1) ```json 围栏（从后往前）
+  const jsonFences = [...full.matchAll(/```json\s*([\s\S]*?)```/gi)].map((m) => m[1]);
+  for (let i = jsonFences.length - 1; i >= 0; i--) { const o = tryParse(jsonFences[i]); if (o) return o; }
+  // 2) 任意 ``` 围栏里含 { 的
+  const anyFences = [...full.matchAll(/```[a-z]*\s*([\s\S]*?)```/gi)].map((m) => m[1]).filter((s) => s.includes("{"));
+  for (let i = anyFences.length - 1; i >= 0; i--) { const o = tryParse(anyFences[i]); if (o) return o; }
+  // 3) 扫描所有平衡的 {...}
+  const objs: string[] = [];
+  let depth = 0, start = -1;
+  for (let i = 0; i < full.length; i++) {
+    const c = full[i];
+    if (c === "{") { if (depth === 0) start = i; depth++; }
+    else if (c === "}") { if (depth > 0) { depth--; if (depth === 0 && start >= 0) { objs.push(full.slice(start, i + 1)); start = -1; } } }
+  }
+  for (let i = objs.length - 1; i >= 0; i--) { const o = tryParse(objs[i]); if (looksCharter(o)) return o; } // 优先像契约的
+  for (let i = objs.length - 1; i >= 0; i--) { const o = tryParse(objs[i]); if (o) return o; }               // 再退而求其次
+  return null;
+}
+// 从这轮助手最后回复里抽出契约 JSON → 缓存 + 事件回填弹窗。抽到并解析成功返回 true。
 function tryExtractCharterDraft(id: string): boolean {
   const a0 = agents.get(id);
   const msgs = a0?.getMessages() || [];
   const last = [...msgs].reverse().find((m: any) => m.role === "assistant");
   if (!last) return false;
   const full = msgText(last);
-  let jsonStr = "";
-  const fences = [...full.matchAll(/```json\s*([\s\S]*?)```/gi)];
-  if (fences.length) jsonStr = fences[fences.length - 1][1];
-  else {
-    const m = full.match(/\{[\s\S]*\}/); // 兜底：抓最外层裸对象
-    if (m) jsonStr = m[0];
+  const d = extractCharterJson(full);
+  if (!d) {
+    // 诊断：解析不出契约 JSON 时，记下回复结尾，便于排查(AI 是否真按格式输出)
+    try { log("charterDraft", id.slice(0, 8), "no JSON parsed; tail=", JSON.stringify(full.slice(-400))); } catch { /* ignore */ }
+    return false;
   }
-  if (!jsonStr.trim()) return false;
-  try {
-    const d = JSON.parse(jsonStr);
-    const draft = {
-      research: String(d.research || d.调研 || ""),
-      rules: {
-        do: String(d.rules?.do || d.do || d.要做 || ""),
-        dont: String(d.rules?.dont || d.dont || d.不做 || d.绝不做 || ""),
-      },
-      plan: Array.isArray(d.plan || d.计划)
-        ? (d.plan || d.计划).map((s: any) => ({
-            title: String(s?.title || s?.step || s?.步骤 || s?.标题 || ""),
-            acceptance: String(s?.acceptance || s?.criteria || s?.验收 || s?.验收标准 || ""),
-          }))
-        : [],
-    };
-    lastCharterDrafts.set(id, draft); // 缓存，供刷新后补拉
-    send("evt:charter-draft", { sid: id, draft });
-    return true;
-  } catch { return false; }
+  const draft = {
+    research: String(d.research || d.调研 || ""),
+    rules: {
+      do: String(d.rules?.do || d.do || d.要做 || ""),
+      dont: String(d.rules?.dont || d.dont || d.不做 || d.绝不做 || ""),
+    },
+    plan: Array.isArray(d.plan || d.计划)
+      ? (d.plan || d.计划).map((s: any) => ({
+          title: String(s?.title || s?.step || s?.步骤 || s?.标题 || ""),
+          acceptance: String(s?.acceptance || s?.criteria || s?.验收 || s?.验收标准 || ""),
+        }))
+      : [],
+  };
+  try { log("charterDraft", id.slice(0, 8), "parsed ok; plan=", String(draft.plan.length), "research=", String(draft.research.length)); } catch { /* ignore */ }
+  lastCharterDrafts.set(id, draft); // 缓存，供刷新后补拉
+  send("evt:charter-draft", { sid: id, draft });
+  return true;
 }
 // 开着「智能继续/自主推进」的会话集合(渲染端在模式变化时同步过来)。
 // 这些会话即使不在屏幕上，跑完一轮也要照样算下一步建议——否则切走就断在那儿。
