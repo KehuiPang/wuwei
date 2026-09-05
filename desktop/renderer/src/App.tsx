@@ -558,10 +558,12 @@ const EN_SKU: Record<string, string> = {
   plan_trial: "plan_trial_en", // $1 · 7天 Pro 体验（海外 Paddle，待建价后可用）
   plan_pro: "plan_pro_en",
   plan_pro_5x: "plan_plus_en",
+  plan_pro_20x: "plan_ultra_en",
   plan_pro_50x: "plan_max_en",
   pack_s: "pack_s_en",
   pack_m: "pack_m_en",
   pack_l: "pack_l_en",
+  pack_xl: "pack_xl_en",
   pack_100: "pack_test_en", // $1 测试档（海外 Paddle）
 };
 // sku：下单时传给后端，服务端据此查金额/币量（价格以后端为准，绝不信任客户端）。价/币量已对齐 wuwei-site coin_catalog。
@@ -571,11 +573,12 @@ const COIN_PACKS: CoinPack[] = [
   { sku: "pack_s", coins: 800, bonus: 0, price: 19, priceUsd: 3.99, desc: "按需充值，随用随充", descEn: "Pay as you go" },
   { sku: "pack_m", coins: 3000, bonus: 0, price: 69, priceUsd: 12.99, desc: "常用档", descEn: "Popular", badge: "推荐", badgeEn: "Recommended", badgeType: "rec" },
   { sku: "pack_l", coins: 9000, bonus: 0, price: 199, priceUsd: 39.99, desc: "高频 / 团队", descEn: "Heavy / team", badge: "最超值", badgeEn: "Best value", badgeType: "val" },
+  { sku: "pack_xl", coins: 20000, bonus: 0, price: 399, priceUsd: 79.99, desc: "重度 / 团队", descEn: "Power / team" },
 ];
 // 测试专用档：仅当后端 flags 含 "coinpack_test" 时展示。CN ¥1 / EN $1（海外走 Paddle pack_test_en）。
 const TEST_COIN_PACK: CoinPack = { sku: "pack_100", coins: 100, bonus: 0, price: 1, priceUsd: 1, desc: "测试专用 · 小额验证", descEn: "Test · small verification", badge: "测试", badgeEn: "Test", badgeType: "val" };
 // 月付阶梯（价/币量/签到 对齐库 coin_catalog）：CN plan_pro/5x/50x = ¥29/99/899；EN pro/plus/max = $6.99/19.99/199。
-type ProPlan = { id: "pro" | "pro5x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
+type ProPlan = { id: "pro" | "pro5x" | "pro20x" | "pro50x"; sku: string; name: string; nameEn: string; price: number; priceUsd: number; unit: string; unitEn: string; coins: number; coinsEn: number; signin: number; saved: number; sub: string; subEn: string; note: string; noteEn: string; tag: string; tagEn: string; tagType: "rec" | "pop" };
 // ── 思考档位（effort）──────────────────────────────────────────────
 // 档位越高，模型思考越深、工具调用越多、前言越长，也就越慢越贵；降档能明显缩短单步耗时，
 // 在服务端有函数时长上限时，这是「一次跑完 vs 中途被掐断」的关键开关。
@@ -619,6 +622,7 @@ const MODEL_LABEL_OVERRIDES: Record<string, string> = {
 const PRO_PLANS: ProPlan[] = [
   { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "包月托管额度 · 每日签到 20", subEn: "Monthly hosted quota · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
   { id: "pro5x", sku: "plan_pro_5x", name: "无为 Plus", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
+  { id: "pro20x", sku: "plan_pro_20x", name: "无为 Ultra", nameEn: "Wuwei Ultra", price: 379, priceUsd: 99, unit: "/月", unitEn: "/mo", coins: 20000, coinsEn: 30000, signin: 70, saved: 201, sub: "20× 额度 · 每日签到 70", subEn: "20× quota · 70/day check-in", note: "省 35%", noteEn: "Save 35%", tag: "大团队", tagEn: "For teams", tagType: "pop" },
   { id: "pro50x", sku: "plan_pro_50x", name: "无为 Max", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "50× 额度 · 每日签到 100", subEn: "50× quota · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
 ];
 const PRO_FEATS: [string, string][] = [
@@ -664,7 +668,10 @@ function buildPayOpts(trialEligible: boolean): PayPlanOpt[] {
     badgeType: p.tagType === "rec" ? "rec" : undefined,
     sub: p.sub, subEn: p.subEn, saved: p.saved || undefined,
   }));
-  return trialEligible ? [trial, ...plans] : plans;
+  // 保持一排 4 张：新用户(有体验资格)= ¥1 + Pro/Plus/Max(去掉 Ultra 大档，团队档对新用户意义不大)；
+  //                老用户/已付费 = Pro/Plus/Ultra/Max 完整阶梯。
+  if (trialEligible) return [trial, ...plans.filter((p) => p.sku !== "plan_pro_20x")];
+  return plans;
 }
 const PAYOPT_DEFAULT_SKU = (trialEligible: boolean) => (trialEligible ? "plan_trial" : "plan_pro_5x");
 // 积分包档（按需充值、永久有效）转成统一可选项，供缺币弹窗「积分包」tab 并排展示。
