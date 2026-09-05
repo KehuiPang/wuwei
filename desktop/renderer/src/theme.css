@@ -4225,8 +4225,9 @@ body {
 .trial-model-badge { width: 19px; height: 19px; border-radius: 6px; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 
 /* 一级·主角：并排套餐选择卡，默认选中 ¥1 体验，选中档明显放大突出 */
-.trial-plans { display: flex; gap: 10px; margin: 0 30px 16px; align-items: stretch; }
-.trial-plan-opt { position: relative; flex: 1 1 0; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 13px 13px; border-radius: 14px; background: #fff; border: 1.5px solid rgba(22, 25, 30, 0.1); cursor: pointer; transition: border-color 0.16s, box-shadow 0.16s, transform 0.14s; }
+.trial-plans { display: flex; gap: 10px; margin: 0 30px 16px; align-items: stretch; justify-content: center; }
+/* max-width 对齐「4 张卡」时的宽度：3 张积分包时不再被 flex 撑宽，仍是同宽居中排列 */
+.trial-plan-opt { position: relative; flex: 1 1 0; min-width: 0; max-width: 185px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 13px 13px; border-radius: 14px; background: #fff; border: 1.5px solid rgba(22, 25, 30, 0.1); cursor: pointer; transition: border-color 0.16s, box-shadow 0.16s, transform 0.14s; }
 .trial-plan-opt:hover { border-color: rgba(192, 95, 60, 0.45); transform: translateY(-2px); box-shadow: 0 8px 18px -12px rgba(22, 25, 30, 0.4); }
 .trial-plan-opt.sel { border-color: #c05f3c; border-width: 2px; background: linear-gradient(160deg, #fff, #fdf0ea); box-shadow: 0 12px 26px -12px rgba(192, 95, 60, 0.65); transform: translateY(-3px); }
 .trial-plan-badge2 { position: absolute; right: 10px; top: -9px; font-size: 9px; font-weight: 700; color: #fff; padding: 2.5px 9px; border-radius: 999px; white-space: nowrap; letter-spacing: 0.2px; }
