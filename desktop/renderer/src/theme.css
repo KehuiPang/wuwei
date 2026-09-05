@@ -5394,6 +5394,25 @@ body {
 @keyframes goal-spin { to { transform: rotate(360deg); } }
 .goal-research-step { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--spark); font-variant-numeric: tabular-nums; }
 .goal-research-label { flex: 1; min-width: 0; color: var(--text); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 手动粘贴 json 兜底 */
+.goal-paste-toggle {
+  margin: 8px 0 2px; padding: 4px 2px; border: none; background: transparent; cursor: pointer;
+  font-size: 12px; color: var(--text-dim); text-align: left;
+}
+.goal-paste-toggle:hover { color: var(--spark); }
+.goal-paste { margin: 4px 0 2px; }
+.goal-paste textarea {
+  width: 100%; box-sizing: border-box; resize: vertical; font-family: var(--mono, ui-monospace, monospace);
+  background: var(--bg-input); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 9px; padding: 9px 11px; font-size: 12px; line-height: 1.5; outline: none;
+}
+.goal-paste textarea:focus { border-color: var(--accent); }
+.goal-paste-b { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.goal-paste-b button { border-radius: 8px; padding: 6px 14px; cursor: pointer; font-size: 12px; border: 1px solid var(--border-strong); background: transparent; color: var(--text-dim); }
+.goal-paste-b button.primary { background: var(--spark); border-color: var(--spark); color: #fff; font-weight: 600; }
+.goal-paste-b button.primary:disabled { opacity: .45; cursor: not-allowed; }
+.goal-paste-b button.ghost:hover { color: var(--text); border-color: var(--accent); }
+.goal-paste-err { font-size: 11.5px; color: #c96262; }
 /* 计划列表 */
 .goal-plan { display: flex; flex-direction: column; gap: 8px; }
 .goal-plan-empty { font-size: 12px; color: var(--text-muted); padding: 6px 2px; }

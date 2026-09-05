@@ -2397,10 +2397,22 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
     persist(useId); // 该会话跑完落盘
     if (!runs.has(useId)) setSessionRunning(useId, false); // 无残留活跃轮→清运行标记(须在 persist 后,它会保留旧标记)
     void emitAccount(); // 刷新余额/本会话已消耗(DeepSeek 等)
-    // 调研轮：解析契约草稿回填弹窗，不触发智能继续接话(等用户在弹窗里审阅确认)
+    // 调研轮：解析契约草稿回填弹窗，不触发智能继续接话(等用户在弹窗里审阅确认)。
+    // ⚠ 流式竞态：finally 触发时最后一条 assistant 消息可能还没完全落定(读到半截 json)。
+    // 所以立刻试一次，失败就隔 ~0.9s 重试几次(等流式写完)，仍抽不到才判 null。
     if (!ac.signal.aborted && charterDraftPending.has(useId)) {
-      charterDraftPending.delete(useId);
-      if (!tryExtractCharterDraft(useId)) send("evt:charter-draft", { sid: useId, draft: null }); // 没抽到 JSON→让弹窗提示重试
+      const attempt = (n: number) => {
+        if (!charterDraftPending.has(useId)) return; // 期间被取消/开始执行→撤销
+        if (tryExtractCharterDraft(useId)) { charterDraftPending.delete(useId); return; } // 成功(内部已 emit+缓存)
+        if (n <= 0) {
+          charterDraftPending.delete(useId);
+          try { const t = lastAssistantText(useId); log("charterDraft", useId.slice(0, 8), "give up; len=", String(t.length), "tail=", JSON.stringify(t.slice(-300))); } catch { /* ignore */ }
+          send("evt:charter-draft", { sid: useId, draft: null });
+          return;
+        }
+        setTimeout(() => attempt(n - 1), 1500);
+      };
+      attempt(40); // 立刻 + 最多 40 次重试(~60s)：长回复流式落定慢，持续轮询直到完整 json 出现
     } else if ((useId === currentId || contSessions.has(useId)) && !ac.signal.aborted) {
       // 当前会话，或开着智能继续的后台会话，跑完都算下一步建议(后台会话切走也能自己接着推进)
       void suggestNextAction(useId);
@@ -4272,19 +4284,27 @@ function extractCharterJson(full: string): any | null {
   for (let i = objs.length - 1; i >= 0; i--) { const o = tryParse(objs[i]); if (o) return o; }               // 再退而求其次
   return null;
 }
+// 取某会话「最后一条 assistant 正文」：内存 getMessages 与落盘会话文件都读，取更长(更可能是完整)的那条。
+// 落盘兜底是为了绕开 getMessages 流式未落定/陈旧的问题——persist 写进文件的是完整消息。
+function lastAssistantText(id: string): string {
+  let t1 = "";
+  try { const m = [...(agents.get(id)?.getMessages() || [])].reverse().find((x: any) => x.role === "assistant"); if (m) t1 = msgText(m); } catch { /* ignore */ }
+  let t2 = "";
+  try {
+    const p = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "sessions", id + ".json");
+    const raw = JSON.parse(readFileSync(p, "utf-8"));
+    const msgs = Array.isArray(raw) ? raw : (raw?.messages || []);
+    const m = [...msgs].reverse().find((x: any) => x && x.role === "assistant");
+    if (m) t2 = msgText(m);
+  } catch { /* 文件没有/结构不符→忽略 */ }
+  return t2.length > t1.length ? t2 : t1;
+}
 // 从这轮助手最后回复里抽出契约 JSON → 缓存 + 事件回填弹窗。抽到并解析成功返回 true。
 function tryExtractCharterDraft(id: string): boolean {
-  const a0 = agents.get(id);
-  const msgs = a0?.getMessages() || [];
-  const last = [...msgs].reverse().find((m: any) => m.role === "assistant");
-  if (!last) return false;
-  const full = msgText(last);
+  const full = lastAssistantText(id);
+  if (!full) return false;
   const d = extractCharterJson(full);
-  if (!d) {
-    // 诊断：解析不出契约 JSON 时，记下回复结尾，便于排查(AI 是否真按格式输出)
-    try { log("charterDraft", id.slice(0, 8), "no JSON parsed; tail=", JSON.stringify(full.slice(-400))); } catch { /* ignore */ }
-    return false;
-  }
+  if (!d) return false; // 失败不在此打日志(流式可能没落定，由调用方延时重试；最终放弃时才记诊断)
   const draft = {
     research: String(d.research || d.调研 || ""),
     rules: {

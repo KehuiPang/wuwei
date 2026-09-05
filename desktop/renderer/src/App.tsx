@@ -284,6 +284,35 @@ function loadResearchState(sid: string): ResearchState | null {
   try { const s = localStorage.getItem("wuwei-research:" + sid); if (s) return JSON.parse(s) as ResearchState; } catch { /* 忽略 */ }
   return null;
 }
+// 客户端解析契约 json（手动粘贴用）：容忍 ```json 围栏/注释/尾逗号，扫描平衡 {...}；
+// research/规则写成对象/数组也接住(转成文字)。解析不出返回 null。
+function parseCharterText(text: string): { research: string; ruleDo: string; ruleDont: string; plan: import("./env").PlanStep[] } | null {
+  const tryParse = (s: string): any => {
+    if (!s || !s.trim()) return null;
+    const cl = s.replace(/\/\/[^\n\r]*/g, "").replace(/,(\s*[}\]])/g, "$1");
+    for (const c of [s, cl]) { try { const o = JSON.parse(c); if (o && typeof o === "object") return o; } catch { /* 下一个 */ } }
+    return null;
+  };
+  let d: any = null;
+  const fences = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)].map((m) => m[1]);
+  for (let i = fences.length - 1; i >= 0 && !d; i--) d = tryParse(fences[i]);
+  if (!d) { const anyF = [...text.matchAll(/```[a-z]*\s*([\s\S]*?)```/gi)].map((m) => m[1]).filter((s) => s.includes("{")); for (let i = anyF.length - 1; i >= 0 && !d; i--) d = tryParse(anyF[i]); }
+  if (!d) {
+    const objs: string[] = []; let dep = 0, st = -1;
+    for (let i = 0; i < text.length; i++) { const c = text[i]; if (c === "{") { if (dep === 0) st = i; dep++; } else if (c === "}") { if (dep > 0) { dep--; if (dep === 0 && st >= 0) { objs.push(text.slice(st, i + 1)); st = -1; } } } }
+    for (let i = objs.length - 1; i >= 0 && !d; i--) { const o = tryParse(objs[i]); if (o && (o.research !== undefined || o.plan !== undefined || o.计划 !== undefined)) d = o; }
+    for (let i = objs.length - 1; i >= 0 && !d; i--) d = tryParse(objs[i]);
+  }
+  if (!d) return null;
+  const S = (v: any) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v)); // 对象/数组→文字，容错
+  const planArr = Array.isArray(d.plan || d.计划) ? (d.plan || d.计划) : [];
+  return {
+    research: S(d.research ?? d.调研),
+    ruleDo: S(d.rules?.do ?? d.do ?? d.要做),
+    ruleDont: S(d.rules?.dont ?? d.dont ?? d.不做 ?? d.绝不做),
+    plan: planArr.map((s: any, i: number) => ({ id: `s${i + 1}`, title: S(s?.title ?? s?.step ?? s?.步骤 ?? s?.标题), acceptance: S(s?.acceptance ?? s?.criteria ?? s?.验收 ?? s?.验收标准), status: "todo" as const })),
+  };
+}
 // 调研实时进度：把一次工具调用翻成人话("正在搜索：xxx"/"正在读网页：xxx")，喂进弹窗提示框
 function researchToolLabel(name: string, input: any, en: boolean): string {
   const raw = input?.query ?? input?.q ?? input?.url ?? input?.file_path ?? input?.path ?? input?.pattern ?? "";
@@ -2945,6 +2974,9 @@ export function App() {
   // 调研实时进度：AI 联网时正在搜什么/读哪页/写多少字，喂进弹窗提示框（几十秒~两分钟别让用户干等）
   const [researchLive, setResearchLive] = useState<{ label: string; steps: number } | null>(null);
   const researchSidRef = useRef<string | null>(null); // 空依赖事件闭包里判"这条活动属不属于正在调研的会话"
+  const [pasteOpen, setPasteOpen] = useState(false); // 手动粘贴 json 兜底(自动没填进来时用)
+  const [pasteText, setPasteText] = useState("");
+  const [pasteErr, setPasteErr] = useState("");
   const [stopRules, setStopRules] = useState("");
   // 红线识别方式:keyword=关键词匹配(快,选项提到词就拦) / smart=智能识别(LLM判是否真触发危险动作,少误伤)
   const [redlineMode, setRedlineMode] = useState<"keyword" | "smart">(() =>
@@ -4605,9 +4637,10 @@ export function App() {
     setResearchLive(live0);
     saveResearchState(sid, { researching: true, live: live0 }); // 按会话持久化，"只保存"/收起/刷新后重开还能恢复
     setGoalEdit({ ...goalEdit, researching: true, minimized: false });
+    // 关键：要求 json 契约块放在回复【最开头】就输出——避免调研正文过长把末尾 json 顶掉/截断导致回填失败
     const prompt = lang === "en"
-      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse web_search / web_fetch to survey the LATEST frontier papers, industry news and authoritative sources, so you truly understand the current state, viable paths, common pitfalls and best practices for this goal.\nOnce you've researched enough, output a "charter draft" and put it at the END of your reply as a single \`\`\`json code block, exactly this shape (output only this one json block, all fields filled):\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path, a few paragraphs",\n  "rules": { "do": "What to do (one per line)", "dont": "What NOT to do / how this goal most easily drifts off course (one per line)" },\n  "plan": [ { "title": "What step 1 does", "acceptance": "Acceptance criteria: how we know this step is done/passing" } ]\n}\n\`\`\`\nMake the plan concrete, ordered and executable, every step with a clear acceptance criterion. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
-      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search / web_fetch 联网调研：查最新的前沿论文、行业新闻、权威资料，充分弄清这个目标当前的现状、可行路径、常见坑与最佳实践。\n调研充分后，产出一份「任务契约草稿」，并放在回复的最后、用一个 \`\`\`json 代码块输出，结构严格如下（只输出这一个 json 块，字段齐全）：\n\`\`\`json\n{\n  "research": "调研结论：现状 / 关键发现 / 推荐路径，几段话说清",\n  "rules": { "do": "要做哪些（逐条，一行一条）", "dont": "绝不做哪些 / 这个目标最容易跑偏成什么样（逐条，一行一条）" },\n  "plan": [ { "title": "第一步做什么", "acceptance": "这步的验收标准：怎样算完成 / 达标" } ]\n}\n\`\`\`\n计划要具体、可执行、有先后逻辑，每步都有明确验收标准。dont 里要写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
+      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse web_search / web_fetch to survey the LATEST frontier papers, industry news and authoritative sources, so you understand the current state, viable paths, common pitfalls and best practices for this goal.\n\n[OUTPUT — IMPORTANT] When done, your final reply MUST BEGIN with one complete \`\`\`json charter block (write nothing before it, so a long response can't truncate it away). Exactly this shape, only this one json block, all fields filled:\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path — a tight summary, a few sentences",\n  "rules": { "do": "What to do (one short line each)", "dont": "What NOT to do / how this goal most easily drifts off course (one short line each)" },\n  "plan": [ { "title": "Milestone in ≤12 words", "acceptance": "How we know it's done, one short line" } ]\n}\n\`\`\`\nKeep it CONCISE — titles and acceptance are one short line each, no filler or padding. But the plan must be COMPLETE: cover the whole path from here to fully achieving the goal (all key milestones/phases in order), not just 3-4 shallow steps. Aim for as many milestones as the goal genuinely needs. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
+      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search / web_fetch 联网调研：查最新的前沿论文、行业新闻、权威资料，弄清这个目标的现状、可行路径、常见坑与最佳实践。\n\n【输出要求·重要】调研完成后，你这条最终回复必须【一开头就先输出】一个完整的 \`\`\`json 契约块（前面不要写任何别的内容，避免正文过长把 json 截断丢失）。结构严格如下，只输出这一个 json 块、字段全部填好：\n\`\`\`json\n{\n  "research": "调研结论：现状/关键发现/推荐路径，精炼几句概要",\n  "rules": { "do": "要做哪些（每条一句话，简短）", "dont": "绝不做哪些/最容易跑偏成什么样（每条一句话，简短）" },\n  "plan": [ { "title": "里程碑，一句话（≤20字）", "acceptance": "怎样算达标，一句话" } ]\n}\n\`\`\`\n【计划要精简但完整】：每步的标题和验收都只写一句话、抓关键、别写废话/长篇论述；但计划必须【完整覆盖从现在到彻底达成目标的整条路径】——把关键里程碑/阶段按先后全列出来，不是只写三四个浅step，需要多少个里程碑就列多少个。dont 里写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
     doSend(prompt, []);
   }
 
@@ -7990,6 +8023,47 @@ export function App() {
                       <span className="goal-research-label" title={researchLive.label}>{researchLive.label}</span>
                     </div>
                   )}
+                </div>
+              )}
+              {/* 手动粘贴 json 兜底：自动没填进来时，把对话里 AI 输出的 json 复制过来一键填入 */}
+              <button type="button" className="goal-paste-toggle" onClick={() => { setPasteOpen((v) => !v); setPasteErr(""); }}>
+                {pasteOpen ? (en ? "▾ Paste JSON manually" : "▾ 手动粘贴 json") : (en ? "▸ Didn't auto-fill? Paste the JSON manually" : "▸ 没自动填进来？手动粘贴 AI 输出的 json")}
+              </button>
+              {pasteOpen && (
+                <div className="goal-paste">
+                  <textarea
+                    rows={4}
+                    value={pasteText}
+                    placeholder={en ? "Paste the whole ```json { ... } block (or raw JSON) the AI output in the chat — then click Fill." : "把对话里 AI 输出的整段 ```json { ... }（或纯 json）粘贴到这里，点「填入」。"}
+                    onChange={(e) => { setPasteText(e.target.value); setPasteErr(""); }}
+                  />
+                  <div className="goal-paste-b">
+                    {pasteErr && <span className="goal-paste-err">{pasteErr}</span>}
+                    <span style={{ flex: 1 }} />
+                    <button type="button" className="ghost" onClick={() => { setPasteOpen(false); setPasteText(""); setPasteErr(""); }}>{en ? "Cancel" : "取消"}</button>
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={!pasteText.trim()}
+                      onClick={() => {
+                        const p = parseCharterText(pasteText);
+                        if (!p) { setPasteErr(en ? "Couldn't parse JSON — check you copied the full { … } block." : "解析不出 json——确认复制了完整的 { … } 整段。"); return; }
+                        setGE({
+                          research: p.research || ge.research,
+                          ruleDo: p.ruleDo || ge.ruleDo,
+                          ruleDont: p.ruleDont || ge.ruleDont,
+                          plan: p.plan.length ? p.plan : ge.plan,
+                          researching: false,
+                        });
+                        // 填好了：清掉"调研中"状态
+                        if (researchSidRef.current === ge.sid) { researchSidRef.current = null; setResearchLive(null); }
+                        saveResearchState(ge.sid, null);
+                        setPasteOpen(false); setPasteText(""); setPasteErr("");
+                      }}
+                    >
+                      {en ? "Fill" : "填入"}
+                    </button>
+                  </div>
                 </div>
               )}
               {/* 调研结论 */}
