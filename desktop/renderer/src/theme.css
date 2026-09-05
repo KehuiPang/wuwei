@@ -4142,6 +4142,8 @@ body {
 .pay-enso { display: block; margin: 0 auto 15px; }
 .pay-top h2 { font-size: 21px; font-weight: 750; color: #16191e; letter-spacing: 0.5px; margin: 0; }
 .pay-top p { font-size: 12.5px; color: #8a9099; margin: 9px auto 0; line-height: 1.6; max-width: 300px; }
+/* 宽弹窗(缺币/选套餐)：副标题放宽，避免明明有空间还换行 */
+.pay-card-wide .pay-top p { max-width: 560px; }
 .pay-coin {
   display: inline-block;
   width: 15px;

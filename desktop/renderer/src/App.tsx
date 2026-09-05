@@ -683,7 +683,7 @@ const PACK_PERKS: [string, string][] = [
   ["随用随充，多少都行", "按需购买，用多少充多少，不用被套餐绑住"],
 ];
 const PACK_PERKS_EN: [string, string][] = [
-  ["Never expires", "Once bought it's yours — not reset monthly like a subscription."],
+  ["Never expires", "Once bought it's yours. It won't reset monthly like a subscription."],
   ["Works on top models", "Spend it on Claude, GPT, Gemini and other paid flagships."],
   ["Top up any amount", "Pay as you go, buy exactly what you need, no plan lock-in."],
 ];
@@ -858,7 +858,7 @@ function WechatMark() {
 function payErrMsg(code?: string): string {
   const en = getLang() === "en";
   switch (code) {
-    case "wechat_not_ready": return en ? "WeChat Pay coming soon — please use Alipay" : "微信支付即将开通，请先用支付宝";
+    case "wechat_not_ready": return en ? "WeChat Pay coming soon, please use Alipay for now" : "微信支付即将开通，请先用支付宝";
     case "not_logged_in": return en ? "Session expired, please sign in again" : "登录已过期，请重新登录后再试";
     case "alipay_not_configured": return en ? "Payment not available yet, please try later" : "支付暂未开通，请稍后再试";
     case "unknown_sku": return en ? "This option isn't available for purchase" : "该档位暂不可购买";
@@ -1580,7 +1580,7 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
         <div className="paych-qrtip">
           {phase === "ready" ? (
             en
-              ? <>Scan with <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{method === "ali" ? "Alipay" : "WeChat"}</b> to pay ¥{price} — redirects automatically once received</>
+              ? <>Scan with <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{method === "ali" ? "Alipay" : "WeChat"}</b> to pay ¥{price}, redirects automatically once received</>
               : <>请使用 <b style={{ color: method === "ali" ? "#1677FF" : "#07C160" }}>{methodName}</b> 扫码支付 ¥{price}，到账后自动跳转</>
           ) : phase === "error" ? (
             errDetail ? <span style={{ color: "#C0392B", wordBreak: "break-all" }}>{errDetail}</span> : (en ? "Try another method or retry later" : "换个支付方式或稍后重试")
@@ -1829,10 +1829,10 @@ function TrialPayModal({
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 2, paddingTop: 22 }}>
           <h2>{context === "browse" ? (en ? "Choose your plan" : "选择你的套餐") : (en ? "You're out of credits" : "无为币用完啦")}</h2>
-          <p>{context === "browse" ? (en ? "One subscription, every top flagship — faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going — every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
+          <p>{context === "browse" ? (en ? "One subscription, every top flagship. Faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going. Every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
         </div>
 
-        <div className="trial-bal-mini"><span className="pay-coin" /> {context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits — upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
+        <div className="trial-bal-mini"><span className="pay-coin" /> {context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits · upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
 
         {/* 升级后畅用的最强顶级模型（官方 logo）——直观放大购买欲 */}
         <div className="trial-models">
@@ -1886,7 +1886,7 @@ function TrialPayModal({
             <span className="pay-oi"><PaySpark size={18} /></span>
             <span style={{ minWidth: 0 }}>
               <span className="pay-ot">{en ? `Continue with ${rebind.label}` : `改用${rebind.label}继续`}</span>
-              <span className="pay-os" style={{ display: "block" }}>{en ? "Direct to your subscription — no credits used" : "直连你的订阅账号 · 不消耗无为币"}</span>
+              <span className="pay-os" style={{ display: "block" }}>{en ? "Direct to your subscription, no credits used" : "直连你的订阅账号 · 不消耗无为币"}</span>
             </span>
             <span className="pay-arr"><PayArrow /></span>
           </button>
@@ -1944,7 +1944,7 @@ const PAY_FAQ: { q: string; qEn: string; a: string; aEn: string }[] = [
     q: "可以随时更换套餐或取消吗？",
     qEn: "Can I change or cancel anytime?",
     a: "可以。国内按月单次开通、不会自动扣费，不想续下个月不买即可；海外 Paddle 订阅可随时在管理页取消，当期权益保留到到期。想升更高档随时生效。",
-    aEn: "Yes. In China plans are one-time monthly purchases with no auto-charge — just don't renew. Overseas Paddle subscriptions can be cancelled anytime in the portal; your benefits stay active until the period ends. Upgrades take effect right away.",
+    aEn: "Yes. In China plans are one-time monthly purchases with no auto-charge, so just skip the renewal. Overseas Paddle subscriptions can be cancelled anytime in the portal, and your benefits stay active until the period ends. Upgrades take effect right away.",
   },
   {
     q: "无为币是什么？会过期吗？",
@@ -2028,7 +2028,7 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
                 <svg viewBox="0 0 24 24" fill="none" stroke="#3E9E6E" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
               </div>
               <div className="payres-ttl">{en ? "Payment successful" : "支付成功"}</div>
-              <div className="payres-desc">{en ? "Credits added — enjoy Wuwei hosted models" : "无为币已到账，尽情使用无为托管模型"}</div>
+              <div className="payres-desc">{en ? "Credits added. Enjoy Wuwei hosted models." : "无为币已到账，尽情使用无为托管模型"}</div>
             </div>
             <div className="payres-box">
               <div className="payres-b1">{en ? "Added this time" : "本次到账"}</div>
@@ -2055,7 +2055,7 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
                 {en ? "Activated" : "开通成功"} <span className="payres-pill"><PaySpark size={11} /> {result.planName}</span>
               </div>
               <div className="payres-desc">
-                {en ? `${result.planName} activated — enjoy all member benefits` : `${result.planName} 已开通，尊享全部会员权益`}
+                {en ? `${result.planName} activated. Enjoy all member benefits.` : `${result.planName} 已开通，尊享全部会员权益`}
               </div>
             </div>
             <div className="payres-box gold">
@@ -2081,7 +2081,7 @@ function PayResultModal({ result, onClose, onRetry }: { result: PayResult; onClo
                 <svg viewBox="0 0 24 24" fill="none" stroke="#C0483C" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </div>
               <div className="payres-ttl err">{en ? "Payment not completed" : "支付未完成"}</div>
-              <div className="payres-desc">{en ? "This order wasn't charged — retry or try another method" : "这笔订单没有扣款，可重新支付或换个方式"}</div>
+              <div className="payres-desc">{en ? "This order wasn't charged. Retry or try another method." : "这笔订单没有扣款，可重新支付或换个方式"}</div>
             </div>
             <div className="payres-reason">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>
