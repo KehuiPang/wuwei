@@ -105,6 +105,8 @@ export interface WuweiApi {
   charterDraftArm(sid: string): void;
   charterDraftDisarm(sid: string): void;
   charterDraftGet(sid: string): Promise<CharterDraft>;
+  charterResearch(sid: string, prompt: string): Promise<{ ok: boolean; error?: string; draft?: NonNullable<CharterDraft> }>;
+  charterResearchCancel(sid: string): void;
   stopRulesGet(): Promise<string>;
   stopRulesSet(t: string): Promise<void>;
   setContSessions(ids: string[]): void;

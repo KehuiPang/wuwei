@@ -1556,6 +1556,13 @@ function msgText(m: any): string {
     .join(" ")
     .slice(0, 200);
 }
+// 取整条消息正文，不截断（msgText 有 200 字上限，只适合做短预览；解析契约 json 等必须用这个）
+function msgFullText(m: any): string {
+  return (m?.content || [])
+    .filter((b: any) => b.type === "text")
+    .map((b: any) => b.text)
+    .join("\n");
+}
 // 保留末尾 n 字：助手回复的「下一步问题/建议」几乎都在结尾，从头截断会把它切掉，故取尾。
 function msgTextTail(m: any, n: number): string {
   return (m.content || [])
@@ -4251,6 +4258,55 @@ ipcMain.handle("chat:charter-draft-get", (_e, sid: string) => {
   if (d) lastCharterDrafts.delete(k);
   return d;
 });
+// ⭐「调研并拟计划」独立子会话：跑一个全新隔离的 Agent(有 web_search/web_fetch)专做调研，
+// await 到完整结果再解析——彻底避开"在用户对话里流式竞态/上下文臃肿/被自身动量带偏"三大坑。
+// 进度走独立事件 evt:charter-progress(不污染聊天)；完成同时缓存+发 evt:charter-draft(刷新也能收)。
+const charterResearchRuns = new Map<string, AbortController>();
+ipcMain.handle("chat:charter-research", async (_e, uiSid: string, prompt: string) => {
+  const sid = String(uiSid || "");
+  if (!provider || !sid || !prompt) return { ok: false, error: "bad args" };
+  charterResearchRuns.get(sid)?.abort(); // 有旧的先取消
+  try { await ensureFreshClaudeOAuth(); } catch { /* ignore */ }
+  try { await ensureHostedProviderReady(sid); } catch { /* ignore */ }
+  // ⚠ 安全：调研子会话只给【只读研究工具】，绝不给 write_file/bash 等——它是自主跑、无权限确认的，
+  // 手里不能有能改文件/执行命令的能力(会在真实项目目录乱来)。
+  const RESEARCH_TOOL_NAMES = new Set(["web_search", "web_fetch", "read_file", "grep", "glob"]);
+  const rTools = desktopTools().filter((t) => RESEARCH_TOOL_NAMES.has(t.name));
+  const rMap = new Map(rTools.map((t) => [t.name, t]));
+  const researchSys = tt(
+    "你是联网调研助手。只用 web_search / web_fetch 查资料，禁止写文件、执行命令、改任何东西。做少量精准的 web_search，读几篇关键来源就够，别无限展开。查完按用户要求只输出一个 json 契约块。",
+    "You are a web research assistant. Use only web_search / web_fetch to gather info; never write files, run commands, or change anything. Do a few targeted web_search queries, read a few key sources — don't over-explore. When done, output only one json charter block as the user asked.",
+  );
+  const ra = new Agent(provider, researchSys, rTools, { cwd, sessionId: "__charter_" + sid }, rMap, agentOpts);
+  const ac = new AbortController();
+  charterResearchRuns.set(sid, ac);
+  try {
+    await ra.send(prompt, {
+      // 只转发工具活动做实时进度(不发 assistant 正文→不污染聊天)
+      onToolStart: (id: string, name: string, input: any) => send("evt:charter-progress", { sid, name, input }),
+    } as any, ac.signal);
+    if (ac.signal.aborted) return { ok: false, error: "aborted" };
+    const last = [...ra.getMessages()].reverse().find((m: any) => m.role === "assistant");
+    const full = last ? msgFullText(last) : "";
+    const d = extractCharterJson(full);
+    if (!d) {
+      try { log("charterDraft", sid.slice(0, 8), "research-agent no json; len=", String(full.length), "tail=", JSON.stringify(full.slice(-300))); } catch { /* ignore */ }
+      return { ok: false, error: "no_json" };
+    }
+    const draft = buildCharterDraftObj(d);
+    lastCharterDrafts.set(sid, draft);              // 缓存：刷新后 charterDraftGet 补拉
+    send("evt:charter-draft", { sid, draft });       // 事件：刷新后的渲染层也能收到回填
+    try { log("charterDraft", sid.slice(0, 8), "research-agent ok; plan=", String(draft.plan.length), "research=", String(draft.research.length)); } catch { /* ignore */ }
+    return { ok: true, draft };
+  } catch (e: any) {
+    if (ac.signal.aborted) return { ok: false, error: "aborted" };
+    try { log("charterDraft", sid.slice(0, 8), "research-agent error", String(e?.message || e).slice(0, 300)); } catch { /* ignore */ }
+    return { ok: false, error: String(e?.message || e) };
+  } finally {
+    if (charterResearchRuns.get(sid) === ac) charterResearchRuns.delete(sid);
+  }
+});
+ipcMain.on("chat:charter-research-cancel", (_e, uiSid: string) => { charterResearchRuns.get(String(uiSid || ""))?.abort(); });
 // 从一段文本里稳健地抽出契约 JSON 对象：容忍 ```json/```围栏、行内注释、尾逗号；
 // 找不到围栏就扫描所有平衡的 {...}，从后往前挑第一个能解析且含 research/plan/rules 的。
 function extractCharterJson(full: string): any | null {
@@ -4288,16 +4344,33 @@ function extractCharterJson(full: string): any | null {
 // 落盘兜底是为了绕开 getMessages 流式未落定/陈旧的问题——persist 写进文件的是完整消息。
 function lastAssistantText(id: string): string {
   let t1 = "";
-  try { const m = [...(agents.get(id)?.getMessages() || [])].reverse().find((x: any) => x.role === "assistant"); if (m) t1 = msgText(m); } catch { /* ignore */ }
+  try { const m = [...(agents.get(id)?.getMessages() || [])].reverse().find((x: any) => x.role === "assistant"); if (m) t1 = msgFullText(m); } catch { /* ignore */ }
   let t2 = "";
   try {
     const p = join(homedir(), process.env.WUWEI_DATA_DIR_NAME || ".wuwei", "sessions", id + ".json");
     const raw = JSON.parse(readFileSync(p, "utf-8"));
     const msgs = Array.isArray(raw) ? raw : (raw?.messages || []);
     const m = [...msgs].reverse().find((x: any) => x && x.role === "assistant");
-    if (m) t2 = msgText(m);
+    if (m) t2 = msgFullText(m);
   } catch { /* 文件没有/结构不符→忽略 */ }
   return t2.length > t1.length ? t2 : t1;
+}
+// 把解析出的对象规整成契约草稿(research/rules/plan)，research/规则写成对象/数组也转成文字，容错
+function buildCharterDraftObj(d: any) {
+  const S = (v: any) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+  return {
+    research: S(d.research ?? d.调研),
+    rules: {
+      do: S(d.rules?.do ?? d.do ?? d.要做),
+      dont: S(d.rules?.dont ?? d.dont ?? d.不做 ?? d.绝不做),
+    },
+    plan: Array.isArray(d.plan || d.计划)
+      ? (d.plan || d.计划).map((s: any) => ({
+          title: S(s?.title ?? s?.step ?? s?.步骤 ?? s?.标题),
+          acceptance: S(s?.acceptance ?? s?.criteria ?? s?.验收 ?? s?.验收标准),
+        }))
+      : [],
+  };
 }
 // 从这轮助手最后回复里抽出契约 JSON → 缓存 + 事件回填弹窗。抽到并解析成功返回 true。
 function tryExtractCharterDraft(id: string): boolean {
@@ -4305,19 +4378,7 @@ function tryExtractCharterDraft(id: string): boolean {
   if (!full) return false;
   const d = extractCharterJson(full);
   if (!d) return false; // 失败不在此打日志(流式可能没落定，由调用方延时重试；最终放弃时才记诊断)
-  const draft = {
-    research: String(d.research || d.调研 || ""),
-    rules: {
-      do: String(d.rules?.do || d.do || d.要做 || ""),
-      dont: String(d.rules?.dont || d.dont || d.不做 || d.绝不做 || ""),
-    },
-    plan: Array.isArray(d.plan || d.计划)
-      ? (d.plan || d.计划).map((s: any) => ({
-          title: String(s?.title || s?.step || s?.步骤 || s?.标题 || ""),
-          acceptance: String(s?.acceptance || s?.criteria || s?.验收 || s?.验收标准 || ""),
-        }))
-      : [],
-  };
+  const draft = buildCharterDraftObj(d);
   try { log("charterDraft", id.slice(0, 8), "parsed ok; plan=", String(draft.plan.length), "research=", String(draft.research.length)); } catch { /* ignore */ }
   lastCharterDrafts.set(id, draft); // 缓存，供刷新后补拉
   send("evt:charter-draft", { sid: id, draft });

@@ -4042,8 +4042,8 @@ export function App() {
           pendingDeltaRef.current += payload.delta; // 累积，节流 flush
           scheduleFlush();
           break;
-        case "evt:tool-start":
-          // 调研进行中：把 AI 正在做的动作(搜什么/读哪页/写文件)喂进弹窗提示框，并持久化(收起/只保存/刷新后可恢复)
+        case "evt:charter-progress":
+          // 独立调研子会话的实时动作(搜什么/读哪页)→喂进弹窗进度条，不进聊天。持久化(收起/刷新可恢复)
           if (researchSidRef.current === payload.sid) {
             setResearchLive((prev) => {
               const live = { label: researchToolLabel(payload.name, payload.input, langRef.current === "en"), steps: (prev?.steps || 0) + 1 };
@@ -4051,6 +4051,8 @@ export function App() {
               return live;
             });
           }
+          break;
+        case "evt:tool-start":
           if (payload.sid !== currentIdRef.current) break;
           push({ type: "tool", id: payload.id, name: payload.name, input: payload.input, status: "running" });
           break;
@@ -4623,25 +4625,27 @@ export function App() {
     }
   }
 
-  // 「调研并拟计划」：发一条纯调研任务给真 Agent（有 web_search/web_fetch），
-  // 让它联网看最新论文/新闻，末尾用 ```json 输出契约草稿；跑完主进程解析→evt:charter-draft 回填弹窗。
+  // 「调研并拟计划」：跑一个【独立隔离子会话】的 Agent（有 web_search/web_fetch）专做调研，
+  // 主进程 await 到完整结果再解析回填——彻底避开在用户对话里的流式竞态/上下文臃肿/被自身动量带偏。
+  // 不污染当前聊天；进度走 evt:charter-progress；完成经 IPC 返回 + evt:charter-draft 双回填(刷新也稳)。
   function startResearch() {
     if (!goalEdit) return;
     const tx = goalEdit.text.trim();
     if (!tx) return;
     const sid = goalEdit.sid;
-    if (sid !== currentId) return; // 调研走 doSend(=当前会话)，只对当前会话有效，避免误发到别的对话
-    window.wuwei.charterDraftArm(sid);
+    if (sid !== currentId) return;
     researchSidRef.current = sid;
-    const live0 = { label: lang === "en" ? "Sent — waiting for AI to go online…" : "已发起，等待 AI 联网…", steps: 0 };
+    const live0 = { label: lang === "en" ? "Starting research…" : "开始调研…", steps: 0 };
     setResearchLive(live0);
     saveResearchState(sid, { researching: true, live: live0 }); // 按会话持久化，"只保存"/收起/刷新后重开还能恢复
     setGoalEdit({ ...goalEdit, researching: true, minimized: false });
-    // 关键：要求 json 契约块放在回复【最开头】就输出——避免调研正文过长把末尾 json 顶掉/截断导致回填失败
     const prompt = lang === "en"
-      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse web_search / web_fetch to survey the LATEST frontier papers, industry news and authoritative sources, so you understand the current state, viable paths, common pitfalls and best practices for this goal.\n\n[OUTPUT — IMPORTANT] When done, your final reply MUST BEGIN with one complete \`\`\`json charter block (write nothing before it, so a long response can't truncate it away). Exactly this shape, only this one json block, all fields filled:\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path — a tight summary, a few sentences",\n  "rules": { "do": "What to do (one short line each)", "dont": "What NOT to do / how this goal most easily drifts off course (one short line each)" },\n  "plan": [ { "title": "Milestone in ≤12 words", "acceptance": "How we know it's done, one short line" } ]\n}\n\`\`\`\nKeep it CONCISE — titles and acceptance are one short line each, no filler or padding. But the plan must be COMPLETE: cover the whole path from here to fully achieving the goal (all key milestones/phases in order), not just 3-4 shallow steps. Aim for as many milestones as the goal genuinely needs. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
-      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search / web_fetch 联网调研：查最新的前沿论文、行业新闻、权威资料，弄清这个目标的现状、可行路径、常见坑与最佳实践。\n\n【输出要求·重要】调研完成后，你这条最终回复必须【一开头就先输出】一个完整的 \`\`\`json 契约块（前面不要写任何别的内容，避免正文过长把 json 截断丢失）。结构严格如下，只输出这一个 json 块、字段全部填好：\n\`\`\`json\n{\n  "research": "调研结论：现状/关键发现/推荐路径，精炼几句概要",\n  "rules": { "do": "要做哪些（每条一句话，简短）", "dont": "绝不做哪些/最容易跑偏成什么样（每条一句话，简短）" },\n  "plan": [ { "title": "里程碑，一句话（≤20字）", "acceptance": "怎样算达标，一句话" } ]\n}\n\`\`\`\n【计划要精简但完整】：每步的标题和验收都只写一句话、抓关键、别写废话/长篇论述；但计划必须【完整覆盖从现在到彻底达成目标的整条路径】——把关键里程碑/阶段按先后全列出来，不是只写三四个浅step，需要多少个里程碑就列多少个。dont 里写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
-    doSend(prompt, []);
+      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse the web_search tool (built-in aggregated search) to find sources, then web_fetch a few specific article URLs to read. Do NOT web_fetch a google/bing search page directly. A few targeted searches + reading a few key sources is enough — don't over-explore. Understand the current state, viable paths, common pitfalls and best practices for this goal.\n\n[OUTPUT — IMPORTANT] When done, your final reply MUST BEGIN with one complete \`\`\`json charter block (write nothing before it, so a long response can't truncate it away). Exactly this shape, only this one json block, all fields filled:\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path — a tight summary, a few sentences",\n  "rules": { "do": "What to do (one short line each)", "dont": "What NOT to do / how this goal most easily drifts off course (one short line each)" },\n  "plan": [ { "title": "Milestone in ≤12 words", "acceptance": "How we know it's done, one short line" } ]\n}\n\`\`\`\nKeep it CONCISE — titles and acceptance are one short line each, no filler or padding. But the plan must be COMPLETE: cover the whole path from here to fully achieving the goal (all key milestones/phases in order), not just 3-4 shallow steps. Aim for as many milestones as the goal genuinely needs. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
+      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search 工具（内置聚合搜索）找资料，再用 web_fetch 抓具体文章 URL 读全文；【不要】用 web_fetch 直接抓 google/bing 的搜索页。做几次精准搜索、读几篇关键来源即可，别无限展开。弄清这个目标的现状、可行路径、常见坑与最佳实践。\n\n【输出要求·重要】调研完成后，你这条最终回复必须【一开头就先输出】一个完整的 \`\`\`json 契约块（前面不要写任何别的内容，避免正文过长把 json 截断丢失）。结构严格如下，只输出这一个 json 块、字段全部填好：\n\`\`\`json\n{\n  "research": "调研结论：现状/关键发现/推荐路径，精炼几句概要",\n  "rules": { "do": "要做哪些（每条一句话，简短）", "dont": "绝不做哪些/最容易跑偏成什么样（每条一句话，简短）" },\n  "plan": [ { "title": "里程碑，一句话（≤20字）", "acceptance": "怎样算达标，一句话" } ]\n}\n\`\`\`\n【计划要精简但完整】：每步的标题和验收都只写一句话、抓关键、别写废话/长篇论述；但计划必须【完整覆盖从现在到彻底达成目标的整条路径】——把关键里程碑/阶段按先后全列出来，不是只写三四个浅step，需要多少个里程碑就列多少个。dont 里写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
+    // 独立子会话跑调研；await 完整结果后回填(evt:charter-draft 也会回填，applyCharterDraft 幂等)
+    window.wuwei.charterResearch(sid, prompt)
+      .then((r) => { if (r?.ok && r.draft) applyCharterDraft(sid, r.draft); else applyCharterDraft(sid, null); })
+      .catch(() => applyCharterDraft(sid, null));
   }
 
   // 调研草稿回填弹窗（事件到达 or 刷新后补拉，都走这里）
@@ -7950,7 +7954,7 @@ export function App() {
         const addStep = () => setGE({ plan: [...ge.plan, { id: `s${ge.plan.length + 1}`, title: "", acceptance: "", status: "todo" }] });
         const delStep = (i: number) => setGE({ plan: ge.plan.filter((_, j) => j !== i) });
         // 彻底关闭放弃：解除调研武装 + 清掉持久化的调研状态。用于 ×/取消/删除目标。
-        const discard = () => { window.wuwei.charterDraftDisarm?.(ge.sid); saveResearchState(ge.sid, null); researchSidRef.current = null; setResearchLive(null); setGoalEdit(null); };
+        const discard = () => { window.wuwei.charterResearchCancel?.(ge.sid); window.wuwei.charterDraftDisarm?.(ge.sid); saveResearchState(ge.sid, null); researchSidRef.current = null; setResearchLive(null); setGoalEdit(null); };
         // 缩小：收起成小药丸，不动任何状态——调研继续在后台跑、进度继续记，点开还在。
         const minimize = () => setGoalEdit({ ...ge, minimized: true });
         // 只保存：存下当前字段，但不解除调研、不清进度——关掉后调研照跑，重开自动恢复+补回草稿。
@@ -8015,7 +8019,7 @@ export function App() {
               </div>
               {ge.researching && (
                 <div className="goal-researching">
-                  <div>{en ? "AI is researching online — findings, plan and rules below fill in automatically when it finishes (about 30s–2min). Feel free to minimize (–) or Save only; research keeps running in the background and restores when you reopen. Only Close (×) cancels it." : "AI 正在联网调研，完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。可随时点右上角「缩小(–)」或「只保存」——调研会在后台继续跑，重新打开自动恢复；只有「关闭(×)」才会放弃这次调研。"}</div>
+                  <div>{en ? "AI is researching in an isolated session (doesn't touch this chat) — findings, plan and rules below fill in automatically when done (about 30s–2min). Feel free to minimize (–) or Save only; it keeps running and restores when you reopen. Only Close (×) cancels it." : "AI 正在独立子会话里联网调研（不占用当前对话），完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。可随时点右上角「缩小(–)」或「只保存」——调研继续跑、重新打开自动恢复；只有「关闭(×)」才会取消。"}</div>
                   {researchLive && (
                     <div className="goal-research-live">
                       <span className="goal-research-spin" />

@@ -39,6 +39,7 @@ const EVENTS = [
   "evt:tray-settings",
   "evt:tray-check-update",
   "evt:charter-draft",
+  "evt:charter-progress",
 ] as const;
 
 // 会话总目标"任务契约"：目标 + 调研 + 规则(要做/不做) + 分步计划(每步带验收标准)
@@ -129,6 +130,10 @@ const api = {
   charterDraftArm: (sid: string) => ipcRenderer.send("chat:charter-draft-arm", sid),
   charterDraftDisarm: (sid: string) => ipcRenderer.send("chat:charter-draft-disarm", sid),
   charterDraftGet: (sid: string) => ipcRenderer.invoke("chat:charter-draft-get", sid) as Promise<CharterDraft>,
+  // 独立子会话调研：跑隔离 Agent 做调研并返回契约草稿(await 完整结果，无竞态/污染)
+  charterResearch: (sid: string, prompt: string) =>
+    ipcRenderer.invoke("chat:charter-research", sid, prompt) as Promise<{ ok: boolean; error?: string; draft?: NonNullable<CharterDraft> }>,
+  charterResearchCancel: (sid: string) => ipcRenderer.send("chat:charter-research-cancel", sid),
   stopRulesGet: () => ipcRenderer.invoke("chat:stopRulesGet") as Promise<string>,
   stopRulesSet: (t: string) => ipcRenderer.invoke("chat:stopRulesSet", t) as Promise<void>,
   setContSessions: (ids: string[]) => ipcRenderer.send("chat:cont-sessions", ids),
