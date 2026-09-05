@@ -4245,7 +4245,7 @@ body {
 .tpo-save em { font-style: normal; font-size: 10.5px; font-weight: 700; color: #d14343; background: rgba(209, 67, 67, 0.1); padding: 1px 5px; border-radius: 5px; }
 
 /* 顶部 tab：会员套餐 / 积分包（分段药丸，水平居中） */
-.trial-tabs { display: flex; width: fit-content; margin: 2px auto 12px; background: #f0f2f5; border-radius: 999px; padding: 3px; gap: 2px; }
+.trial-tabs { display: flex; width: fit-content; margin: 12px auto 18px; background: #f0f2f5; border-radius: 999px; padding: 3px; gap: 2px; }
 .trial-tab { border: none; background: transparent; font-size: 12.5px; font-weight: 650; color: #8a9099; padding: 6px 20px; border-radius: 999px; cursor: pointer; transition: background 0.15s, color 0.15s; }
 .trial-tab.on { background: #fff; color: #16191e; box-shadow: 0 1px 3px rgba(22, 25, 30, 0.12); }
 
