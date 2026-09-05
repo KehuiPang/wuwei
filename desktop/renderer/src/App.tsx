@@ -1909,7 +1909,7 @@ function TrialPayModal({
                 <div className="trial-sub2">Secure checkout via Paddle</div>
               </div>
             ) : phase === "ready" && qr ? (
-              <><QRCodeSVG value={qr} size={168} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码支付 <b>{price}</b> · 到账自动开通</div></>
+              <><QRCodeSVG value={qr} size={168} level="M" marginSize={2} /><div className="trial-scan">支付宝扫码 <b>{price}</b> · 自动到账</div></>
             ) : phase === "error" ? (
               <div className="trial-msg err"><span>{errMsg}</span><button onClick={() => setReloadKey((k) => k + 1)}>重试</button></div>
             ) : (
