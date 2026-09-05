@@ -4160,7 +4160,7 @@ body {
 .pay-bal-v { font-size: 30px; font-weight: 750; color: #c05f3c; margin-top: 6px; font-variant-numeric: tabular-nums; }
 .pay-bal-v small { font-size: 13px; color: #8a9099; font-weight: 600; margin-left: 4px; }
 /* ¥1/$1 体验弹窗：宽版两栏（左二维码/付款 · 右套餐详情） */
-.pay-card.pay-card-wide { width: 640px; }
+.pay-card.pay-card-wide { width: 800px; }
 .pay-opt.trial-rebind { box-sizing: border-box; width: calc(100% - 60px); margin: 0 30px 14px; }
 .trial-grid { display: flex; gap: 18px; margin: 4px 30px 10px; align-items: stretch; }
 .trial-pay { flex: 0 0 220px; min-height: 0; box-sizing: border-box; border-radius: 16px; background: #f4f6f8; border: 1px solid rgba(22, 25, 30, 0.08); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; }
