@@ -1738,10 +1738,11 @@ function ModelPricingModal({ lang, onClose, onContact }: { lang: Lang; onClose: 
 }
 
 function TrialPayModal({
-  en, balance, rebind, opts, defaultSku, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onContact, onFaq,
+  en, balance, rebind, opts, defaultSku, onClose, onPaid, onNeedLogin, onRebind, onPaddle, onContact, onFaq, context = "shortage",
 }: {
   en: boolean;
   balance: number;
+  context?: "shortage" | "browse"; // shortage=无为币用完弹的；browse=账号菜单主动点「充值/升级」弹的
   rebind?: { providerId: string; model: string; label: string } | null;
   opts: PayPlanOpt[];
   defaultSku: string;
@@ -1827,11 +1828,11 @@ function TrialPayModal({
       <div className="pay-card pay-card-wide" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 2, paddingTop: 22 }}>
-          <h2>{en ? "You're out of credits" : "无为币用完啦"}</h2>
-          <p>{en ? "Pick a plan to keep going — every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。"}</p>
+          <h2>{context === "browse" ? (en ? "Choose your plan" : "选择你的套餐") : (en ? "You're out of credits" : "无为币用完啦")}</h2>
+          <p>{context === "browse" ? (en ? "One subscription, every top flagship — faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going — every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
         </div>
 
-        <div className="trial-bal-mini"><span className="pay-coin" /> {en ? `Balance ${balance} credits — upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`}</div>
+        <div className="trial-bal-mini"><span className="pay-coin" /> {context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits — upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
 
         {/* 升级后畅用的最强顶级模型（官方 logo）——直观放大购买欲 */}
         <div className="trial-models">
@@ -3287,7 +3288,7 @@ export function App() {
   const isPro = (wuwei?.membership?.tier ?? "free") !== "free"; // 会员态：脑网络等专享功能门控
   const [wuweiBusy, setWuweiBusy] = useState(false);
   // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
-  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string } } | null>(null);
+  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string }; browse?: boolean } | null>(null);
   const [payFaqOpen, setPayFaqOpen] = useState(false); // 缺币弹窗「常见问题」答疑弹窗（叠在支付弹窗之上，关闭即返回）
   const shortageShownAt = useRef(0); // 余额不足弹窗展示时刻，用于算用户看了多久
   // 关闭余额不足弹窗并记录用户动作 + 停留时长。action: close(叉/暂不) | upgrade(升级会员) | buy_pack(买积分包) | rebind(改用订阅)
@@ -5788,8 +5789,17 @@ export function App() {
                         const daysLeft = exp ? Math.ceil((new Date(exp).getTime() - Date.now()) / 86400000) : Infinity;
                         const nearExpiry = daysLeft <= 7;
                         const bal = wuwei.coin.balance;
-                        const openPack = () => { void window.wuwei.track?.("menu_item_click", { item: "topup" }); setShowAcctMenu(false); setCoinPackOpen(true); }; // 充值→购买积分包弹窗
-                        const openPlan = () => { void window.wuwei.track?.("menu_item_click", { item: "upgrade" }); setShowAcctMenu(false); setPlanOpen(true); }; // 开通/续费→升级套餐弹窗
+                        // 充值/升级统一走这个支付弹窗(browse 态：顶部显示「选择你的套餐」而非「无为币不足」)。
+                        const openBrowsePay = async (item: string) => {
+                          void window.wuwei.track?.("menu_item_click", { item });
+                          setShowAcctMenu(false);
+                          const me = await window.wuwei.wuweiMe().catch(() => null);
+                          if (me) setWuwei(me);
+                          setCoinShortage({ message: "browse", balance: (me ?? wuwei)?.coin.balance, browse: true });
+                          shortageShownAt.current = Date.now();
+                        };
+                        const openPack = () => void openBrowsePay("topup"); // 充值 → 统一支付弹窗
+                        const openPlan = () => void openBrowsePay("upgrade"); // 开通/续费 → 统一支付弹窗
                         // 已登录但没昵称/邮箱时的兜底首字：中文取「无」(无为)，英文取 W
                         const initial = (wuwei.user.name || wuwei.user.email || t("acct.userInitial", "无")).slice(0, 1).toUpperCase();
                         const Spark = () => (
@@ -8330,6 +8340,7 @@ export function App() {
           en={lang === "en"}
           balance={coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
           rebind={coinShortage.rebind}
+          context={coinShortage.browse ? "browse" : "shortage"}
           opts={payOpts}
           defaultSku={payDefaultSku}
           onClose={() => closeShortage("close")}
