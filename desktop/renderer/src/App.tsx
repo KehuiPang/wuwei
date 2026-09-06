@@ -7713,8 +7713,9 @@ export function App() {
                   {t("foot.context")} {(usage.lastInput / 1000).toFixed(1)}k
                 </span>
                 {/* 无为托管会员：底部栏常显本周额度已用%，≥50%黄、≥80%红，提醒省着用。
-                    仅无为托管平台模型显示——周额度是托管特有，切到 Claude/GPT 自己的订阅号就不显示 */}
-                {(curPreset?.hosted || curProviderId.startsWith("wuwei-")) && wuwei?.membership?.weeklyQuota?.active && (() => {
+                    仅「纯无为托管付费平台+付费模型」显示：排除免费体验(anon)和免费模型——它们不吃周额度；
+                    切到 Claude/GPT 自己的订阅号(非 wuwei-)也不显示。 */}
+                {curProviderId.startsWith("wuwei-") && !curPreset?.anon && !freeModelIds.has(meta.model) && wuwei?.membership?.weeklyQuota?.active && (() => {
                   const wq = wuwei.membership!.weeklyQuota!;
                   const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
                   const tone = usedPct >= 80 ? " danger" : usedPct >= 50 ? " warn" : "";
@@ -7906,8 +7907,9 @@ export function App() {
               // 无为托管：显示无为币余额（未登录则引导登录）
               wuwei ? (
                 <>
-                  {wuwei.membership?.weeklyQuota?.active ? (() => {
-                    // 订阅版：隐藏无为币余额，只显本周「已用百分比」进度条(用多少涨多少) + 重置日
+                  {(!curPreset?.anon && !freeModelIds.has(meta.model) && wuwei.membership?.weeklyQuota?.active) ? (() => {
+                    // 订阅版：隐藏无为币余额，只显本周「已用百分比」进度条(用多少涨多少) + 重置日。
+                    // 仅纯无为托管付费平台+付费模型显示；免费体验(anon)/免费模型不吃周额度，走下面余额分支。
                     const wq = wuwei.membership!.weeklyQuota!;
                     const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
                     const rd = wq.resetsAt ? new Date(wq.resetsAt) : null;
