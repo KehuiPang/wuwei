@@ -7660,6 +7660,18 @@ export function App() {
                 <span>
                   {t("foot.context")} {(usage.lastInput / 1000).toFixed(1)}k
                 </span>
+                {/* 无为托管会员：底部栏常显本周额度已用%，≥50%黄、≥80%红，提醒省着用 */}
+                {wuwei?.membership?.weeklyQuota?.active && (() => {
+                  const wq = wuwei.membership!.weeklyQuota!;
+                  const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
+                  const tone = usedPct >= 80 ? " danger" : usedPct >= 50 ? " warn" : "";
+                  return (
+                    <>
+                      <span className="fs-dot">·</span>
+                      <span className={"fs-quota" + tone}>{lang === "en" ? "Week" : "本周"} {usedPct}%</span>
+                    </>
+                  );
+                })()}
                 {meta.sub && rate && typeof rate.primaryUsedPercent === "number" && (
                   <>
                     <span className="fs-dot">·</span>
@@ -7853,7 +7865,7 @@ export function App() {
                           <span>{lang === "en" ? "This week" : "本周额度"}</span>
                           <span>{lang === "en" ? `${usedPct}% used${rs ? ` · resets ${rs}` : ""}` : `已用 ${usedPct}%${rs ? ` · ${rs} 重置` : ""}`}</span>
                         </div>
-                        <div className="u-bar"><div className="u-fill" style={{ width: usedPct + "%" }} /></div>
+                        <div className="u-bar"><div className={"u-fill" + (usedPct >= 80 ? " danger" : usedPct >= 50 ? " warn" : "")} style={{ width: usedPct + "%" }} /></div>
                       </div>
                     );
                   })() : (
