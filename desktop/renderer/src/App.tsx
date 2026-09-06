@@ -1700,14 +1700,14 @@ function PayCheckoutModal({ order, onClose, onPaid, onContactSupport, onNeedLogi
 // 缺币弹窗右侧「下单理由」：每条 = 加粗钩子 + 具体说明，精准戳付费点（顶级模型 / 更快 / 更多额度 / 记忆 / 省钱）。
 const PAYNOW_PERKS: [string, string][] = [
   ["一份订阅，顶三份钱", "别再 ChatGPT 20刀、Claude 20刀、Gemini 20刀分开交，无为一份全给你"],
-  ["旗舰全家桶，一键随便切", "Claude Fable 5.1、GPT-5.6、Gemini 3.7、DeepSeek V4、Grok 4.6 想用哪个用哪个，不绑死任何一家"],
+  ["旗舰全家桶，一键随便切", "Claude Fable 5.1、GPT-6、Gemini 3.7、DeepSeek V4、Grok 4.6 想用哪个用哪个，不绑死任何一家"],
   ["长任务一口气跑完", "额度更足、无为币更多，几万字的活儿中途不断供"],
   ["会员走快车道", "专属极速通道，高峰期不用排在免费用户后面干等"],
   ["它永远记得你", "脑网络永久记忆，跨对话记住你的项目、代码风格和偏好"],
 ];
 const PAYNOW_PERKS_EN: [string, string][] = [
   ["One subscription beats three", "Skip paying $20 for ChatGPT, $20 for Claude, $20 for Gemini. Wuwei runs all of them."],
-  ["All the flagships, one click away", "Claude Fable 5.1, GPT-5.6, Gemini 3.7, DeepSeek V4, Grok 4.6, switch anytime, locked to no one."],
+  ["All the flagships, one click away", "Claude Fable 5.1, GPT-6, Gemini 3.7, DeepSeek V4, Grok 4.6, switch anytime, locked to no one."],
   ["Long jobs won't die halfway", "More tokens, more Wuwei coins. Your big task runs to the end without cutting out."],
   ["Members jump the queue", "Priority lane for faster replies, no waiting behind free users at peak hours."],
   ["It remembers you, forever", "Brain-network memory keeps your project, code style and habits across every chat."],
@@ -2095,7 +2095,7 @@ function PayFaqModal({ en, onClose }: { en: boolean; onClose: () => void }) {
 // 名字对齐官网 ModelShowcase 的旗舰清单；换代时随客户端发版更新即可。
 const PAY_MODEL_MARKS: { brand: string; n: string; nw?: boolean }[] = [
   { brand: "claude", n: "Claude Fable 5.1", nw: true },
-  { brand: "gpt", n: "GPT-5.6", nw: true },
+  { brand: "gpt", n: "GPT-6", nw: true },
   { brand: "gemini", n: "Gemini 3.7", nw: true },
   { brand: "deepseek", n: "DeepSeek V4" },
   { brand: "qwen", n: "Qwen3.8 Max", nw: true },
