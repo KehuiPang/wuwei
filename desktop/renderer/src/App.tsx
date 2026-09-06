@@ -3397,6 +3397,7 @@ export function App() {
   const [wuweiBusy, setWuweiBusy] = useState(false);
   // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string }; browse?: boolean } | null>(null);
+  const [freeCapModal, setFreeCapModal] = useState<{ model: string; balance: number } | null>(null); // 免费模型当天次数用完(已登录)→弹窗引导
   const [payFaqOpen, setPayFaqOpen] = useState(false); // 缺币弹窗「常见问题」答疑弹窗（叠在支付弹窗之上，关闭即返回）
   const shortageShownAt = useRef(0); // 余额不足弹窗展示时刻，用于算用户看了多久
   // 关闭余额不足弹窗并记录用户动作 + 停留时长。action: close(叉/暂不) | upgrade(升级会员) | buy_pack(买积分包) | rebind(改用订阅)
@@ -3960,6 +3961,25 @@ export function App() {
     setCurProviderId(p.id);
     setShowProviderMenu(false);
   }
+  // 免费模型 → 对应的「托管付费」模型：去掉 -free 后在各托管付费平台(hosted 且非 anon)里找同名，找不到返回 null
+  function hostedEquivalentOf(freeModel: string): { provider: (typeof providerList)[number]; model: string } | null {
+    const base = (freeModel || "").replace(/-free$/i, "");
+    for (const prov of providerList) {
+      if (!prov.hosted || prov.anon) continue;
+      for (const c of [base, freeModel]) if (c && prov.models?.includes(c)) return { provider: prov, model: c };
+    }
+    return null;
+  }
+  // 一键切到指定托管平台+模型(和 quickProvider 同套配置，但指定具体 model)
+  async function switchToHosted(prov: (typeof providerList)[number], model: string) {
+    const r = await window.wuwei.getSettings();
+    const cur = r?.settings || {};
+    const slot = (cur.creds || {})[prov.id] || {};
+    window.wuwei.setSettings({ ...cur, kind: prov.kind, providerId: prov.id, apiKey: slot.apiKey, oauthToken: slot.oauthToken, baseUrl: prov.fixedBaseUrl ? prov.baseUrl : slot.baseUrl || prov.baseUrl, model });
+    setRate(null);
+    setCurProviderId(prov.id);
+    void window.wuwei.track?.("free_cap_switch_hosted", { to: model, provider: prov.id });
+  }
 
   // 启动即把当前界面语言同步进主进程 settings.app.lang → WUWEI_LANG，
   // 保证主进程 tt()/工具描述/系统提示默认从一开始就跟随界面语言（此后已持久化，下次启动即正确）。
@@ -4307,14 +4327,11 @@ export function App() {
           const loggedIn = !!wuweiRef.current;
           const isFreeCap = /free_daily_cap_reached|daily_cap_reached|free_quota_exhausted/i.test(rawMsg);
           const isCoinOut = /insufficient_balance/i.test(rawMsg);
+          let suppressInlineNotice = false;
           if (isFreeCap && loggedIn) {
-            const bal = wuweiRef.current?.coin?.balance ?? 0;
-            push({
-              type: "notice",
-              text: lang === "en"
-                ? `Today's free-model quota is used up — it resets tomorrow. You still have ${bal} credits; switch to another Wuwei-hosted model to keep going now.`
-                : `免费模型今天的次数用完了，明天可继续免费使用。你当前还有 ${bal} 无为币——也可以切换到其他无为托管模型继续用。`,
-            });
+            // 免费次数用完(已登录)→弹窗引导(明天继续 / 一键切托管付费模型)，抑制下面的 inline 提示避免重复
+            setFreeCapModal({ model: meta.model, balance: wuweiRef.current?.coin?.balance ?? 0 });
+            suppressInlineNotice = true;
           } else if (isCoinOut && loggedIn) {
             setShowAcctMenu(false);
             void refreshWuweiForShortage(friendly); // 无为币真用完 → 升级/充值弹窗
@@ -4329,8 +4346,8 @@ export function App() {
           }
           // 上游暂不可用(厂商抖动) → 记下当前模型，错误栏给「一键换到可用模型继续」，不让用户对着死路干等
           setUnavailModel(/upstream_error/i.test(rawMsg) ? meta.model : null);
-          // 去重：与上一条完全相同的出错提示不重复堆叠
-          setItems((p) => {
+          // 去重：与上一条完全相同的出错提示不重复堆叠（免费次数用完已弹窗→不再叠 inline）
+          if (!suppressInlineNotice) setItems((p) => {
             const last = p[p.length - 1];
             if (last && last.type === "notice" && last.text === friendly) return p;
             return [...p, { type: "notice", text: friendly }];
@@ -8575,6 +8592,42 @@ export function App() {
               <div className="s-note" style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, maxHeight: "68vh", overflow: "auto" }}>{announce.body}</div>
             </div>
           </div>
+        );
+      })()}
+      {/* 免费模型当天次数用完(已登录)：弹窗引导——明天继续 / 一键切到对应托管付费模型。无为币再用完才走升级窗 */}
+      {freeCapModal && (() => {
+        const en = lang === "en";
+        const labelOf = (m: string) => MODEL_LABEL_OVERRIDES[m] || (en ? modelLabelsEn.get(m) : undefined) || modelLabels.get(m) || m;
+        const eq = hostedEquivalentOf(freeCapModal.model);
+        const bal = freeCapModal.balance;
+        return (
+          <>
+            <div className="mq-overlay" style={{ zIndex: 200 }} onClick={() => setFreeCapModal(null)} />
+            <div className="freecap-modal">
+              <button className="freecap-x" title={en ? "Close" : "关闭"} onClick={() => setFreeCapModal(null)}>×</button>
+              <div className="freecap-title">{en ? "Today's free quota is used up" : "今天的免费次数用完啦"}</div>
+              <div className="freecap-sub">
+                {en
+                  ? `This free model resets tomorrow — you can keep using it free then. You still have ${bal} credits.`
+                  : `这个免费模型明天可以继续免费用。你当前还有 ${bal} 无为币。`}
+              </div>
+              {eq ? (
+                <button className="freecap-primary" onClick={() => { void switchToHosted(eq.provider, eq.model); setFreeCapModal(null); }}>
+                  {en ? `Switch to hosted ${labelOf(eq.model)} — keep going now` : `一键切到托管 ${labelOf(eq.model)}，立刻继续用`}
+                </button>
+              ) : (
+                <button className="freecap-primary" onClick={() => { setShowProviderMenu(true); setFreeCapModal(null); }}>
+                  {en ? "Switch to a Wuwei-hosted model" : "换个无为托管模型继续用"}
+                </button>
+              )}
+              <div className="freecap-note">
+                {en
+                  ? `Hosted models bill your credits by token (you have ${bal}). When credits run out, upgrade your membership to keep going.`
+                  : `托管模型按 token 扣无为币（你有 ${bal} 币）。等无为币也用完了，升级会员即可继续用。`}
+              </div>
+              <button className="freecap-ghost" onClick={() => setFreeCapModal(null)}>{en ? "Maybe tomorrow" : "明天再说"}</button>
+            </div>
+          </>
         );
       })()}
       {/* ① 无为币不足触发弹窗（v2）：金色升级Pro在上(更划算) + 朱色购买积分包在下 */}

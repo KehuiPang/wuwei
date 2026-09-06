@@ -5314,6 +5314,30 @@ body {
   color: var(--text-dim); border-radius: 7px; padding: 2px 9px; cursor: pointer; font-size: 11.5px;
 }
 .goal-open:hover { color: var(--spark); border-color: var(--spark); }
+/* 免费模型次数用完弹窗(已登录) */
+.freecap-modal {
+  position: fixed; z-index: 201; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(420px, 90vw); padding: 24px 24px 18px; text-align: center;
+  background: var(--bg-raised); border: 1px solid var(--border-strong); border-radius: 16px;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, .32);
+}
+.freecap-x {
+  position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border: none; background: transparent;
+  color: var(--text-muted); cursor: pointer; font-size: 18px; line-height: 1; border-radius: 8px;
+}
+.freecap-x:hover { background: var(--bg-input); color: var(--text); }
+.freecap-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 4px 0 8px; }
+.freecap-sub { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 16px; }
+.freecap-primary {
+  display: block; width: 100%; box-sizing: border-box; padding: 11px 16px; border-radius: 11px; cursor: pointer;
+  background: var(--spark); border: 1px solid var(--spark); color: #fff; font-size: 14px; font-weight: 600;
+}
+.freecap-primary:hover { filter: brightness(1.08); }
+.freecap-note { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin: 12px 2px 4px; }
+.freecap-ghost {
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 6px 10px; margin-top: 2px;
+}
+.freecap-ghost:hover { color: var(--text-dim); }
 .goal-modal {
   position: fixed; z-index: 50; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(620px, 88vw); padding: 18px 20px 16px;
