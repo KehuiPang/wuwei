@@ -678,6 +678,10 @@ const MODEL_LABEL_OVERRIDES: Record<string, string> = {
   "claude-opus-4-6": "Claude Opus 4.6",
   "claude-sonnet-4-6": "Claude Sonnet 4.6",
   "claude-haiku-4-5": "Claude Haiku 4.5",
+  // 无为托管·智谱 GLM：统一 GLM 开头、去掉「智谱」中文前缀
+  "glm-5.3": "GLM-5.3",
+  "glm-5.3-flash": "GLM-5.3 Flash",
+  "glm-5.2": "GLM-5.2",
 };
 
 const PRO_PLANS: ProPlan[] = [
@@ -3115,7 +3119,7 @@ export function App() {
   const sessionsRef = useRef<SessionMeta[]>([]); // 事件回调里取会话标题(ask 通知文案)
   sessionsRef.current = sessions;
   const [groups, setGroups] = useState<string[]>([]); // 分组顺序(新组置顶)
-  const [groupMode, setGroupMode] = useState<"manual" | "date" | "project">("manual"); // 分组模式
+  const [groupMode, setGroupMode] = useState<"manual" | "date" | "project">("date"); // 分组模式(默认按日期)
   const [streamMode, setStreamMode] = useState<"typewriter" | "stream" | "instant">("stream"); // 输出方式
   const [streamSpeed, setStreamSpeed] = useState(400); // 打字机速度(字符/秒)
   const [keepRecent, setKeepRecent] = useState(12); // 上下文压缩保留最近N条
@@ -3661,7 +3665,7 @@ export function App() {
       setHiddenProviders(r?.settings?.hiddenProviders || []);
       setRemovedProviders((r?.settings as any)?.removedProviders || []);
       setProviderOverrides((r?.settings as any)?.providerOverrides || {});
-      setGroupMode((r?.settings as any)?.groupMode || "manual");
+      setGroupMode((r?.settings as any)?.groupMode || "date");
       setStreamMode((r?.settings as any)?.streamMode || "stream");
       setStreamSpeed((r?.settings as any)?.streamSpeed || 400);
       setKeepRecent((r?.settings as any)?.keepRecent || 12);
