@@ -4154,7 +4154,7 @@ body {
 .pay-inline-link { border: none; background: none; padding: 0; font: inherit; color: var(--spark); font-weight: 600; cursor: pointer; }
 .pay-inline-link:hover { filter: brightness(1.08); }
 /* 宽弹窗(缺币/选套餐)：副标题放宽，避免明明有空间还换行 */
-.pay-card-wide .pay-top p { max-width: 560px; }
+.pay-card-wide .pay-top p { max-width: 700px; }
 .pay-coin {
   display: inline-block;
   width: 15px;
