@@ -5327,15 +5327,16 @@ body {
 }
 .freecap-x:hover { background: var(--bg-input); color: var(--text); }
 .freecap-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 4px 0 8px; }
-.freecap-sub { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 16px; }
+/* 一句话说明，居中留白后接按钮区 */
+.freecap-sub { font-size: 13px; color: var(--text-dim); line-height: 1.7; margin-bottom: 20px; }
+.freecap-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
 .freecap-primary {
   display: block; width: 100%; box-sizing: border-box; padding: 11px 16px; border-radius: 11px; cursor: pointer;
   background: var(--spark); border: 1px solid var(--spark); color: #fff; font-size: 14px; font-weight: 600;
 }
 .freecap-primary:hover { filter: brightness(1.08); }
-.freecap-note { font-size: 11.5px; color: var(--text-muted); line-height: 1.6; margin: 12px 2px 4px; }
 .freecap-ghost {
-  border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 6px 10px; margin-top: 2px;
+  border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 6px 10px;
 }
 .freecap-ghost:hover { color: var(--text-dim); }
 .goal-modal {

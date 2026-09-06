@@ -682,9 +682,9 @@ const MODEL_LABEL_OVERRIDES: Record<string, string> = {
 
 const PRO_PLANS: ProPlan[] = [
   { id: "pro", sku: "plan_pro", name: "无为 Pro", nameEn: "Wuwei Pro", price: 29, priceUsd: 6.99, unit: "/月", unitEn: "/mo", coins: 1000, coinsEn: 2000, signin: 20, saved: 0, sub: "包月托管额度 · 每日签到 20", subEn: "Monthly hosted quota · 20/day check-in", note: "", noteEn: "", tag: "入门", tagEn: "Starter", tagType: "pop" },
-  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Plus", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 46, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 32%", noteEn: "Save 32%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
+  { id: "pro5x", sku: "plan_pro_5x", name: "无为 Plus", nameEn: "Wuwei Plus", price: 99, priceUsd: 19.99, unit: "/月", unitEn: "/mo", coins: 5000, coinsEn: 6000, signin: 40, saved: 25, sub: "5× 额度 · 每日签到 40", subEn: "5× quota · 40/day check-in", note: "省 20%", noteEn: "Save 20%", tag: "最受欢迎", tagEn: "Most popular", tagType: "rec" },
   { id: "pro20x", sku: "plan_pro_20x", name: "无为 Ultra", nameEn: "Wuwei Ultra", price: 379, priceUsd: 99, unit: "/月", unitEn: "/mo", coins: 20000, coinsEn: 30000, signin: 70, saved: 201, sub: "20× 额度 · 每日签到 70", subEn: "20× quota · 70/day check-in", note: "省 35%", noteEn: "Save 35%", tag: "大团队", tagEn: "For teams", tagType: "pop" },
-  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Max", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 551, sub: "50× 额度 · 每日签到 100", subEn: "50× quota · 100/day check-in", note: "省 38%", noteEn: "Save 38%", tag: "顶配", tagEn: "Top tier", tagType: "pop" },
+  { id: "pro50x", sku: "plan_pro_50x", name: "无为 Max", nameEn: "Wuwei Max", price: 899, priceUsd: 199, unit: "/月", unitEn: "/mo", coins: 50000, coinsEn: 70000, signin: 100, saved: 899, sub: "50× 额度 · 每日签到 100", subEn: "50× quota · 100/day check-in", note: "省 50%", noteEn: "Save 50%", tag: "畅用到爽", tagEn: "Go all-in", tagType: "rec" },
 ];
 const PRO_FEATS: [string, string][] = [
   ["托管额度", "不用自己配接口额度"],
@@ -1065,8 +1065,16 @@ function SupportChatModal({ onClose, loggedIn, t }: { onClose: () => void; logge
   const load = async (dropTemp = false) => {
     const r = await window.wuwei.supportThread(true).catch(() => null);
     // dropTemp=true(发送成功后)：直接用服务器权威列表，撤掉乐观占位，避免重复。
-    // dropTemp=false(定时轮询)：保留尚未回流的乐观条(负 id)，避免刚发那条被刷新闪掉。
-    if (r) setMsgs((prev) => (dropTemp ? r.messages : [...r.messages, ...prev.filter((m) => m.id < 0)]));
+    // dropTemp=false(定时轮询)：保留「尚未回流」的乐观条(负 id)，避免刚发那条被刷新闪掉；
+    //   但若服务器列表已含内容相同的用户消息，说明该乐观条已回流 → 丢弃它，否则会出现
+    //   「服务器正式副本 + 乐观副本」两条一模一样(等下次全量刷新才消失)的重复 bug。
+    if (r) setMsgs((prev) => {
+      if (dropTemp) return r.messages;
+      const key = (m: { message: string; images?: string[] }) => m.message + "|" + (m.images?.length || 0);
+      const serverUserKeys = new Set(r.messages.filter((m) => m.sender === "user").map(key));
+      const pendingTemp = prev.filter((m) => m.id < 0 && !serverUserKeys.has(key(m)));
+      return [...r.messages, ...pendingTemp];
+    });
     setLoaded(true);
   };
   useEffect(() => {
@@ -8608,24 +8616,21 @@ export function App() {
               <div className="freecap-title">{en ? "Today's free quota is used up" : "今天的免费次数用完啦"}</div>
               <div className="freecap-sub">
                 {en
-                  ? `This free model resets tomorrow — you can keep using it free then. You still have ${bal} credits.`
-                  : `这个免费模型明天可以继续免费用。你当前还有 ${bal} 无为币。`}
+                  ? `Free resets tomorrow. To keep going now, switch to a hosted model — billed by token from your ${bal} credits.`
+                  : `明天恢复免费。想现在继续，可切换托管模型，按 token 扣无为币（余额 ${bal}）。`}
               </div>
-              {eq ? (
-                <button className="freecap-primary" onClick={() => { void switchToHosted(eq.provider, eq.model); setFreeCapModal(null); }}>
-                  {en ? `Switch to hosted ${labelOf(eq.model)} — keep going now` : `一键切到托管 ${labelOf(eq.model)}，立刻继续用`}
-                </button>
-              ) : (
-                <button className="freecap-primary" onClick={() => { setShowProviderMenu(true); setFreeCapModal(null); }}>
-                  {en ? "Switch to a Wuwei-hosted model" : "换个无为托管模型继续用"}
-                </button>
-              )}
-              <div className="freecap-note">
-                {en
-                  ? `Hosted models bill your credits by token (you have ${bal}). When credits run out, upgrade your membership to keep going.`
-                  : `托管模型按 token 扣无为币（你有 ${bal} 币）。等无为币也用完了，升级会员即可继续用。`}
+              <div className="freecap-actions">
+                {eq ? (
+                  <button className="freecap-primary" onClick={() => { void switchToHosted(eq.provider, eq.model); setFreeCapModal(null); }}>
+                    {en ? `Switch to hosted ${labelOf(eq.model)} — keep going now` : `一键切到托管 ${labelOf(eq.model)}，立刻继续用`}
+                  </button>
+                ) : (
+                  <button className="freecap-primary" onClick={() => { setShowProviderMenu(true); setFreeCapModal(null); }}>
+                    {en ? "Switch to a Wuwei-hosted model" : "换个无为托管模型继续用"}
+                  </button>
+                )}
+                <button className="freecap-ghost" onClick={() => setFreeCapModal(null)}>{en ? "Maybe tomorrow" : "明天再说"}</button>
               </div>
-              <button className="freecap-ghost" onClick={() => setFreeCapModal(null)}>{en ? "Maybe tomorrow" : "明天再说"}</button>
             </div>
           </>
         );
