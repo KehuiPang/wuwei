@@ -3410,6 +3410,7 @@ export function App() {
   // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
   const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string }; browse?: boolean } | null>(null);
   const [freeCapModal, setFreeCapModal] = useState<{ model: string; balance: number } | null>(null); // 免费模型当天次数用完(已登录)→弹窗引导
+  const [quotaWarn, setQuotaWarn] = useState<{ model: string; usedPct: number; resetsAt: string | null } | null>(null); // 用高价模型烧周额度过快(≥50/80%)→弹窗建议切省钱模型
   const [payFaqOpen, setPayFaqOpen] = useState(false); // 缺币弹窗「常见问题」答疑弹窗（叠在支付弹窗之上，关闭即返回）
   const shortageShownAt = useRef(0); // 余额不足弹窗展示时刻，用于算用户看了多久
   // 关闭余额不足弹窗并记录用户动作 + 停留时长。action: close(叉/暂不) | upgrade(升级会员) | buy_pack(买积分包) | rebind(改用订阅)
@@ -4021,6 +4022,27 @@ export function App() {
     return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 高价模型(托管 Claude/GPT)烧周额度过快提醒：跨过 50%/80% 时弹窗，建议切到更省的 DeepSeek/GLM Flash。
+  // 每档每周只弹一次(按 resetsAt 分周，存 localStorage)；用户点「继续用」= 不再打扰这档。
+  useEffect(() => {
+    const wq = wuwei?.membership?.weeklyQuota;
+    if (!wq?.active) return;
+    const pricey = curProviderId === "wuwei-claude" || curProviderId === "wuwei-gpt";
+    if (!pricey) return;
+    const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
+    const threshold = usedPct >= 80 ? 80 : usedPct >= 50 ? 50 : 0;
+    if (!threshold) return;
+    const key = `wuwei:quotaWarn:${wq.resetsAt || "na"}`;
+    let shown: number[] = [];
+    try { shown = JSON.parse(localStorage.getItem(key) || "[]"); } catch { /* ignore */ }
+    if (shown.includes(threshold)) return;
+    // 直接跨到 80% 时把 50 也一并标记，避免回落刷新再补弹 50 档
+    const next = [...new Set([...shown, ...(threshold === 80 ? [50, 80] : [50])])];
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
+    setQuotaWarn({ model: meta.model, usedPct, resetsAt: wq.resetsAt });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wuwei?.membership?.weeklyQuota?.remainingPct, wuwei?.membership?.weeklyQuota?.active, wuwei?.membership?.weeklyQuota?.resetsAt, curProviderId]);
 
   // 定时刷新会员/余额(每90s + 窗口聚焦)：只在扣费时推送会导致免费模型使用期「本周额度%」长期显示旧值(不刷新)。
   useEffect(() => {
@@ -8659,6 +8681,44 @@ export function App() {
                   </button>
                 )}
                 <button className="freecap-ghost" onClick={() => setFreeCapModal(null)}>{en ? "Maybe tomorrow" : "明天再说"}</button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+      {/* 高价模型烧周额度过快：建议一键切到更省的 DeepSeek V4 Flash / GLM-5.3 Flash；点「继续用」则不再打扰这档 */}
+      {quotaWarn && (() => {
+        const en = lang === "en";
+        const labelOf = (m: string) => MODEL_LABEL_OVERRIDES[m] || (en ? modelLabelsEn.get(m) : undefined) || modelLabels.get(m) || m;
+        const curLabel = labelOf(quotaWarn.model);
+        const ds = findHostedModel("deepseek-v4-flash");
+        const glm = findHostedModel("glm-5.3-flash");
+        const rd = quotaWarn.resetsAt ? new Date(quotaWarn.resetsAt) : null;
+        const rs = rd ? (en ? rd.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : `${rd.getMonth() + 1}月${rd.getDate()}日`) : "";
+        const switchTo = (t: { provider: (typeof providerList)[number]; model: string } | null) => { if (t) void switchToHosted(t.provider, t.model); setQuotaWarn(null); };
+        return (
+          <>
+            <div className="mq-overlay" style={{ zIndex: 200 }} onClick={() => setQuotaWarn(null)} />
+            <div className="freecap-modal">
+              <button className="freecap-x" title={en ? "Close" : "关闭"} onClick={() => setQuotaWarn(null)}>×</button>
+              <div className="freecap-title">{en ? "You're burning your weekly quota fast" : "本周额度消耗有点快"}</div>
+              <div className="freecap-sub">
+                {en
+                  ? `You're on ${curLabel}, which costs more per token — your weekly quota is ${quotaWarn.usedPct}% used${rs ? ` (resets ${rs})` : ""}. To make it last, switch to a cheaper model below and keep going.`
+                  : `你正在用 ${curLabel}，它单价较高——本周额度已用 ${quotaWarn.usedPct}%${rs ? `（${rs} 重置）` : ""}。想省着点用，可以切到下面更便宜的模型继续工作。`}
+              </div>
+              <div className="freecap-actions">
+                {ds && (
+                  <button className="freecap-primary" onClick={() => switchTo(ds)}>
+                    {en ? `Switch to ${labelOf(ds.model)}` : `一键切到 ${labelOf(ds.model)}`}
+                  </button>
+                )}
+                {glm && (
+                  <button className="freecap-secondary" onClick={() => switchTo(glm)}>
+                    {en ? `Switch to ${labelOf(glm.model)}` : `一键切到 ${labelOf(glm.model)}`}
+                  </button>
+                )}
+                <button className="freecap-ghost" onClick={() => setQuotaWarn(null)}>{en ? `Keep using ${curLabel}` : `继续用 ${curLabel}`}</button>
               </div>
             </div>
           </>

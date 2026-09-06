@@ -1025,8 +1025,8 @@ body {
   transition: background .2s;
 }
 /* 周额度进度条：≥50% 黄、≥80% 红——变相提醒省着用 */
-.usage-panel .u-fill.warn { background: #E0A400; }
-.usage-panel .u-fill.danger { background: #E5484D; }
+.usage-panel .u-fill.warn { background: #C79A3B; }
+.usage-panel .u-fill.danger { background: #D2413F; }
 .usage-panel .u-note {
   margin-top: 10px;
   color: var(--text-dim);
@@ -2188,14 +2188,14 @@ body {
 }
 .foot-status .fs-dot {
   opacity: 0.4;
+  margin: 0 4px;
 }
 .foot-status .fs-busy {
   color: var(--accent);
 }
-/* 底部栏本周额度%：≥50% 黄、≥80% 红，常显提醒 */
-.foot-status .fs-quota { font-weight: 600; }
-.foot-status .fs-quota.warn { color: #E0A400; }
-.foot-status .fs-quota.danger { color: #E5484D; }
+/* 底部栏本周额度%：≥50% 黄、≥80% 红，常显提醒(正常字重、黄色偏暗不刺眼) */
+.foot-status .fs-quota.warn { color: #B08A2E; }
+.foot-status .fs-quota.danger { color: #D2413F; }
 /* 右下角模型快切 */
 .model-quick {
   position: relative;
@@ -5343,6 +5343,11 @@ body {
   background: var(--spark); border: 1px solid var(--spark); color: #fff; font-size: 14px; font-weight: 600;
 }
 .freecap-primary:hover { filter: brightness(1.08); }
+.freecap-secondary {
+  display: block; width: 100%; box-sizing: border-box; padding: 11px 16px; border-radius: 11px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border-strong); color: var(--text); font-size: 14px; font-weight: 600;
+}
+.freecap-secondary:hover { background: var(--bg-input); }
 .freecap-ghost {
   border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 6px 10px;
 }
