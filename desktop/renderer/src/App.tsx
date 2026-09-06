@@ -1810,7 +1810,7 @@ function TrialPayModal({
 }: {
   en: boolean;
   balance: number;
-  context?: "shortage" | "browse"; // shortage=无为币用完弹的；browse=账号菜单主动点「充值/升级」弹的
+  context?: "shortage" | "browse" | "weekly"; // shortage=无为币用完；browse=账号菜单主动点充值/升级；weekly=付费会员本周额度用完
   rebind?: { providerId: string; model: string; label: string } | null;
   opts: PayPlanOpt[];
   defaultSku: string;
@@ -1896,11 +1896,11 @@ function TrialPayModal({
       <div className="pay-card pay-card-wide" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
         <div className="pay-top" style={{ paddingBottom: 2, paddingTop: 22 }}>
-          <h2>{context === "browse" ? (en ? "Choose your plan" : "选择你的套餐") : (en ? "You're out of credits" : "无为币用完啦")}</h2>
-          <p>{context === "browse" ? (en ? "One subscription, every top flagship. Faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going. Every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
+          <h2>{context === "weekly" ? (en ? "This week's quota is used up" : "本周额度已用完") : context === "browse" ? (en ? "Choose your plan" : "选择你的套餐") : (en ? "You're out of credits" : "无为币用完啦")}</h2>
+          <p>{context === "weekly" ? (en ? "Your weekly hosted quota resets next week. To keep going now, buy a credit pack or upgrade your plan." : "本周托管额度用完了，下周会自动恢复。想现在继续，可购买积分包，或升级更高档会员。") : context === "browse" ? (en ? "One subscription, every top flagship. Faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going. Every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
         </div>
 
-        <div className="trial-bal-mini"><span className="pay-coin" /> {context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits · upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
+        <div className="trial-bal-mini"><span className="pay-coin" /> {context === "weekly" ? (en ? `Balance ${balance} credits · buy a pack or wait for next week` : `当前余额 ${balance} 无为币 · 买积分包或等下周恢复`) : context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits · upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
 
         {/* 升级后畅用的最强顶级模型（官方 logo）——直观放大购买欲 */}
         <div className="trial-models">
@@ -8636,7 +8636,7 @@ export function App() {
           en={lang === "en"}
           balance={coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
           rebind={coinShortage.rebind}
-          context={coinShortage.browse ? "browse" : "shortage"}
+          context={coinShortage.browse ? "browse" : ((wuwei?.membership?.weeklyQuota?.active && (wuwei.membership.weeklyQuota.remainingPct ?? 0) <= 0) ? "weekly" : "shortage")}
           opts={payOpts}
           defaultSku={payDefaultSku}
           onClose={() => closeShortage("close")}
