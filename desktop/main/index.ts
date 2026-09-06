@@ -1675,10 +1675,18 @@ async function suggestNextAction(id: string) {
   if (goalActive) {
     const plan = g!.plan || [];
     if (plan.length) {
-      const planTxt = plan
-        .map((s, i) => `${i + 1}. [${s.status === "done" ? tt("✓已完成", "✓done") : s.status === "doing" ? tt("▶进行中", "▶doing") : tt("待办", "todo")}] ${s.title}${s.acceptance ? tt(`（验收:${s.acceptance}）`, ` (acceptance: ${s.acceptance})`) : ""}`)
-        .join("\n");
-      charterExtra += tt("\n【执行计划】按节点逐步推进：\n", "\n[Plan] advance node by node:\n") + planTxt;
+      // 树形计划序列化(缩进带层级)：编号如 1 / 1.2 / 1.2.3，带状态+验收
+      const st = (s: PlanStep) => (s.status === "done" ? tt("✓已完成", "✓done") : s.status === "doing" ? tt("▶进行中", "▶doing") : tt("待办", "todo"));
+      const lines: string[] = [];
+      const walk = (nodes: PlanStep[], prefix: string, indent: string) => {
+        nodes.forEach((s, i) => {
+          const no = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+          lines.push(`${indent}${no}. [${st(s)}] ${s.title}${s.acceptance ? tt(`（验收:${s.acceptance}）`, ` (acceptance: ${s.acceptance})`) : ""}`);
+          if (s.children?.length) walk(s.children, no, indent + "  ");
+        });
+      };
+      walk(plan, "", "");
+      charterExtra += tt("\n【执行计划】按节点逐步推进(含子节点)：\n", "\n[Plan] advance node by node (with sub-nodes):\n") + lines.join("\n");
     }
     const doTxt = g!.rules?.do?.trim();
     const dontTxt = g!.rules?.dont?.trim();
@@ -4155,7 +4163,24 @@ function pruneTranscripts(days: number) {
 // ==================== 智能继续：会话总目标 + 自定义红线 + 后台推进集合 ====================
 // —— 会话总目标：给这个对话定一个大目标，它自己拆解、自己一步步推进 ——
 // 计划节点：一步 + 验收标准 + 状态。防跑偏的骨架——每步都回看"现在在哪个节点、达没达验收"
-type PlanStep = { id: string; title: string; acceptance: string; status: "todo" | "doing" | "done" };
+type PlanStep = { id: string; title: string; acceptance: string; status: "todo" | "doing" | "done"; description?: string; children?: PlanStep[] };
+// 递归规整计划树(限深3、限量)：清洗每个节点的字段并保留子节点
+function sanitizePlan(arr: any, depth = 1): PlanStep[] | undefined {
+  if (!Array.isArray(arr) || depth > 3) return undefined;
+  const out = arr.slice(0, 40).map((s: any, i: number) => {
+    const node: PlanStep = {
+      id: String(s?.id || `s${depth}_${i + 1}`).slice(0, 40),
+      title: String(s?.title || "").slice(0, 300),
+      acceptance: String(s?.acceptance || "").slice(0, 600),
+      status: s?.status === "doing" || s?.status === "done" ? s.status : "todo",
+    };
+    if (s?.description) node.description = String(s.description).slice(0, 4000);
+    const kids = sanitizePlan(s?.children, depth + 1);
+    if (kids && kids.length) node.children = kids;
+    return node;
+  });
+  return out;
+}
 type SessionGoal = {
   text: string;
   active: boolean;
@@ -4234,14 +4259,7 @@ ipcMain.handle("chat:goalSet", (_e, sid: string, goal: SessionGoal | null) => {
     rules: goal.rules
       ? { do: String(goal.rules.do || "").slice(0, 2000), dont: String(goal.rules.dont || "").slice(0, 2000) }
       : undefined,
-    plan: Array.isArray(goal.plan)
-      ? goal.plan.slice(0, 40).map((s: any, i: number) => ({
-          id: String(s?.id || `s${i + 1}`).slice(0, 40),
-          title: String(s?.title || "").slice(0, 300),
-          acceptance: String(s?.acceptance || "").slice(0, 600),
-          status: s?.status === "doing" || s?.status === "done" ? s.status : "todo",
-        }))
-      : undefined,
+    plan: sanitizePlan(goal.plan),
   };
   saveGoals();
 });
@@ -4355,21 +4373,30 @@ function lastAssistantText(id: string): string {
   } catch { /* 文件没有/结构不符→忽略 */ }
   return t2.length > t1.length ? t2 : t1;
 }
-// 把解析出的对象规整成契约草稿(research/rules/plan)，research/规则写成对象/数组也转成文字，容错
+// 把解析出的对象规整成契约草稿(research/rules/plan)，research/规则写成对象/数组也转成文字，容错。
+// plan 递归成树(title/description/acceptance/children)，限深 3。
 function buildCharterDraftObj(d: any) {
   const S = (v: any) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+  const mapNodes = (arr: any, depth = 1): any[] => {
+    if (!Array.isArray(arr) || depth > 3) return [];
+    return arr.map((s: any) => {
+      const node: any = {
+        title: S(s?.title ?? s?.step ?? s?.步骤 ?? s?.标题),
+        description: S(s?.description ?? s?.说明 ?? s?.desc ?? s?.详情),
+        acceptance: S(s?.acceptance ?? s?.criteria ?? s?.验收 ?? s?.验收标准),
+      };
+      const kids = mapNodes(s?.children ?? s?.subtasks ?? s?.子节点 ?? s?.子任务, depth + 1);
+      if (kids.length) node.children = kids;
+      return node;
+    });
+  };
   return {
     research: S(d.research ?? d.调研),
     rules: {
       do: S(d.rules?.do ?? d.do ?? d.要做),
       dont: S(d.rules?.dont ?? d.dont ?? d.不做 ?? d.绝不做),
     },
-    plan: Array.isArray(d.plan || d.计划)
-      ? (d.plan || d.计划).map((s: any) => ({
-          title: S(s?.title ?? s?.step ?? s?.步骤 ?? s?.标题),
-          acceptance: S(s?.acceptance ?? s?.criteria ?? s?.验收 ?? s?.验收标准),
-        }))
-      : [],
+    plan: mapNodes(d.plan || d.计划),
   };
 }
 // 从这轮助手最后回复里抽出契约 JSON → 缓存 + 事件回填弹窗。抽到并解析成功返回 true。

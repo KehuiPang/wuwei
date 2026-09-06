@@ -5344,6 +5344,9 @@ body {
   width: min(760px, 92vw); max-height: 88vh; padding: 0;
   display: flex; flex-direction: column;
 }
+/* 目标大弹窗盖过询问弹窗(.ask z-index 160)：整个弹窗在最上层，询问弹窗在底下 */
+.mq-overlay.goal-modal-overlay { z-index: 200; }
+.goal-modal.goal-modal-lg { z-index: 201; }
 .goal-modal-lg .goal-modal-h { display: flex; align-items: center; gap: 6px; padding: 14px 14px 10px 22px; margin-bottom: 0; border-bottom: 1px solid var(--border); }
 .goal-modal-h-t { font-size: 15px; font-weight: 700; color: var(--text); }
 .goal-modal-icon {
@@ -5443,6 +5446,53 @@ body {
   border: 1px dashed var(--border-strong); background: transparent; color: var(--text-dim);
 }
 .goal-plan-add:hover { color: var(--text); border-color: var(--accent); }
+/* 树形计划节点：左装订线(箭头+序号) + 右 body 列(标题/说明/验收 左对齐) */
+.goal-node { display: flex; flex-direction: column; gap: 6px; padding: 3px 0; }
+.goal-node .goal-node { border-left: 1px dashed var(--border); padding-left: 8px; }
+.goal-node-row { display: flex; align-items: flex-start; gap: 6px; }
+.goal-node-gutter { flex-shrink: 0; display: flex; align-items: center; gap: 2px; height: 30px; }
+.goal-node-toggle {
+  width: 18px; height: 18px; border: none; background: transparent; cursor: pointer;
+  color: var(--text-dim); font-size: 10px; display: flex; align-items: center; justify-content: center; border-radius: 4px;
+}
+.goal-node-toggle:hover { background: var(--bg-input); color: var(--text); }
+.goal-node-dot { width: 18px; text-align: center; color: var(--text-muted); }
+.goal-node-dot::before { content: "·"; }
+.goal-node-no { min-width: 26px; font-size: 11px; font-weight: 700; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+/* body：标题/说明/验收同一左边缘竖排对齐 */
+.goal-node-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.goal-node-titlerow { display: flex; align-items: center; gap: 6px; }
+.goal-node-body input, .goal-node-body textarea {
+  width: 100%; box-sizing: border-box;
+  background: var(--bg-input); border: 1px solid var(--border-strong); border-radius: 8px;
+  padding: 6px 10px; font-family: var(--sans); outline: none; color: var(--text);
+}
+.goal-node-body input:focus, .goal-node-body textarea:focus { border-color: var(--accent); }
+.goal-node-title { font-weight: 600; font-size: 13px; }
+textarea.goal-node-desc { font-size: 12px !important; color: var(--text-dim) !important; line-height: 1.5; resize: vertical; min-height: 30px; }
+.goal-node-acc { font-size: 12px !important; color: var(--text-dim) !important; }
+.goal-node-add, .goal-node-del {
+  flex-shrink: 0; border-radius: 7px; cursor: pointer; border: 1px solid transparent; background: transparent;
+}
+.goal-node-add { padding: 4px 9px; font-size: 11px; white-space: nowrap; color: var(--spark); border-color: color-mix(in srgb, var(--spark) 30%, transparent); }
+.goal-node-add:hover { background: color-mix(in srgb, var(--spark) 12%, transparent); }
+.goal-node-del { width: 26px; height: 26px; color: var(--text-muted); font-size: 15px; line-height: 1; }
+.goal-node-del:hover { color: #c96262; border-color: var(--border-strong); }
+/* 调研方向/来源 chips */
+.goal-src-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.goal-src-label { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.goal-src-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: 999px;
+  background: color-mix(in srgb, var(--spark) 10%, transparent); border: 1px solid color-mix(in srgb, var(--spark) 28%, transparent);
+  color: var(--text); font-size: 12px;
+}
+.goal-src-chip button { border: none; background: transparent; cursor: pointer; color: var(--text-muted); font-size: 13px; line-height: 1; padding: 0 2px; }
+.goal-src-chip button:hover { color: #c96262; }
+.goal-src-input {
+  min-width: 110px; flex: 0 1 auto; background: transparent; border: 1px dashed var(--border-strong); border-radius: 999px;
+  padding: 3px 10px; font-size: 12px; color: var(--text); outline: none; font-family: var(--sans);
+}
+.goal-src-input:focus { border-color: var(--accent); border-style: solid; }
 /* 规则两栏 */
 .goal-rules { display: flex; gap: 14px; }
 .goal-rules-col { flex: 1; min-width: 0; }

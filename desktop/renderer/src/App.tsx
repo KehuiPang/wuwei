@@ -284,6 +284,39 @@ function loadResearchState(sid: string): ResearchState | null {
   try { const s = localStorage.getItem("wuwei-research:" + sid); if (s) return JSON.parse(s) as ResearchState; } catch { /* 忽略 */ }
   return null;
 }
+// 把原始/草稿节点数组递归转成 PlanStep 树(补 id/status，带 description/children)，限深 3
+function draftNodesToPlan(arr: any, depth = 1, prefix = "s"): import("./env").PlanStep[] {
+  const S = (v: any) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v));
+  if (!Array.isArray(arr) || depth > 3) return [];
+  return arr.map((s: any, i: number) => {
+    const id = `${prefix}${i + 1}`;
+    const node: import("./env").PlanStep = {
+      id,
+      title: S(s?.title ?? s?.step ?? s?.步骤 ?? s?.标题),
+      acceptance: S(s?.acceptance ?? s?.criteria ?? s?.验收 ?? s?.验收标准),
+      status: (s?.status === "doing" || s?.status === "done" ? s.status : "todo") as import("./env").PlanStep["status"],
+    };
+    const desc = S(s?.description ?? s?.说明 ?? s?.desc ?? s?.详情);
+    if (desc) node.description = desc;
+    const kids = draftNodesToPlan(s?.children ?? s?.subtasks ?? s?.子节点 ?? s?.子任务, depth + 1, id + "_");
+    if (kids.length) node.children = kids;
+    return node;
+  });
+}
+// 契约字段 → 干净 JSON 字符串(与 AI 契约 schema 一致：research/rules/plan 树)，供 JSON 视图展示+复制迁移
+function charterToJson(f: { research: string; ruleDo: string; ruleDont: string; plan: import("./env").PlanStep[] }): string {
+  const nodes = (arr: import("./env").PlanStep[]): any[] =>
+    arr
+      .filter((n) => n.title.trim() || (n.description || "").trim() || n.acceptance.trim() || (n.children && n.children.length))
+      .map((n) => {
+        const o: any = { title: n.title };
+        if ((n.description || "").trim()) o.description = n.description;
+        o.acceptance = n.acceptance;
+        if (n.children && n.children.length) o.children = nodes(n.children);
+        return o;
+      });
+  return JSON.stringify({ research: f.research, rules: { do: f.ruleDo, dont: f.ruleDont }, plan: nodes(f.plan) }, null, 2);
+}
 // 客户端解析契约 json（手动粘贴用）：容忍 ```json 围栏/注释/尾逗号，扫描平衡 {...}；
 // research/规则写成对象/数组也接住(转成文字)。解析不出返回 null。
 function parseCharterText(text: string): { research: string; ruleDo: string; ruleDont: string; plan: import("./env").PlanStep[] } | null {
@@ -305,18 +338,17 @@ function parseCharterText(text: string): { research: string; ruleDo: string; rul
   }
   if (!d) return null;
   const S = (v: any) => (typeof v === "string" ? v : v == null ? "" : JSON.stringify(v)); // 对象/数组→文字，容错
-  const planArr = Array.isArray(d.plan || d.计划) ? (d.plan || d.计划) : [];
   return {
     research: S(d.research ?? d.调研),
     ruleDo: S(d.rules?.do ?? d.do ?? d.要做),
     ruleDont: S(d.rules?.dont ?? d.dont ?? d.不做 ?? d.绝不做),
-    plan: planArr.map((s: any, i: number) => ({ id: `s${i + 1}`, title: S(s?.title ?? s?.step ?? s?.步骤 ?? s?.标题), acceptance: S(s?.acceptance ?? s?.criteria ?? s?.验收 ?? s?.验收标准), status: "todo" as const })),
+    plan: draftNodesToPlan(d.plan ?? d.计划),
   };
 }
 // 调研实时进度：把一次工具调用翻成人话("正在搜索：xxx"/"正在读网页：xxx")，喂进弹窗提示框
 function researchToolLabel(name: string, input: any, en: boolean): string {
   const raw = input?.query ?? input?.q ?? input?.url ?? input?.file_path ?? input?.path ?? input?.pattern ?? "";
-  const s = String(raw).replace(/\s+/g, " ").trim().slice(0, 64);
+  const s = String(raw).replace(/\s+/g, " ").trim().slice(0, 300); // 不硬截断，显示时靠 CSS 省略号 + 悬停 title 看全
   const tail = s ? "：" + s : "";
   const tailEn = s ? ": " + s : "";
   switch (name) {
@@ -2974,9 +3006,27 @@ export function App() {
   // 调研实时进度：AI 联网时正在搜什么/读哪页/写多少字，喂进弹窗提示框（几十秒~两分钟别让用户干等）
   const [researchLive, setResearchLive] = useState<{ label: string; steps: number } | null>(null);
   const researchSidRef = useRef<string | null>(null); // 空依赖事件闭包里判"这条活动属不属于正在调研的会话"
-  const [pasteOpen, setPasteOpen] = useState(false); // 手动粘贴 json 兜底(自动没填进来时用)
+  const [pasteOpen, setPasteOpen] = useState(false); // JSON 视图(与下面字段/计划双向实时同步，可复制迁移)
   const [pasteText, setPasteText] = useState("");
   const [pasteErr, setPasteErr] = useState("");
+  const jsonEditingRef = useRef(false); // JSON 框正在被用户编辑→别用下面的字段回写覆盖它
+  // JSON 视图与下面字段/计划双向同步：下面变了→回写 JSON 框(除非用户正手动编辑 JSON)
+  useEffect(() => {
+    if (pasteOpen && goalEdit && !jsonEditingRef.current) {
+      setPasteText(charterToJson({ research: goalEdit.research, ruleDo: goalEdit.ruleDo, ruleDont: goalEdit.ruleDont, plan: goalEdit.plan }));
+      setPasteErr("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goalEdit, pasteOpen]);
+  // 调研方向/来源(可增删)：默认 最新论文/最新新闻/GitHub，持久化
+  const [researchSources, setResearchSources] = useState<string[]>(() => {
+    try { const s = localStorage.getItem("wuwei-research-sources"); if (s) { const a = JSON.parse(s); if (Array.isArray(a)) return a; } } catch { /* ignore */ }
+    return getLang() === "en" ? ["Latest papers", "Latest news", "GitHub"] : ["最新论文", "最新新闻", "GitHub"];
+  });
+  const [srcInput, setSrcInput] = useState("");
+  useEffect(() => { try { localStorage.setItem("wuwei-research-sources", JSON.stringify(researchSources)); } catch { /* ignore */ } }, [researchSources]);
+  const [planCollapsed, setPlanCollapsed] = useState<Set<string>>(new Set()); // 折叠的计划节点 id
+  const planIdCounter = useRef(0); // 新建节点 id 自增
   const [stopRules, setStopRules] = useState("");
   // 红线识别方式:keyword=关键词匹配(快,选项提到词就拦) / smart=智能识别(LLM判是否真触发危险动作,少误伤)
   const [redlineMode, setRedlineMode] = useState<"keyword" | "smart">(() =>
@@ -4639,9 +4689,10 @@ export function App() {
     setResearchLive(live0);
     saveResearchState(sid, { researching: true, live: live0 }); // 按会话持久化，"只保存"/收起/刷新后重开还能恢复
     setGoalEdit({ ...goalEdit, researching: true, minimized: false });
+    const srcLine = researchSources.map((s) => s.trim()).filter(Boolean).join(lang === "en" ? ", " : "、"); // 调研方向/来源
     const prompt = lang === "en"
-      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n\nUse the web_search tool (built-in aggregated search) to find sources, then web_fetch a few specific article URLs to read. Do NOT web_fetch a google/bing search page directly. A few targeted searches + reading a few key sources is enough — don't over-explore. Understand the current state, viable paths, common pitfalls and best practices for this goal.\n\n[OUTPUT — IMPORTANT] When done, your final reply MUST BEGIN with one complete \`\`\`json charter block (write nothing before it, so a long response can't truncate it away). Exactly this shape, only this one json block, all fields filled:\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path — a tight summary, a few sentences",\n  "rules": { "do": "What to do (one short line each)", "dont": "What NOT to do / how this goal most easily drifts off course (one short line each)" },\n  "plan": [ { "title": "Milestone in ≤12 words", "acceptance": "How we know it's done, one short line" } ]\n}\n\`\`\`\nKeep it CONCISE — titles and acceptance are one short line each, no filler or padding. But the plan must be COMPLETE: cover the whole path from here to fully achieving the goal (all key milestones/phases in order), not just 3-4 shallow steps. Aim for as many milestones as the goal genuinely needs. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
-      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n\n请用 web_search 工具（内置聚合搜索）找资料，再用 web_fetch 抓具体文章 URL 读全文；【不要】用 web_fetch 直接抓 google/bing 的搜索页。做几次精准搜索、读几篇关键来源即可，别无限展开。弄清这个目标的现状、可行路径、常见坑与最佳实践。\n\n【输出要求·重要】调研完成后，你这条最终回复必须【一开头就先输出】一个完整的 \`\`\`json 契约块（前面不要写任何别的内容，避免正文过长把 json 截断丢失）。结构严格如下，只输出这一个 json 块、字段全部填好：\n\`\`\`json\n{\n  "research": "调研结论：现状/关键发现/推荐路径，精炼几句概要",\n  "rules": { "do": "要做哪些（每条一句话，简短）", "dont": "绝不做哪些/最容易跑偏成什么样（每条一句话，简短）" },\n  "plan": [ { "title": "里程碑，一句话（≤20字）", "acceptance": "怎样算达标，一句话" } ]\n}\n\`\`\`\n【计划要精简但完整】：每步的标题和验收都只写一句话、抓关键、别写废话/长篇论述；但计划必须【完整覆盖从现在到彻底达成目标的整条路径】——把关键里程碑/阶段按先后全列出来，不是只写三四个浅step，需要多少个里程碑就列多少个。dont 里写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
+      ? `Research task (ONLY research — do NOT start implementing yet).\nMy overall goal: ${tx}\n${srcLine ? `\nFocus your research on these directions / sources: ${srcLine}.\n` : ""}\nUse the web_search tool (built-in aggregated search) to find sources, then web_fetch a few specific article URLs to read. Do NOT web_fetch a google/bing search page directly. A few targeted searches + reading a few key sources is enough — don't over-explore. Understand the current state, viable paths, common pitfalls and best practices for this goal.\n\n[OUTPUT — IMPORTANT] When done, your final reply MUST BEGIN with one complete \`\`\`json charter block (write nothing before it, so a long response can't truncate it away). Exactly this shape, only this one json block, all fields filled:\n\`\`\`json\n{\n  "research": "Findings: current state / key insights / recommended path — a tight summary, a few sentences",\n  "rules": { "do": "What to do (one short line each)", "dont": "What NOT to do / how this goal most easily drifts off course (one short line each)" },\n  "plan": [ { "title": "Milestone, ≤12 words", "description": "explain this node as fully as is helpful — what to do, how, why, key considerations", "acceptance": "how we know it's done, one short line", "children": [ { "title": "sub-step", "description": "detailed as needed", "acceptance": "one short line" } ] } ]\n}\n\`\`\`\nPLAN = a TREE, up to 3 levels deep. Break a milestone into "children" sub-nodes when it's complex enough to warrant it; leave "children" out for simple leaves. YOU decide the depth and size by the task's complexity. EVERY node (including sub-nodes) has its own acceptance. Keep TITLES short and ACCEPTANCE to one line; DESCRIPTIONS can be as detailed as helpful — don't force them short. The plan must be COMPLETE: cover the whole path from here to fully achieving the goal, all key milestones in order. In "dont", spell out how this goal most easily drifts into something that looks related but betrays the original intent.`
+      : `研究任务（只调研，先别动手实现）。\n我的总目标是：${tx}\n${srcLine ? `\n重点从这些方向/来源调研：${srcLine}。\n` : ""}\n请用 web_search 工具（内置聚合搜索）找资料，再用 web_fetch 抓具体文章 URL 读全文；【不要】用 web_fetch 直接抓 google/bing 的搜索页。做几次精准搜索、读几篇关键来源即可，别无限展开。弄清这个目标的现状、可行路径、常见坑与最佳实践。\n\n【输出要求·重要】调研完成后，你这条最终回复必须【一开头就先输出】一个完整的 \`\`\`json 契约块（前面不要写任何别的内容，避免正文过长把 json 截断丢失）。结构严格如下，只输出这一个 json 块、字段全部填好：\n\`\`\`json\n{\n  "research": "调研结论：现状/关键发现/推荐路径，精炼几句概要",\n  "rules": { "do": "要做哪些（每条一句话，简短）", "dont": "绝不做哪些/最容易跑偏成什么样（每条一句话，简短）" },\n  "plan": [ { "title": "里程碑一句话（≤20字）", "description": "这个节点做什么/怎么做/为什么，可以详细展开，别刻意精简", "acceptance": "怎样算达标，一句话", "children": [ { "title": "子步骤", "description": "按需详细说明", "acceptance": "一句话" } ] } ]\n}\n\`\`\`\n【计划=树形，最多 3 层】：某个里程碑足够复杂就拆成 children 子节点，简单的叶子节点不用 children。层数和树的大小【由你按任务复杂度自己定】。每个节点（含子节点）都要有自己的验收标准。title 简短、acceptance 一句话；但 description（说明）可以详细展开、想写多细写多细，别刻意压缩。计划要【完整覆盖从现在到彻底达成目标的整条路径】、关键里程碑按先后全列出。dont 里写清「这个目标最容易跑偏成什么样、哪些看似相关其实偏离初衷」。`;
     // 独立子会话跑调研；await 完整结果后回填(evt:charter-draft 也会回填，applyCharterDraft 幂等)
     window.wuwei.charterResearch(sid, prompt)
       .then((r) => { if (r?.ok && r.draft) applyCharterDraft(sid, r.draft); else applyCharterDraft(sid, null); })
@@ -4661,10 +4712,7 @@ export function App() {
         research: draft.research || prev.research,
         ruleDo: draft.rules?.do || prev.ruleDo,
         ruleDont: draft.rules?.dont || prev.ruleDont,
-        plan:
-          Array.isArray(draft.plan) && draft.plan.length
-            ? draft.plan.map((s, i) => ({ id: `s${i + 1}`, title: s.title || "", acceptance: s.acceptance || "", status: "todo" as const }))
-            : prev.plan,
+        plan: Array.isArray(draft.plan) && draft.plan.length ? draftNodesToPlan(draft.plan) : prev.plan,
       };
     });
   }
@@ -4679,11 +4727,21 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 把弹窗字段拼成契约对象
+  // 把弹窗字段拼成契约对象（计划为树，递归清洗，丢掉整棵空标题节点）
+  function cleanPlanTree(nodes: import("./env").PlanStep[], prefix = "s"): import("./env").PlanStep[] {
+    return nodes
+      .filter((s) => s.title.trim() || (s.children && s.children.length))
+      .map((s, i) => {
+        const id = s.id || `${prefix}${i + 1}`;
+        const kids = s.children && s.children.length ? cleanPlanTree(s.children, id + "_") : undefined;
+        const node: import("./env").PlanStep = { id, title: s.title.trim(), acceptance: (s.acceptance || "").trim(), status: s.status || "todo" };
+        if (s.description && s.description.trim()) node.description = s.description.trim();
+        if (kids && kids.length) node.children = kids;
+        return node;
+      });
+  }
   function buildCharter(e: NonNullable<typeof goalEdit>, active: boolean): import("./env").Charter {
-    const plan = e.plan
-      .filter((s) => s.title.trim())
-      .map((s, i) => ({ id: s.id || `s${i + 1}`, title: s.title.trim(), acceptance: s.acceptance.trim(), status: s.status || "todo" }));
+    const plan = cleanPlanTree(e.plan);
     const rd = e.ruleDo.trim();
     const rdo = e.ruleDont.trim();
     return {
@@ -4703,10 +4761,19 @@ export function App() {
     parts.push(en ? `[Overall goal for this conversation] ${c.text}` : `【这个对话的总目标】${c.text}`);
     if (c.research?.trim()) parts.push((en ? "[Research findings]\n" : "【调研结论】\n") + c.research.trim());
     if (c.plan?.length) {
-      const planTxt = c.plan
-        .map((s, i) => `${i + 1}. ${s.title}${s.acceptance ? (en ? ` — acceptance: ${s.acceptance}` : ` —— 验收：${s.acceptance}`) : ""}`)
-        .join("\n");
-      parts.push((en ? "[Execution plan] advance node by node; finish & self-check acceptance before moving on:\n" : "【执行计划】按节点逐步推进，每步做完先自测达到验收标准再进入下一步：\n") + planTxt);
+      // 树形序列化：编号 1 / 1.2 / 1.2.3，缩进带层级，含说明+验收
+      const lines: string[] = [];
+      const walk = (nodes: import("./env").PlanStep[], prefix: string, indent: string) => {
+        nodes.forEach((s, i) => {
+          const no = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+          const desc = s.description?.trim() ? (en ? ` — ${s.description.trim()}` : ` —— ${s.description.trim()}`) : "";
+          const acc = s.acceptance?.trim() ? (en ? ` [acceptance: ${s.acceptance.trim()}]` : `【验收：${s.acceptance.trim()}】`) : "";
+          lines.push(`${indent}${no}. ${s.title}${desc}${acc}`);
+          if (s.children?.length) walk(s.children, no, indent + "  ");
+        });
+      };
+      walk(c.plan, "", "");
+      parts.push((en ? "[Execution plan] hierarchical; advance node by node (finish sub-nodes to complete a parent); self-check acceptance before moving on:\n" : "【执行计划】树形，按节点逐步推进（子节点做完才算父节点完成），每步做完先自测达到验收再进入下一步：\n") + lines.join("\n"));
     }
     if (c.rules?.do?.trim()) parts.push((en ? "[Must do]\n" : "【必须做】\n") + c.rules.do.trim());
     if (c.rules?.dont?.trim()) parts.push((en ? "[Never do] (touching these means drifting off the goal)\n" : "【绝不做】（碰到就是跑偏、背离初衷）\n") + c.rules.dont.trim());
@@ -7949,10 +8016,51 @@ export function App() {
         const en = lang === "en";
         const ge = goalEdit;
         const setGE = (patch: Partial<NonNullable<typeof goalEdit>>) => setGoalEdit({ ...ge, ...patch });
-        const setStep = (i: number, patch: Partial<import("./env").PlanStep>) =>
-          setGE({ plan: ge.plan.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
-        const addStep = () => setGE({ plan: [...ge.plan, { id: `s${ge.plan.length + 1}`, title: "", acceptance: "", status: "todo" }] });
-        const delStep = (i: number) => setGE({ plan: ge.plan.filter((_, j) => j !== i) });
+        // —— 树形计划的增删改(按 id 递归) ——
+        type PN = import("./env").PlanStep;
+        const newNode = (): PN => ({ id: "n" + ++planIdCounter.current, title: "", acceptance: "", status: "todo" });
+        const updNode = (nodes: PN[], id: string, patch: Partial<PN>): PN[] =>
+          nodes.map((n) => (n.id === id ? { ...n, ...patch } : n.children ? { ...n, children: updNode(n.children, id, patch) } : n));
+        const rmNode = (nodes: PN[], id: string): PN[] =>
+          nodes.filter((n) => n.id !== id).map((n) => (n.children ? { ...n, children: rmNode(n.children, id) } : n));
+        const addChildTo = (nodes: PN[], pid: string): PN[] =>
+          nodes.map((n) => (n.id === pid ? { ...n, children: [...(n.children || []), newNode()] } : n.children ? { ...n, children: addChildTo(n.children, pid) } : n));
+        const setStepId = (id: string, patch: Partial<PN>) => setGE({ plan: updNode(ge.plan, id, patch) });
+        const delStepId = (id: string) => setGE({ plan: rmNode(ge.plan, id) });
+        const addChildId = (pid: string) => { setGE({ plan: addChildTo(ge.plan, pid) }); setPlanCollapsed((s) => { const n = new Set(s); n.delete(pid); return n; }); };
+        const addRootStep = () => setGE({ plan: [...ge.plan, newNode()] });
+        const toggleCollapse = (id: string) => setPlanCollapsed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+        // 递归渲染计划树(depth 1..3)
+        const renderNodes = (nodes: PN[], depth: number, prefix: string): any =>
+          nodes.map((s, i) => {
+            const no = prefix ? `${prefix}.${i + 1}` : `${i + 1}`;
+            const hasKids = !!(s.children && s.children.length);
+            const collapsed = planCollapsed.has(s.id);
+            return (
+              <div className="goal-node" key={s.id} style={{ marginLeft: (depth - 1) * 16 }}>
+                <div className="goal-node-row">
+                  <span className="goal-node-gutter">
+                    {hasKids ? (
+                      <button type="button" className="goal-node-toggle" onClick={() => toggleCollapse(s.id)}>{collapsed ? "▸" : "▾"}</button>
+                    ) : (
+                      <span className="goal-node-dot" />
+                    )}
+                    <span className="goal-node-no">{no}</span>
+                  </span>
+                  <div className="goal-node-body">
+                    <div className="goal-node-titlerow">
+                      <input className="goal-node-title" value={s.title} placeholder={en ? "Node title" : "节点标题"} onChange={(e) => setStepId(s.id, { title: e.target.value })} />
+                      {depth < 3 && <button type="button" className="goal-node-add" title={en ? "Add sub-node" : "加子节点"} onClick={() => addChildId(s.id)}>+{en ? "sub" : "子"}</button>}
+                      <button type="button" className="goal-node-del" title={en ? "Remove" : "删除"} onClick={() => delStepId(s.id)}>×</button>
+                    </div>
+                    <textarea className="goal-node-desc" rows={2} value={s.description || ""} placeholder={en ? "Description (optional — can be detailed)" : "说明（选填，可详细）"} onChange={(e) => setStepId(s.id, { description: e.target.value })} />
+                    <input className="goal-node-acc" value={s.acceptance} placeholder={en ? "Acceptance criterion" : "验收标准"} onChange={(e) => setStepId(s.id, { acceptance: e.target.value })} />
+                  </div>
+                </div>
+                {hasKids && !collapsed && renderNodes(s.children!, depth + 1, no)}
+              </div>
+            );
+          });
         // 彻底关闭放弃：解除调研武装 + 清掉持久化的调研状态。用于 ×/取消/删除目标。
         const discard = () => { window.wuwei.charterResearchCancel?.(ge.sid); window.wuwei.charterDraftDisarm?.(ge.sid); saveResearchState(ge.sid, null); researchSidRef.current = null; setResearchLive(null); setGoalEdit(null); };
         // 缩小：收起成小药丸，不动任何状态——调研继续在后台跑、进度继续记，点开还在。
@@ -7981,7 +8089,7 @@ export function App() {
         }
         return (
         <>
-          <div className="mq-overlay" onClick={minimize} />
+          <div className="mq-overlay goal-modal-overlay" onClick={minimize} />
           <div className="goal-modal goal-modal-lg">
             <div className="goal-modal-h">
               <span className="goal-modal-h-t">◎ {en ? "Overall goal for this conversation" : "这个对话的总目标"}</span>
@@ -8017,6 +8125,25 @@ export function App() {
                   {en ? "Let AI search the latest papers & news online, then auto-fill the findings, plan and rules below for you to review and edit." : "让 AI 联网查最新论文/新闻，自动填好下面的调研结论、计划与规则——你再逐项审阅修改。"}
                 </span>
               </div>
+              {/* 调研方向/来源(可增删)：默认 最新论文/最新新闻/GitHub */}
+              <div className="goal-src-row">
+                <span className="goal-src-label">{en ? "Sources / directions:" : "调研方向/来源："}</span>
+                {researchSources.map((s, i) => (
+                  <span className="goal-src-chip" key={i}>
+                    {s}
+                    <button type="button" title={en ? "Remove" : "移除"} onClick={() => setResearchSources((arr) => arr.filter((_, j) => j !== i))}>×</button>
+                  </span>
+                ))}
+                <input
+                  className="goal-src-input"
+                  value={srcInput}
+                  placeholder={en ? "+ add source…" : "+ 添加来源…"}
+                  onChange={(e) => setSrcInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && srcInput.trim()) { e.preventDefault(); setResearchSources((arr) => arr.includes(srcInput.trim()) ? arr : [...arr, srcInput.trim()]); setSrcInput(""); }
+                  }}
+                />
+              </div>
               {ge.researching && (
                 <div className="goal-researching">
                   <div>{en ? "AI is researching in an isolated session (doesn't touch this chat) — findings, plan and rules below fill in automatically when done (about 30s–2min). Feel free to minimize (–) or Save only; it keeps running and restores when you reopen. Only Close (×) cancels it." : "AI 正在独立子会话里联网调研（不占用当前对话），完成后会自动把下面的调研结论、计划和规则填好（约几十秒到一两分钟）。可随时点右上角「缩小(–)」或「只保存」——调研继续跑、重新打开自动恢复；只有「关闭(×)」才会取消。"}</div>
@@ -8029,43 +8156,49 @@ export function App() {
                   )}
                 </div>
               )}
-              {/* 手动粘贴 json 兜底：自动没填进来时，把对话里 AI 输出的 json 复制过来一键填入 */}
-              <button type="button" className="goal-paste-toggle" onClick={() => { setPasteOpen((v) => !v); setPasteErr(""); }}>
-                {pasteOpen ? (en ? "▾ Paste JSON manually" : "▾ 手动粘贴 json") : (en ? "▸ Didn't auto-fill? Paste the JSON manually" : "▸ 没自动填进来？手动粘贴 AI 输出的 json")}
+              {/* JSON 视图：与下面字段/计划双向实时同步。改下面→JSON 跟着变；改 JSON→下面跟着变；可整份复制迁移到别的对话 */}
+              <button type="button" className="goal-paste-toggle" onClick={() => setPasteOpen((v) => !v)}>
+                {pasteOpen ? (en ? "▾ JSON (live-synced with the fields below)" : "▾ JSON（与下面字段/计划双向同步）") : (en ? "▸ View / edit / copy as JSON (live-synced; paste to migrate)" : "▸ 查看/编辑/复制 JSON（与下面实时同步，可整份复制迁移）")}
               </button>
               {pasteOpen && (
                 <div className="goal-paste">
                   <textarea
-                    rows={4}
+                    className="goal-json-view"
+                    rows={8}
                     value={pasteText}
-                    placeholder={en ? "Paste the whole ```json { ... } block (or raw JSON) the AI output in the chat — then click Fill." : "把对话里 AI 输出的整段 ```json { ... }（或纯 json）粘贴到这里，点「填入」。"}
-                    onChange={(e) => { setPasteText(e.target.value); setPasteErr(""); }}
+                    placeholder={en ? "The whole charter as JSON — edit here and the fields below update; edit below and this updates. Paste a JSON here to import a whole plan." : "整份契约的 JSON——在这改，下面字段/计划跟着变；改下面，这里也跟着变。把别处的 JSON 粘进来即可整份导入。"}
+                    onFocus={() => { jsonEditingRef.current = true; }}
+                    onBlur={() => {
+                      jsonEditingRef.current = false;
+                      // 失焦时若能解析，用规范格式回刷一遍(整理缩进)；解析不了就保留原文+错误
+                      const p = parseCharterText(pasteText);
+                      if (p) setPasteText(charterToJson({ research: ge.research, ruleDo: ge.ruleDo, ruleDont: ge.ruleDont, plan: ge.plan }));
+                    }}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      jsonEditingRef.current = true;
+                      setPasteText(raw);
+                      const p = parseCharterText(raw);
+                      if (p) {
+                        setPasteErr("");
+                        setGE({ research: p.research, ruleDo: p.ruleDo, ruleDont: p.ruleDont, plan: p.plan.length ? p.plan : ge.plan });
+                      } else {
+                        setPasteErr(en ? "Invalid JSON — fields below keep the last valid version." : "JSON 暂时不合法——下面字段先保留上一次有效的。");
+                      }
+                    }}
                   />
                   <div className="goal-paste-b">
                     {pasteErr && <span className="goal-paste-err">{pasteErr}</span>}
                     <span style={{ flex: 1 }} />
-                    <button type="button" className="ghost" onClick={() => { setPasteOpen(false); setPasteText(""); setPasteErr(""); }}>{en ? "Cancel" : "取消"}</button>
                     <button
                       type="button"
-                      className="primary"
-                      disabled={!pasteText.trim()}
+                      className="ghost"
                       onClick={() => {
-                        const p = parseCharterText(pasteText);
-                        if (!p) { setPasteErr(en ? "Couldn't parse JSON — check you copied the full { … } block." : "解析不出 json——确认复制了完整的 { … } 整段。"); return; }
-                        setGE({
-                          research: p.research || ge.research,
-                          ruleDo: p.ruleDo || ge.ruleDo,
-                          ruleDont: p.ruleDont || ge.ruleDont,
-                          plan: p.plan.length ? p.plan : ge.plan,
-                          researching: false,
-                        });
-                        // 填好了：清掉"调研中"状态
-                        if (researchSidRef.current === ge.sid) { researchSidRef.current = null; setResearchLive(null); }
-                        saveResearchState(ge.sid, null);
-                        setPasteOpen(false); setPasteText(""); setPasteErr("");
+                        const txt = charterToJson({ research: ge.research, ruleDo: ge.ruleDo, ruleDont: ge.ruleDont, plan: ge.plan });
+                        navigator.clipboard?.writeText(txt).then(() => { setPasteErr(en ? "Copied ✓" : "已复制 ✓"); setTimeout(() => setPasteErr(""), 1500); }).catch(() => {});
                       }}
                     >
-                      {en ? "Fill" : "填入"}
+                      {en ? "Copy JSON" : "复制 JSON"}
                     </button>
                   </div>
                 </div>
@@ -8078,23 +8211,14 @@ export function App() {
                 placeholder={en ? "Findings from the research above — or write your own." : "上面调研得到的现状/发现/推荐路径——也可以自己写。"}
                 onChange={(e) => setGE({ research: e.target.value })}
               />
-              {/* 计划 + 验收 */}
-              <div className="goal-field-label">{en ? "Execution plan — each step has an acceptance criterion" : "执行计划 —— 每步一个验收标准"}</div>
+              {/* 计划(树形，最多3层，每节点带说明+验收，可展开子节点) */}
+              <div className="goal-field-label">{en ? "Execution plan — tree, up to 3 levels; each node has a description & acceptance" : "执行计划 —— 树形(最多3层)，每个节点带说明+验收，可展开子节点"}</div>
               <div className="goal-plan">
                 {ge.plan.length === 0 && (
-                  <div className="goal-plan-empty">{en ? "No steps yet — click Research above to have AI draft them, or add manually." : "还没有步骤——点上面「调研」让 AI 拟，或手动添加。"}</div>
+                  <div className="goal-plan-empty">{en ? "No nodes yet — click Research above to have AI draft the tree, or add manually." : "还没有节点——点上面「调研」让 AI 拟出计划树，或手动添加。"}</div>
                 )}
-                {ge.plan.map((s, i) => (
-                  <div className="goal-plan-step" key={i}>
-                    <span className="goal-plan-no">{i + 1}</span>
-                    <div className="goal-plan-body">
-                      <input className="goal-plan-title" value={s.title} placeholder={en ? "What this step does" : "这一步做什么"} onChange={(e) => setStep(i, { title: e.target.value })} />
-                      <input className="goal-plan-acc" value={s.acceptance} placeholder={en ? "Acceptance: how we know this step is done / passing" : "验收标准：怎样算这步完成 / 达标"} onChange={(e) => setStep(i, { acceptance: e.target.value })} />
-                    </div>
-                    <button className="goal-plan-del" title={en ? "Remove step" : "删除这步"} onClick={() => delStep(i)}>×</button>
-                  </div>
-                ))}
-                <button className="goal-plan-add" onClick={addStep}>{en ? "+ Add step" : "+ 添加一步"}</button>
+                {renderNodes(ge.plan, 1, "")}
+                <button className="goal-plan-add" onClick={addRootStep}>{en ? "+ Add node" : "+ 添加节点"}</button>
               </div>
               {/* 规则：要做 / 绝不做 */}
               <div className="goal-rules">

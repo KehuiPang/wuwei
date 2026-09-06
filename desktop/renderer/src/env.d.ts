@@ -2,7 +2,7 @@
 import type { WuweiMe, CatalogProviderDto, ModelPricingData } from "../../main/wuwei-auth.js";
 
 // 会话总目标"任务契约"：目标 + 调研 + 规则(要做/不做) + 分步计划(每步带验收标准)
-export interface PlanStep { id: string; title: string; acceptance: string; status: "todo" | "doing" | "done" }
+export interface PlanStep { id: string; title: string; acceptance: string; status: "todo" | "doing" | "done"; description?: string; children?: PlanStep[] }
 export interface Charter {
   text: string;
   active: boolean;
@@ -11,11 +11,12 @@ export interface Charter {
   rules?: { do: string; dont: string };
   plan?: PlanStep[];
 }
-// 「调研并拟计划」跑完，主进程解析回填弹窗用的草稿
+// 「调研并拟计划」跑完，主进程解析回填弹窗用的草稿。plan 为树(带 description+children)
+export interface CharterDraftNode { title: string; description?: string; acceptance: string; children?: CharterDraftNode[] }
 export type CharterDraft = {
   research: string;
   rules: { do: string; dont: string };
-  plan: { title: string; acceptance: string }[];
+  plan: CharterDraftNode[];
 } | null;
 
 export interface BrainNodeLite {
