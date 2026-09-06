@@ -526,22 +526,50 @@ function parseDDG(html: string): { title: string; url: string; snippet: string }
   return items.map((it, i) => ({ ...it, snippet: snips[i] || "" }));
 }
 
-// 解析 Bing 结果页(无需 key)：每个 <li class="b_algo"> 一条，取 <h2><a href> 标题/URL + 首个 <p> 摘要
+// Bing 现在把真实 URL 包在 /ck/a?...&u=a1<base64url> 跳转链里，解出真链(否则拿到的全是 bing.com/ck/a 跳转)。
+function decodeBingUrl(href: string): string {
+  const h = href.replace(/&amp;/g, "&");
+  const m = /[?&]u=a1([^&]+)/.exec(h);
+  if (m) {
+    try {
+      const b64 = m[1].replace(/-/g, "+").replace(/_/g, "/");
+      const dec = Buffer.from(b64, "base64").toString("utf8");
+      if (/^https?:\/\//i.test(dec)) return dec;
+    } catch { /* ignore */ }
+  }
+  return h;
+}
+// 解析 Bing 结果页(无需 key)：每个 <li class="b_algo"> 一条，取 <h2 ...><a href> 标题/URL + 首个 <p> 摘要。
+// ⚠️ Bing 改版：<h2> 带了 class 属性、URL 变成 /ck/a base64 跳转 → 旧正则(<h2> 无属性)恒解析为 0 条，
+// 表现为「Bing 空」。故用 <h2[^>]*> 容属性 + decodeBingUrl 解跳转。
 function parseBing(html: string): { title: string; url: string; snippet: string }[] {
   const out: { title: string; url: string; snippet: string }[] = [];
   const blockRe = /<li class="b_algo"[\s\S]*?(?=<li class="b_algo"|<\/ol>|$)/gi;
   let b: RegExpExecArray | null;
   while ((b = blockRe.exec(html))) {
     const block = b[0];
-    const a = /<h2>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
+    const a = /<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
     if (!a) continue;
-    const url = a[1];
+    const url = decodeBingUrl(a[1]);
     if (!/^https?:\/\//i.test(url)) continue;
     const title = stripTags(a[2]);
     const p = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(block);
     if (title) out.push({ url, title, snippet: p ? stripTags(p[1]) : "" });
   }
   return out;
+}
+// 解析 SearXNG 的 JSON 结果(?format=json)：元搜索聚合多引擎，独立于 DDG/Bing，返回稳定 JSON。
+// 公共实例偶尔返回 HTML 挑战页 → JSON.parse 失败即当空，交给下一个源。
+function parseSearxng(text: string): { title: string; url: string; snippet: string }[] {
+  try {
+    const j = JSON.parse(text);
+    const arr = Array.isArray(j?.results) ? j.results : [];
+    return arr
+      .filter((r: any) => r && typeof r.url === "string" && /^https?:\/\//i.test(r.url) && r.title)
+      .map((r: any) => ({ title: stripTags(String(r.title)), url: String(r.url), snippet: stripTags(String(r.content || "")) }));
+  } catch {
+    return [];
+  }
 }
 // 退避 sleep：可被 ctx.signal 中断，避免用户点停后还在死等
 function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
@@ -553,7 +581,18 @@ function sleepAbortable(ms: number, signal?: AbortSignal): Promise<void> {
 }
 // 带指数退避的抓取：202挑战页/429限流/5xx 都当作可重试；默认 3 次(间隔 500ms→1000ms)
 async function fetchTextRetry(url: string, ctx: any, tries = 3): Promise<string> {
-  const headers = { "User-Agent": UA, "Accept-Language": tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9") };
+  // 补全浏览器请求头：Bing/DDG 等反爬会对缺 Accept/Sec-* 的请求返回 202 挑战页，
+  // 带上更像真实浏览器的头能显著降低被挑战概率(实测 curl 带同款头即得 200)。
+  const isJson = /[?&]format=json\b/.test(url);
+  const headers: Record<string, string> = {
+    "User-Agent": UA,
+    "Accept": isJson ? "application/json,text/plain,*/*" : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": tt("zh-CN,zh;q=0.9,en;q=0.8", "en-US,en;q=0.9"),
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Upgrade-Insecure-Requests": "1",
+  };
   let lastErr: any;
   for (let i = 0; i < tries; i++) {
     if (ctx?.signal?.aborted) throw new Error("aborted");
@@ -586,10 +625,13 @@ const webSearchTool: Tool = {
       if (!q) return { content: tt("搜索词为空", "Search query is empty"), isError: true };
       const eq = encodeURIComponent(q);
       // 多个独立搜索源，逐个尝试(每个都带指数退避重试)，第一个拿到结果的胜出。
-      // DDG Lite 最快最稳；Bing 是独立引擎兜底；DDG html 老源垫底。都挂了才报不可用。
+      // 顺序按「实测可达+稳定」排：Bing 命中率最高(补了浏览器头后 202 明显减少)；SearXNG 元搜索
+      // 走 JSON、独立于 DDG/Bing，多个公共实例互为备份；DDG 部分网络连不上(返回 000)故垫底。
+      const sx = (host: string) => `https://${host}/search?q=${eq}&format=json&language=` + tt("zh-CN", "en-US");
       const sources: { name: string; url: string; parse: (h: string) => { title: string; url: string; snippet: string }[] }[] = [
-        { name: "DuckDuckGo", url: "https://lite.duckduckgo.com/lite/?q=" + eq, parse: parseLite },
         { name: "Bing", url: "https://www.bing.com/search?q=" + eq + "&setlang=" + tt("zh-CN", "en-US"), parse: parseBing },
+        { name: "SearXNG", url: sx("searx.be"), parse: parseSearxng }, // 元搜索独立备份(公共实例，偶尔限流)
+        { name: "DuckDuckGo", url: "https://lite.duckduckgo.com/lite/?q=" + eq, parse: parseLite },
         { name: "DuckDuckGo-html", url: "https://html.duckduckgo.com/html/?q=" + eq, parse: parseDDG },
       ];
       let results: { title: string; url: string; snippet: string }[] = [];
