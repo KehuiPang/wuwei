@@ -3970,13 +3970,21 @@ export function App() {
     setShowProviderMenu(false);
   }
   // 免费模型 → 对应的「托管付费」模型：去掉 -free 后在各托管付费平台(hosted 且非 anon)里找同名，找不到返回 null
-  function hostedEquivalentOf(freeModel: string): { provider: (typeof providerList)[number]; model: string } | null {
-    const base = (freeModel || "").replace(/-free$/i, "");
+  // 在托管(非匿名)provider 里找带指定 model 的那个
+  function findHostedModel(modelId: string): { provider: (typeof providerList)[number]; model: string } | null {
     for (const prov of providerList) {
       if (!prov.hosted || prov.anon) continue;
-      for (const c of [base, freeModel]) if (c && prov.models?.includes(c)) return { provider: prov, model: c };
+      if (modelId && prov.models?.includes(modelId)) return { provider: prov, model: modelId };
     }
     return null;
+  }
+  // 免费模型用完 → 建议切到的托管模型。规则：GLM-5.3 Flash 用完 → 托管 GLM-5.3 Flash；
+  // 其余所有免费模型 → 统一托管 DeepSeek V4 Flash。托管 GLM 目录里若暂无则兜底回 DeepSeek。
+  function hostedEquivalentOf(freeModel: string): { provider: (typeof providerList)[number]; model: string } | null {
+    const base = (freeModel || "").replace(/-free$/i, "").toLowerCase();
+    const DEEPSEEK = "deepseek-v4-flash";
+    if (/glm-5\.3-flash/.test(base)) return findHostedModel("glm-5.3-flash") || findHostedModel(DEEPSEEK);
+    return findHostedModel(DEEPSEEK);
   }
   // 一键切到指定托管平台+模型(和 quickProvider 同套配置，但指定具体 model)
   async function switchToHosted(prov: (typeof providerList)[number], model: string) {
@@ -8621,8 +8629,8 @@ export function App() {
               <div className="freecap-title">{en ? "Today's free quota is used up" : "今天的免费次数用完啦"}</div>
               <div className="freecap-sub">
                 {en
-                  ? `Free resets tomorrow. To keep going now, switch to a hosted model — billed by token from your ${bal} credits.`
-                  : `明天恢复免费。想现在继续，可切换托管模型，按 token 扣无为币（余额 ${bal}）。`}
+                  ? `Your free quota resets tomorrow, so you can keep using it free then. In a hurry? Switch to a Wuwei-hosted model — billed by token from your credits. You still have ${bal} credits and can use it right away.`
+                  : `明天免费额度会重置，可以继续免费使用哦～ 如果着急使用，可以切换到无为托管模型，按 token 计费扣无为币，你当前还有 ${bal} 无为币，可以直接使用哦。`}
               </div>
               <div className="freecap-actions">
                 {eq ? (
