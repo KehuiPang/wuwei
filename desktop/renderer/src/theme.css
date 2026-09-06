@@ -4150,6 +4150,9 @@ body {
 .pay-enso { display: block; margin: 0 auto 15px; }
 .pay-top h2 { font-size: 21px; font-weight: 750; color: #16191e; letter-spacing: 0.5px; margin: 0; }
 .pay-top p { font-size: 12.5px; color: #8a9099; margin: 9px auto 0; line-height: 1.6; max-width: 300px; }
+/* 说明句里的「积分包」内联可点高亮：点了切到积分包 tab */
+.pay-inline-link { border: none; background: none; padding: 0; font: inherit; color: var(--spark); font-weight: 600; cursor: pointer; }
+.pay-inline-link:hover { filter: brightness(1.08); }
 /* 宽弹窗(缺币/选套餐)：副标题放宽，避免明明有空间还换行 */
 .pay-card-wide .pay-top p { max-width: 560px; }
 .pay-coin {
@@ -5337,7 +5340,7 @@ body {
 .freecap-title { font-size: 17px; font-weight: 700; color: var(--text); margin: 4px 0 8px; }
 /* 一句话说明，居中留白后接按钮区 */
 .freecap-sub { font-size: 13px; color: var(--text-dim); line-height: 1.7; margin-bottom: 20px; }
-.freecap-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.freecap-actions { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 .freecap-primary {
   display: block; width: 100%; box-sizing: border-box; padding: 11px 16px; border-radius: 11px; cursor: pointer;
   background: var(--spark); border: 1px solid var(--spark); color: #fff; font-size: 14px; font-weight: 600;

@@ -667,6 +667,7 @@ const MODEL_LABEL_OVERRIDES: Record<string, string> = {
   "gpt-5.6-sol": "GPT-5.6 Sol",
   "gpt-5.6-terra": "GPT-5.6 Terra",
   "gpt-5.6-luna": "GPT-5.6 Luna",
+  "gpt-6-astra": "GPT-6 Astra",
   "gpt-5.5": "GPT-5.5",
   // Claude 订阅
   "claude-opus-5": "Claude Opus 5",
@@ -1822,7 +1823,7 @@ function TrialPayModal({
 }: {
   en: boolean;
   balance: number;
-  context?: "shortage" | "browse" | "weekly"; // shortage=无为币用完；browse=账号菜单主动点充值/升级；weekly=付费会员本周额度用完
+  context?: "shortage" | "browse" | "weekly" | "freecap"; // shortage=无为币用完；browse=账号菜单主动点充值/升级；weekly=本周额度用完(默认积分包tab)；freecap=免费用完且0币
   rebind?: { providerId: string; model: string; label: string } | null;
   opts: PayPlanOpt[];
   defaultSku: string;
@@ -1835,9 +1836,10 @@ function TrialPayModal({
   onFaq: () => void;
 }) {
   const packOpts = buildPackOpts();
-  const [tab, setTab] = useState<"plan" | "pack">("plan"); // 顶部 tab：会员套餐 / 积分包
+  // weekly(本周额度用完)默认落在「积分包」tab——会员已订阅，买包比再升级更顺
+  const [tab, setTab] = useState<"plan" | "pack">(context === "weekly" ? "pack" : "plan"); // 顶部 tab：会员套餐 / 积分包
   const curOpts = tab === "plan" ? opts : packOpts;
-  const [selSku, setSelSku] = useState(defaultSku);
+  const [selSku, setSelSku] = useState(context === "weekly" ? (packOpts.find((o) => o.badgeType === "rec")?.sku ?? packOpts[0].sku) : defaultSku);
   const cur = curOpts.find((o) => o.sku === selSku) ?? curOpts[0];
   const isPack = cur.kind === "pack";
   function switchTab(t: "plan" | "pack") {
@@ -1907,12 +1909,23 @@ function TrialPayModal({
     <div className="perm-overlay pay-overlay" onClick={onClose}>
       <div className="pay-card pay-card-wide" onClick={(e) => e.stopPropagation()}>
         <PayCloseX onClick={onClose} />
-        <div className="pay-top" style={{ paddingBottom: 2, paddingTop: 22 }}>
-          <h2>{context === "weekly" ? (en ? "This week's quota is used up" : "本周额度已用完") : context === "browse" ? (en ? "Choose your plan" : "选择你的套餐") : (en ? "You're out of credits" : "无为币用完啦")}</h2>
-          <p>{context === "weekly" ? (en ? "Your weekly hosted quota resets next week. To keep going now, buy a credit pack or upgrade your plan." : "本周托管额度用完了，下周会自动恢复。想现在继续，可购买积分包，或升级更高档会员。") : context === "browse" ? (en ? "One subscription, every top flagship. Faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going. Every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
+        <div className="pay-top" style={{ paddingBottom: (context === "weekly" || context === "freecap") ? 16 : 2, paddingTop: 22 }}>
+          <h2>{context === "freecap" ? (en ? "Today's free quota is used up" : "今日免费额度用完啦") : context === "weekly" ? (en ? "This week's quota is used up" : "本周额度已用完") : context === "browse" ? (en ? "Choose your plan" : "选择你的套餐") : (en ? "You're out of credits" : "无为币用完啦")}</h2>
+          <p>{context === "freecap"
+            ? (en
+                ? <>Your free quota refreshes tomorrow. In a hurry? <button type="button" className="pay-inline-link" onClick={() => switchTab("plan")}>Upgrade your plan</button> or buy a <button type="button" className="pay-inline-link" onClick={() => switchTab("pack")}>credit pack</button> to keep going.</>
+                : <>明天可继续使用免费额度。如果着急使用，可<button type="button" className="pay-inline-link" onClick={() => switchTab("plan")}>升级会员</button>或购买<button type="button" className="pay-inline-link" onClick={() => switchTab("pack")}>积分包</button>后继续使用。</>)
+            : context === "weekly"
+            ? (en
+                ? <>Your weekly quota is used up — it refreshes next week. In a hurry? Buy a <button type="button" className="pay-inline-link" onClick={() => switchTab("pack")}>credit pack</button> to keep going.</>
+                : <>您的本周额度已消耗完，可以等下周额度恢复后继续使用。如果着急使用，可购买<button type="button" className="pay-inline-link" onClick={() => switchTab("pack")}>积分包</button>后继续使用。</>)
+            : context === "browse" ? (en ? "One subscription, every top flagship. Faster replies, fuller quota." : "一份订阅，用遍全球最强旗舰，响应更快、额度更足。") : (en ? "Pick a plan to keep going. Every top model, one click away." : "选个套餐接着用，全球最强旗舰随便切换。")}</p>
         </div>
 
-        <div className="trial-bal-mini"><span className="pay-coin" /> {context === "weekly" ? (en ? `Balance ${balance} credits · buy a pack or wait for next week` : `当前余额 ${balance} 无为币 · 买积分包或等下周恢复`) : context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits · upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
+        {/* weekly/freecap 态不显余额行：一句话说明已足够，余额对这两种场景无关或为0 */}
+        {context !== "weekly" && context !== "freecap" && (
+          <div className="trial-bal-mini"><span className="pay-coin" /> {context === "browse" ? (en ? `Balance ${balance} credits` : `当前余额 ${balance} 无为币`) : (en ? `Balance ${balance} credits · upgrade to continue` : `当前余额 ${balance} 无为币 · 升级后即可继续`)}</div>
+        )}
 
         {/* 升级后畅用的最强顶级模型（官方 logo）——直观放大购买欲 */}
         <div className="trial-models">
@@ -1960,18 +1973,6 @@ function TrialPayModal({
           })}
         </div>
 
-        {rebind && (
-          <button className="pay-opt pay-opt-plan trial-rebind" onClick={onRebind}>
-            <span className="pay-badge">{en ? "No credits" : "不扣币"}</span>
-            <span className="pay-oi"><PaySpark size={18} /></span>
-            <span style={{ minWidth: 0 }}>
-              <span className="pay-ot">{en ? `Continue with ${rebind.label}` : `改用${rebind.label}继续`}</span>
-              <span className="pay-os" style={{ display: "block" }}>{en ? "Direct to your subscription, no credits used" : "直连你的订阅账号 · 不消耗无为币"}</span>
-            </span>
-            <span className="pay-arr"><PayArrow /></span>
-          </button>
-        )}
-
         <div className="trial-grid">
           {/* 左：国内二维码 / 海外 Paddle 按钮（跟随选中套餐） */}
           <div className="trial-pay">
@@ -2000,6 +2001,19 @@ function TrialPayModal({
             </button>
           </div>
         </div>
+
+        {/* Claude/GPT 订阅改绑：放到最底部(不占主推位)，直连自己的订阅、不扣无为币 */}
+        {rebind && (
+          <button className="pay-opt pay-opt-plan trial-rebind" onClick={onRebind}>
+            <span className="pay-badge">{en ? "No credits" : "不扣币"}</span>
+            <span className="pay-oi"><PaySpark size={18} /></span>
+            <span style={{ minWidth: 0 }}>
+              <span className="pay-ot">{en ? `Continue with ${rebind.label}` : `改用${rebind.label}继续`}</span>
+              <span className="pay-os" style={{ display: "block" }}>{en ? "Direct to your subscription, no credits used" : "直连你的订阅账号 · 不消耗无为币"}</span>
+            </span>
+            <span className="pay-arr"><PayArrow /></span>
+          </button>
+        )}
 
         <div className="pay-foot trial-foot">
           <button className="pay-foot__faq" onClick={onFaq}>
@@ -3408,7 +3422,7 @@ export function App() {
   const isPro = (wuwei?.membership?.tier ?? "free") !== "free"; // 会员态：脑网络等专享功能门控
   const [wuweiBusy, setWuweiBusy] = useState(false);
   // rebind：当前绑的是「无为托管·Claude」且用户已授权 Claude 订阅时，弹窗给「一键改用订阅继续」（订阅走账号额度、不扣无为币）
-  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string }; browse?: boolean } | null>(null);
+  const [coinShortage, setCoinShortage] = useState<{ message: string; balance?: number; rebind?: { providerId: string; model: string; label: string }; browse?: boolean; freecap?: boolean } | null>(null);
   const [freeCapModal, setFreeCapModal] = useState<{ model: string; balance: number } | null>(null); // 免费模型当天次数用完(已登录)→弹窗引导
   const [quotaWarn, setQuotaWarn] = useState<{ model: string; usedPct: number; resetsAt: string | null } | null>(null); // 用高价模型烧周额度过快(≥50/80%)→弹窗建议切省钱模型
   const [payFaqOpen, setPayFaqOpen] = useState(false); // 缺币弹窗「常见问题」答疑弹窗（叠在支付弹窗之上，关闭即返回）
@@ -4028,22 +4042,25 @@ export function App() {
   useEffect(() => {
     const wq = wuwei?.membership?.weeklyQuota;
     if (!wq?.active) return;
-    // 高价模型按「模型名」判断(claude/gpt 家族)，不依赖 provider id——托管目录是后台动态下发，id 可能变。
+    // 仅无为托管平台：周额度是托管特有，用自己的 Claude/GPT 订阅号时不算周额度，不提醒。
+    if (!curProviderId.startsWith("wuwei-")) return;
+    // 高价模型按「模型名」判断(claude/gpt 家族)，不依赖具体 model id——托管目录后台动态下发。
     const pricey = /claude|gpt/i.test(meta.model || "");
     if (!pricey) return;
     const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
     const threshold = usedPct >= 80 ? 80 : usedPct >= 50 ? 50 : 0;
     if (!threshold) return;
+    const TEST_ALWAYS = false; // 每档每周只弹一次(按 resetsAt 分周去重)；测试时可临时改 true
     const key = `wuwei:quotaWarn:${wq.resetsAt || "na"}`;
     let shown: number[] = [];
     try { shown = JSON.parse(localStorage.getItem(key) || "[]"); } catch { /* ignore */ }
-    if (shown.includes(threshold)) return;
+    if (!TEST_ALWAYS && shown.includes(threshold)) return;
     // 直接跨到 80% 时把 50 也一并标记，避免回落刷新再补弹 50 档
     const next = [...new Set([...shown, ...(threshold === 80 ? [50, 80] : [50])])];
-    try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
+    if (!TEST_ALWAYS) { try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ } }
     setQuotaWarn({ model: meta.model, usedPct, resetsAt: wq.resetsAt });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wuwei?.membership?.weeklyQuota?.remainingPct, wuwei?.membership?.weeklyQuota?.active, wuwei?.membership?.weeklyQuota?.resetsAt, meta.model]);
+  }, [wuwei?.membership?.weeklyQuota?.remainingPct, wuwei?.membership?.weeklyQuota?.active, wuwei?.membership?.weeklyQuota?.resetsAt, meta.model, curProviderId]);
 
   // 定时刷新会员/余额(每90s + 窗口聚焦)：只在扣费时推送会导致免费模型使用期「本周额度%」长期显示旧值(不刷新)。
   useEffect(() => {
@@ -4372,8 +4389,18 @@ export function App() {
           const isCoinOut = /insufficient_balance/i.test(rawMsg);
           let suppressInlineNotice = false;
           if (isFreeCap && loggedIn) {
-            // 免费次数用完(已登录)→弹窗引导(明天继续 / 一键切托管付费模型)，抑制下面的 inline 提示避免重复
-            setFreeCapModal({ model: meta.model, balance: wuweiRef.current?.coin?.balance ?? 0 });
+            const bal = wuweiRef.current?.coin?.balance ?? 0;
+            const wq = wuweiRef.current?.membership?.weeklyQuota;
+            const hasQuota = !!wq?.active && (wq.remainingPct ?? 0) > 0;
+            if (bal <= 0 && !hasQuota) {
+              // 免费次数用完 且 无为币=0 且 无周额度 → 切托管也没币可用 → 直接弹付费窗(freecap 文案)
+              setShowAcctMenu(false);
+              setCoinShortage({ message: "freecap", balance: 0, freecap: true });
+              shortageShownAt.current = Date.now();
+            } else {
+              // 还有币/周额度 → 引导(明天继续 / 一键切托管付费模型)
+              setFreeCapModal({ model: meta.model, balance: bal });
+            }
             suppressInlineNotice = true;
           } else if (isCoinOut && loggedIn) {
             setShowAcctMenu(false);
@@ -7683,8 +7710,9 @@ export function App() {
                 <span>
                   {t("foot.context")} {(usage.lastInput / 1000).toFixed(1)}k
                 </span>
-                {/* 无为托管会员：底部栏常显本周额度已用%，≥50%黄、≥80%红，提醒省着用 */}
-                {wuwei?.membership?.weeklyQuota?.active && (() => {
+                {/* 无为托管会员：底部栏常显本周额度已用%，≥50%黄、≥80%红，提醒省着用。
+                    仅无为托管平台模型显示——周额度是托管特有，切到 Claude/GPT 自己的订阅号就不显示 */}
+                {(curPreset?.hosted || curProviderId.startsWith("wuwei-")) && wuwei?.membership?.weeklyQuota?.active && (() => {
                   const wq = wuwei.membership!.weeklyQuota!;
                   const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
                   const tone = usedPct >= 80 ? " danger" : usedPct >= 50 ? " warn" : "";
@@ -8705,8 +8733,8 @@ export function App() {
               <div className="freecap-title">{en ? "You're burning your weekly quota fast" : "本周额度消耗有点快"}</div>
               <div className="freecap-sub">
                 {en
-                  ? `You're on ${curLabel}, which costs more per token — your weekly quota is ${quotaWarn.usedPct}% used${rs ? ` (resets ${rs})` : ""}. To make it last, switch to a cheaper model below and keep going.`
-                  : `你正在用 ${curLabel}，它单价较高——本周额度已用 ${quotaWarn.usedPct}%${rs ? `（${rs} 重置）` : ""}。想省着点用，可以切到下面更便宜的模型继续工作。`}
+                  ? `You're on ${curLabel}, which costs more per token. Your weekly quota is ${quotaWarn.usedPct}% used${rs ? ` (resets ${rs})` : ""}. Switch to a cheaper model below to make it last.`
+                  : `你正在用 ${curLabel}，单价较高，本周额度已用 ${quotaWarn.usedPct}%${rs ? `（${rs} 重置）` : ""}。想省着点用，可以切到下面更便宜的模型继续。`}
               </div>
               <div className="freecap-actions">
                 {ds && (
@@ -8731,7 +8759,7 @@ export function App() {
           en={lang === "en"}
           balance={coinShortage.balance != null ? coinShortage.balance : wuwei?.coin.balance ?? 0}
           rebind={coinShortage.rebind}
-          context={coinShortage.browse ? "browse" : ((wuwei?.membership?.weeklyQuota?.active && (wuwei.membership.weeklyQuota.remainingPct ?? 0) <= 0) ? "weekly" : "shortage")}
+          context={coinShortage.freecap ? "freecap" : coinShortage.browse ? "browse" : ((wuwei?.membership?.weeklyQuota?.active && (wuwei.membership.weeklyQuota.remainingPct ?? 0) <= 0) ? "weekly" : "shortage")}
           opts={payOpts}
           defaultSku={payDefaultSku}
           onClose={() => closeShortage("close")}
@@ -10889,8 +10917,8 @@ const PRESETS: Preset[] = [
     baseUrl: "https://wuweiai.io/api/gateway/v1",
     keyUrl: "",
     keyHint: "",
-    models: ["gpt-5.5", "gpt-5.6"],
-    note: "无为托管：无需自己的 Key，按 token 扣无为币。GPT-5.5 / 5.6。",
+    models: ["gpt-6-astra", "gpt-5.6", "gpt-5.5"],
+    note: "无为托管：无需自己的 Key，按 token 扣无为币。GPT-6 Astra / 5.6 / 5.5。",
     fixedBaseUrl: true,
     hosted: true,
   },
