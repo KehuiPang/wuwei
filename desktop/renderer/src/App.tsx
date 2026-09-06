@@ -4028,7 +4028,8 @@ export function App() {
   useEffect(() => {
     const wq = wuwei?.membership?.weeklyQuota;
     if (!wq?.active) return;
-    const pricey = curProviderId === "wuwei-claude" || curProviderId === "wuwei-gpt";
+    // 高价模型按「模型名」判断(claude/gpt 家族)，不依赖 provider id——托管目录是后台动态下发，id 可能变。
+    const pricey = /claude|gpt/i.test(meta.model || "");
     if (!pricey) return;
     const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
     const threshold = usedPct >= 80 ? 80 : usedPct >= 50 ? 50 : 0;
@@ -4042,7 +4043,7 @@ export function App() {
     try { localStorage.setItem(key, JSON.stringify(next)); } catch { /* ignore */ }
     setQuotaWarn({ model: meta.model, usedPct, resetsAt: wq.resetsAt });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wuwei?.membership?.weeklyQuota?.remainingPct, wuwei?.membership?.weeklyQuota?.active, wuwei?.membership?.weeklyQuota?.resetsAt, curProviderId]);
+  }, [wuwei?.membership?.weeklyQuota?.remainingPct, wuwei?.membership?.weeklyQuota?.active, wuwei?.membership?.weeklyQuota?.resetsAt, meta.model]);
 
   // 定时刷新会员/余额(每90s + 窗口聚焦)：只在扣费时推送会导致免费模型使用期「本周额度%」长期显示旧值(不刷新)。
   useEffect(() => {
