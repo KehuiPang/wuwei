@@ -5960,13 +5960,18 @@ export function App() {
                         const nearExpiry = daysLeft <= 7;
                         const bal = wuwei.coin.balance;
                         // 充值/升级统一走这个支付弹窗(browse 态：顶部显示「选择你的套餐」而非「无为币不足」)。
-                        const openBrowsePay = async (item: string) => {
+                        const openBrowsePay = (item: string) => {
                           void window.wuwei.track?.("menu_item_click", { item });
                           setShowAcctMenu(false);
-                          const me = await window.wuwei.wuweiMe().catch(() => null);
-                          if (me) setWuwei(me);
-                          setCoinShortage({ message: "browse", balance: (me ?? wuwei)?.coin.balance, browse: true });
+                          // 立即弹窗(用本地已知余额)，不等网络——弹窗内容是同步的，无需 await。
+                          setCoinShortage({ message: "browse", balance: wuwei?.coin.balance, browse: true });
                           shortageShownAt.current = Date.now();
+                          // 后台刷新最新余额，到了自动更新弹窗里的余额显示。
+                          void window.wuwei.wuweiMe().then((me) => {
+                            if (!me) return;
+                            setWuwei(me);
+                            setCoinShortage((cur) => (cur ? { ...cur, balance: me.coin.balance } : cur));
+                          }).catch(() => {});
                         };
                         const openPack = () => void openBrowsePay("topup"); // 充值 → 统一支付弹窗
                         const openPlan = () => void openBrowsePay("upgrade"); // 开通/续费 → 统一支付弹窗
