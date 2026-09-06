@@ -1098,17 +1098,29 @@ function isOAuthDead(e: any): boolean {
   if (status === 401 || status === 403) return true;
   return /\b401\b|invalid[_ ]?token|token (has )?expired|oauth token (expired|revoked|invalid)|unauthorized/.test(msg);
 }
-async function ensureFreshClaudeOAuth(): Promise<void> {
+async function ensureFreshClaudeOAuth(force = false): Promise<void> {
   const st = loadSettings();
   if (!st || st.kind !== "anthropic-oauth") return;
   if (!claudeAutoRefreshEnabled(st)) return; // 用户关了自动续期(保护本机 claude CLI 登录)→不续
   const auth = loadClaudeAuth();
+  // 自愈：settings 里 token 丢了(被 clearDeadClaudeOAuth 误清、它只清 settings 没动 sidecar)但 sidecar
+  // 里的 access token 仍未过期 → 直接补回 settings + 热更会话，避免用户对着有效凭证却被要求重新登录。
+  const settingsHasToken = !!(st.oauthToken || st.creds?.["claude-oauth"]?.oauthToken);
+  if (!settingsHasToken && auth?.accessToken && auth.expiresAt && auth.expiresAt > Date.now()) {
+    st.oauthToken = auth.accessToken;
+    if (st.creds?.["claude-oauth"]) st.creds["claude-oauth"].oauthToken = auth.accessToken;
+    saveSettings(st);
+    applyEnvFromSettings(st);
+    provider = makeProvider(loadConfig());
+    for (const [sid, a] of agents) if (backendBySid.get(sid) === "claude-oauth") a.setProvider(provider);
+    log("claudeOAuth", "settings token 缺失但 sidecar 未过期 → 已自动补回并热更会话");
+  }
   if (!auth?.refreshToken || !auth.expiresAt) {
     // 无 refresh/过期信息(老用户或 sidecar 丢失)：能判定已过期就清掉，否则交给手动重登
     if (auth?.expiresAt && auth.expiresAt <= Date.now()) clearDeadClaudeOAuth("no-refresh-token");
     return;
   }
-  if (auth.expiresAt - Date.now() > 5 * 60 * 1000) return; // 还有 >5 分钟 → 无需续期
+  if (!force && auth.expiresAt - Date.now() > 5 * 60 * 1000) return; // 还有 >5 分钟 且非强制 → 无需续期
   if (refreshingClaude) return refreshingClaude; // 合并并发，避免同一时刻多次刷新
   refreshingClaude = (async () => {
     try {
@@ -2391,10 +2403,18 @@ async function startTurn(useId: string, text: string, images?: string[], sysOver
           log("turnError", useId.slice(0, 8), "status=", e?.status, "msg=", String(e?.message || e).slice(0, 800),
               e?.error ? "body=" + JSON.stringify(e.error).slice(0, 800) : "");
         } catch { /* ignore */ }
-        // Claude 订阅：真撞上 401/token 失效就当场清掉死 token。
-        // 光靠 expiresAt 判断会漏——在别处撤销授权时，时间还没到但 token 已经废了。
-        if (loadSettings()?.kind === "anthropic-oauth" && isOAuthDead(e)) clearDeadClaudeOAuth("http-401");
-        send("evt:error", { sid: useId, message: e.message });
+        // Claude 订阅撞 401/token 失效：别急着清！先用 sidecar 里的 refresh_token 强制续一次
+        // (spurious 401、限流被判成 401 等都可能误清一个其实有效的 token)。续回来就提示重发、
+        // 不清 token；确实续不回来(refresh 也失效)才清并引导重新授权。
+        if (loadSettings()?.kind === "anthropic-oauth" && isOAuthDead(e)) {
+          await ensureFreshClaudeOAuth(true).catch(() => {});
+          const s2 = loadSettings();
+          const restored = !!(s2?.oauthToken || s2?.creds?.["claude-oauth"]?.oauthToken);
+          if (restored) send("evt:error", { sid: useId, message: tt("授权刚已自动续期，请重新发送这条消息。", "Authorization was just auto-renewed — please resend this message.") });
+          else clearDeadClaudeOAuth("http-401"); // 内部会发一条「已清除失效 token，请重新授权」的 evt:error
+        } else {
+          send("evt:error", { sid: useId, message: e.message });
+        }
         // 诊断日志：本轮报错(非用户主动停止) —— 错误原文 + 模型/平台/状态码/耗时，便于排障
         try {
           const cc = loadConfig();

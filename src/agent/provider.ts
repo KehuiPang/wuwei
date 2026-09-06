@@ -107,7 +107,7 @@ const CLIENT_OS = (() => {
     return process.platform || "";
   }
 })();
-async function fetchWithRetry(url: string, init: RequestInit, retries = 4): Promise<Response> {
+async function fetchWithRetry(url: string, init: RequestInit, retries = 10): Promise<Response> {
   // 无为网关：带上 X-Client-OS，后台「用量记录」据此显示游客系统。
   if (CLIENT_OS && typeof url === "string" && /wuweiai\.io\/api\/gateway/.test(url)) {
     const h = new Headers(init.headers as ConstructorParameters<typeof Headers>[0]);
@@ -165,14 +165,14 @@ class AnthropicProvider implements Provider {
         baseURL: cfg.baseUrl,
         defaultHeaders: { "anthropic-beta": cfg.anthropicBeta },
         fetch: capFetch,
-        maxRetries: 4, // 429/5xx 自动退避重试(并发撞限速更稳)
+        maxRetries: 10, // 429/5xx 自动退避重试(并发撞限速更稳)
       });
     } else {
       this.client = new Anthropic({
         apiKey: cfg.apiKey,
         baseURL: cfg.baseUrl,
         fetch: capFetch,
-        maxRetries: 4,
+        maxRetries: 10,
       });
     }
   }
