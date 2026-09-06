@@ -4048,6 +4048,8 @@ export function App() {
     const pricey = /claude|gpt/i.test(meta.model || "");
     if (!pricey) return;
     const usedPct = Math.max(0, Math.min(100, 100 - wq.remainingPct));
+    // 已耗尽(≥100%)时不弹「切便宜模型省着用」——没额度可省了，交给发消息时的付费窗处理
+    if (usedPct >= 100) return;
     const threshold = usedPct >= 80 ? 80 : usedPct >= 50 ? 50 : 0;
     if (!threshold) return;
     const TEST_ALWAYS = false; // 每档每周只弹一次(按 resetsAt 分周去重)；测试时可临时改 true
