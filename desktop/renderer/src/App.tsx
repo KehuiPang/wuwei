@@ -3198,34 +3198,51 @@ export function App() {
   const sidebarWRef = useRef(sidebarW);
   sidebarWRef.current = sidebarW;
   const [pendingImages, setPendingImages] = useState<string[]>([]);
-  // 输入框草稿持久化：文字+粘贴的截图实时落盘(~/.wuwei/draft.json)，重开/更新后自动恢复。
+  // 输入框草稿：每个会话【各存各的】，切会话互不影响。存 localStorage(wuwei-drafts: {sid:{text,images}})，重开/更新后恢复。
   // draftLoadedRef 保证「先加载完再回写」，避免初始空草稿把已存内容冲掉。
   const draftLoadedRef = useRef(false);
+  const draftsRef = useRef<Record<string, { text: string; images: string[] }>>({});
+  const prevSidRef = useRef(currentId);
+  const draftValsRef = useRef<{ text: string; images: string[] }>({ text: input, images: pendingImages }); // 最新文字/图片(供切会话/落盘读)
+  draftValsRef.current = { text: input, images: pendingImages };
   useEffect(() => {
-    window.wuwei
-      .draftGet()
-      .then((d) => {
-        if (d?.text) setInput(d.text);
-        if (d?.images?.length) setPendingImages(d.images);
-      })
-      .catch(() => {})
-      .finally(() => {
-        draftLoadedRef.current = true;
-      });
+    try { const s = localStorage.getItem("wuwei-drafts"); if (s) draftsRef.current = JSON.parse(s) || {}; } catch { /* ignore */ }
+    // 迁移：老的全局单份草稿(~/.wuwei/draft.json)首次并入当前会话，之后各会话独立
+    const applyCur = () => {
+      const d = draftsRef.current[currentId];
+      if (d) { if (d.text) setInput(d.text); if (d.images?.length) setPendingImages(d.images); }
+      draftLoadedRef.current = true;
+    };
+    if (draftsRef.current[currentId]) { applyCur(); }
+    else { window.wuwei.draftGet().then((d) => { if (d?.text || d?.images?.length) draftsRef.current[currentId] = { text: d.text || "", images: d.images || [] }; }).catch(() => {}).finally(applyCur); }
   }, []);
+  // 切会话：把正在编辑的存进「走的那个会话」，再载入「切来的会话」自己的草稿(各存各的)
+  useEffect(() => {
+    const prev = prevSidRef.current;
+    if (prev === currentId) return;
+    draftsRef.current[prev] = { text: draftValsRef.current.text, images: draftValsRef.current.images };
+    const d = draftsRef.current[currentId] || { text: "", images: [] };
+    setInput(d.text); setPendingImages(d.images);
+    prevSidRef.current = currentId;
+    try { localStorage.setItem("wuwei-drafts", JSON.stringify(draftsRef.current)); } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId]);
   // 草稿落盘：节流+trailing，而非纯防抖。纯防抖在连续快速打字时每次输入都重置计时器→一直不落盘→
   // 重启就丢一大段。节流保证连打时也每 ~400ms 落一次(最多丢最后一小段)；用 ref 读最新值，
   // 避免 trailing 触发时存到旧文本。
-  const draftValsRef = useRef<{ text: string; images: string[] }>({ text: input, images: pendingImages });
-  draftValsRef.current = { text: input, images: pendingImages };
   const draftTimerRef = useRef<number | null>(null);
   const draftLastSaveRef = useRef(0);
+  // 把当前会话的草稿写进按会话的表并落 localStorage（每会话各存各的）
+  const persistDraft = () => {
+    draftsRef.current[currentIdRef.current] = { text: draftValsRef.current.text, images: draftValsRef.current.images };
+    try { localStorage.setItem("wuwei-drafts", JSON.stringify(draftsRef.current)); } catch { /* ignore */ }
+  };
   useEffect(() => {
     if (!draftLoadedRef.current) return;
     const flush = () => {
       draftTimerRef.current = null;
       draftLastSaveRef.current = Date.now();
-      window.wuwei.draftSet(draftValsRef.current); // 读 ref=最新文字/图片
+      persistDraft(); // 存到【当前会话】名下，不再是全局单份
     };
     const since = Date.now() - draftLastSaveRef.current;
     const GAP = 400;
@@ -3236,7 +3253,7 @@ export function App() {
   // 关窗/刷新前兜底再落一次(尽量少丢；硬 kill 无法拦，靠上面的节流兜底)
   useEffect(() => {
     const onUnload = () => {
-      if (draftLoadedRef.current) window.wuwei.draftSet(draftValsRef.current);
+      if (draftLoadedRef.current) persistDraft(); // 存到当前会话名下
     };
     window.addEventListener("beforeunload", onUnload);
     return () => window.removeEventListener("beforeunload", onUnload);
@@ -3363,6 +3380,8 @@ export function App() {
     trialEligible?: boolean; // 从未付费 → 缺币弹 ¥1 体验；否则弹「升级正式会员」
     providers?: { hidden?: string[] };
   } | null>(null);
+  const wuweiRef = useRef(wuwei); // 空依赖事件闭包里读最新登录态(否则 wuwei 冻结在挂载时=未登录)
+  wuweiRef.current = wuwei;
   // 后台轮询客服未读（不清未读）：登录 且 聊天窗未开时，每 20s 查一次，有回复亮红点
   useEffect(() => {
     if (!wuwei || showSupportChat) return;
@@ -4279,13 +4298,28 @@ export function App() {
           // 服务端报了真实上限就记下来，占用条改按它算(比客户端按模型名猜准)
           const realLimit = parseServerCtxLimit(rawMsg);
           if (realLimit > 0) setServerCtxMax(realLimit);
-          if (isCoinShortage(rawMsg) || isCoinShortage(friendly)) {
+          // 按场景分流（用 ref 取最新登录态，避免空依赖闭包里 wuwei 冻结在未登录）：
+          //  A. 免费模型今天次数用完 (free_daily_cap_reached / daily_cap_reached / free_quota_exhausted)
+          //     · 已登录：不是没币，是免费次数用完 → 明确文案(明天恢复 / 可切其他托管模型)，绝不弹「无为币用完」升级窗
+          //     · 未登录：弹登录引导(登录即解锁更高额度)
+          //  B. 无为币真不足 (insufficient_balance)：已登录→升级/充值窗；未登录→登录引导
+          //  C. 免费体验被关停/需登录：未登录→登录引导
+          const loggedIn = !!wuweiRef.current;
+          const isFreeCap = /free_daily_cap_reached|daily_cap_reached|free_quota_exhausted/i.test(rawMsg);
+          const isCoinOut = /insufficient_balance/i.test(rawMsg);
+          if (isFreeCap && loggedIn) {
+            const bal = wuweiRef.current?.coin?.balance ?? 0;
+            push({
+              type: "notice",
+              text: lang === "en"
+                ? `Today's free-model quota is used up — it resets tomorrow. You still have ${bal} credits; switch to another Wuwei-hosted model to keep going now.`
+                : `免费模型今天的次数用完了，明天可继续免费使用。你当前还有 ${bal} 无为币——也可以切换到其他无为托管模型继续用。`,
+            });
+          } else if (isCoinOut && loggedIn) {
             setShowAcctMenu(false);
-            void refreshWuweiForShortage(friendly);
-          }
-          // 免费体验触发上限/配额用尽/被关停/需登录 → 未登录则弹登录引导（"触发最大限制后才引导登录"）
-          // anon_login_required 必须在列：游客把需登录模型发出去时，不能只甩灰字，要弹登录卡（审计高危1）
-          if (!wuwei && /daily_cap_reached|free_quota_exhausted|free_trial_disabled|anon_login_required/i.test(rawMsg)) {
+            void refreshWuweiForShortage(friendly); // 无为币真用完 → 升级/充值弹窗
+          } else if (!loggedIn && (isFreeCap || isCoinOut || /free_trial_disabled|anon_login_required/i.test(rawMsg))) {
+            // anon_login_required 必须在列：游客把需登录模型发出去时要弹登录卡（审计高危1）
             setLoginIntroReason(
               /anon_login_required/i.test(rawMsg)
                 ? (lang === "en" ? "Sign in to use this model free" : "该模型登录后免费使用")
