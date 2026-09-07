@@ -479,8 +479,10 @@ class OpenAIProvider implements Provider {
         const ch = j.choices?.[0];
         if (!ch) continue;
         const d = ch.delta ?? {};
-        // 推理模型（GLM-Z1/4.7-Flash 等）的独立思考流：包进 <think>…</think>，与原生 <think> 归一，渲染端统一折叠
-        const rc = (d as { reasoning_content?: unknown }).reasoning_content;
+        // 推理模型（GLM-Z1/4.7-Flash 等）的独立思考流：包进 <think>…</think>，与原生 <think> 归一，渲染端统一折叠。
+        // 字段名各家不一：DeepSeek/智谱=reasoning_content；OpenRouter/Groq=reasoning。都认，避免思考流未识别被当空输出而中断。
+        const dd = d as { reasoning_content?: unknown; reasoning?: unknown };
+        const rc = typeof dd.reasoning_content === "string" ? dd.reasoning_content : (typeof dd.reasoning === "string" ? dd.reasoning : undefined);
         if (typeof rc === "string" && rc) {
           if (!reasoningOpen) {
             reasoningOpen = true;
