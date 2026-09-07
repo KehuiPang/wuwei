@@ -994,6 +994,12 @@ function syncBrainDocsFlag(st: Settings | null) {
   }
 }
 
+// 给 web_search 工具(同进程共享代码)一个「永远最新」的无为登录 token 取值桥，
+// 用于调无为网关搜索代理(/api/gateway/v1/search)。懒读 session，无需在每个登录/登出点同步。
+(globalThis as unknown as { wuweiGwToken?: () => string }).wuweiGwToken = () => {
+  try { return loadWuweiSession()?.accessToken || ""; } catch { return ""; }
+};
+
 function initProvider() {
   cwd = process.cwd();
   const st = loadSettings();

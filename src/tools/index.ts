@@ -451,10 +451,9 @@ const rememberTool: Tool = {
 // ---- 联网：web_search / web_fetch ----
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-// 自建 SearXNG(美国机房，能访问 Google/Bing/Brave)——web_search 主力源。改机器只需换这两行。
-// AUTH = base64("wuwei:<密码>")，前面是 nginx Basic Auth 账号；轮换密码时同步更新服务器 htpasswd。
-const SELF_SEARXNG_HOST = "47.85.61.227:8888";
-const SELF_SEARXNG_AUTH = "d3V3ZWk6NDQzYTRkOTQyNDJiZTg2OGQ0NTgyNmI4";
+// web_search 主力源 = 无为网关搜索代理(服务器端带自建 SearXNG 凭证转发，凭证不进客户端)。
+// 走无为登录 token(主进程登录后写入 WUWEI_GW_TOKEN 环境变量)；未登录则此源跳过、回落到 Bing 等公开源。
+const WUWEI_SEARCH_URL = "https://wuweiai.io/api/gateway/v1/search";
 
 function stripTags(s: string): string {
   return s
@@ -633,16 +632,21 @@ const webSearchTool: Tool = {
       // 顺序按「实测可达+稳定」排：Bing 命中率最高(补了浏览器头后 202 明显减少)；SearXNG 元搜索
       // 走 JSON、独立于 DDG/Bing，多个公共实例互为备份；DDG 部分网络连不上(返回 000)故垫底。
       const sx = (host: string) => `https://${host}/search?q=${eq}&format=json&language=` + tt("zh-CN", "en-US");
-      // 自建 SearXNG(美国机房)：能自由访问 Google/Bing/Brave，聚合返回干净 JSON，是最稳的主力源。
-      // 走 Basic Auth 防公网滥用(凭证内嵌仅拦扫描器，非强鉴权；被滥用可服务器端轮换)。
-      const selfSx = `http://${SELF_SEARXNG_HOST}/search?q=${eq}&format=json&language=` + tt("zh-CN", "en-US");
-      const sources: { name: string; url: string; parse: (h: string) => { title: string; url: string; snippet: string }[]; headers?: Record<string, string> }[] = [
-        { name: "SearXNG-self", url: selfSx, parse: parseSearxng, headers: { Authorization: "Basic " + SELF_SEARXNG_AUTH } },
+      const sources: { name: string; url: string; parse: (h: string) => { title: string; url: string; snippet: string }[]; headers?: Record<string, string> }[] = [];
+      // 主力源：无为网关搜索代理(服务器端转发自建 SearXNG，聚合 Google/Bing/Brave)。仅登录用户有 token。
+      // token 由主进程挂在 globalThis.wuweiGwToken()(永远最新)；CLI 等无此桥则回落 env。
+      const tokFn = (globalThis as unknown as { wuweiGwToken?: () => string }).wuweiGwToken;
+      const gwTok = (typeof tokFn === "function" ? tokFn() : (process.env.WUWEI_GW_TOKEN || "")).trim();
+      if (gwTok && !gwTok.startsWith("anon-")) {
+        sources.push({ name: "Wuwei-search", url: `${WUWEI_SEARCH_URL}?q=${eq}&format=json&language=` + tt("zh-CN", "en-US"), parse: parseSearxng, headers: { Authorization: "Bearer " + gwTok } });
+      }
+      // 兜底：公开源(未登录、或网关不可用时用)。
+      sources.push(
         { name: "Bing", url: "https://www.bing.com/search?q=" + eq + "&setlang=" + tt("zh-CN", "en-US"), parse: parseBing },
         { name: "SearXNG", url: sx("searx.be"), parse: parseSearxng }, // 元搜索公共实例备份(偶尔限流)
         { name: "DuckDuckGo", url: "https://lite.duckduckgo.com/lite/?q=" + eq, parse: parseLite },
         { name: "DuckDuckGo-html", url: "https://html.duckduckgo.com/html/?q=" + eq, parse: parseDDG },
-      ];
+      );
       let results: { title: string; url: string; snippet: string }[] = [];
       const tried: string[] = [];
       for (const s of sources) {
